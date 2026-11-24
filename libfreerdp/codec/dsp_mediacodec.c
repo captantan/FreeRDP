@@ -30,6 +30,15 @@
 
 #define TAG FREERDP_TAG("dsp.mediacodec")
 
+/* captantan fork: TEMPORARY audio diagnostics */
+#include <freerdp/captantan_audio_diag.h>
+static uint64_t captantan_aus_in = 0;
+static uint64_t captantan_bytes_in = 0;
+static uint64_t captantan_buffers_out = 0;
+static uint64_t captantan_bytes_out = 0;
+static uint64_t captantan_empty_drains = 0;
+static uint64_t captantan_last_log = 0;
+
 static const char* AAC_MIME = "audio/mp4a-latm";
 static const int AAC_OBJECT_LC = 2; /* AAC-LC */
 
@@ -195,6 +204,9 @@ static BOOL mediacodec_drain_output(MEDIACODEC_AAC* mc, wStream* out)
 	 * buffers are already queued, and paying the timeout again just stalls the channel. */
 	int64_t timeout = MEDIACODEC_DSP_DEQUEUE_TIMEOUT;
 
+	/* captantan fork: TEMPORARY audio diagnostics */
+	const size_t captantanStart = Stream_GetPosition(out);
+
 	for (int loops = 0; loops <= MEDIACODEC_DSP_MAX_RETRIES; loops++)
 	{
 		AMediaCodecBufferInfo info = { 0 };
@@ -230,6 +242,9 @@ static BOOL mediacodec_drain_output(MEDIACODEC_AAC* mc, wStream* out)
 						return FALSE;
 					}
 					Stream_Write(out, outBuf + info.offset, (size_t)info.size);
+					/* captantan fork: TEMPORARY audio diagnostics */
+					captantan_buffers_out++;
+					captantan_bytes_out += (size_t)info.size;
 				}
 			}
 			const media_status_t rc =
@@ -247,6 +262,9 @@ static BOOL mediacodec_drain_output(MEDIACODEC_AAC* mc, wStream* out)
 			{
 				int32_t newRate = 0;
 				int32_t newCh = 0;
+				/* captantan fork: TEMPORARY audio diagnostics */
+				WLog_INFO(CAPTANTAN_AUDIO_TAG, "AAC decoder output format changed: %s",
+				          AMediaFormat_toString(newFormat));
 				if (AMediaFormat_getInt32(newFormat, AMEDIAFORMAT_KEY_SAMPLE_RATE, &newRate) &&
 				    (newRate > 0))
 					mc->outSampleRate = (UINT32)newRate;
@@ -284,6 +302,25 @@ static BOOL mediacodec_drain_output(MEDIACODEC_AAC* mc, wStream* out)
 		{
 			WLog_ERR(TAG, "dequeueOutputBuffer returned %zd", outIdx);
 			return FALSE;
+		}
+	}
+
+	/* captantan fork: TEMPORARY audio diagnostics */
+	if (Stream_GetPosition(out) == captantanStart)
+		captantan_empty_drains++;
+	{
+		const uint64_t now = GetTickCount64();
+		if (now - captantan_last_log >= CAPTANTAN_AUDIO_PERIOD_MS)
+		{
+			captantan_last_log = now;
+			WLog_INFO(CAPTANTAN_AUDIO_TAG,
+			          "AAC decoder so far: %" PRIu64 " inputs, %" PRIu64 " bytes in, %" PRIu64
+			          " output buffers, %" PRIu64 " PCM bytes out (%" PRIu64
+			          " frames at %" PRIu16 " ch), %" PRIu64 " calls without output",
+			          captantan_aus_in, captantan_bytes_in, captantan_buffers_out,
+			          captantan_bytes_out,
+			          captantan_bytes_out / (sizeof(int16_t) * (mc->outChannels ? mc->outChannels : 1)),
+			          mc->outChannels, captantan_empty_drains);
 		}
 	}
 	return TRUE;
@@ -325,6 +362,9 @@ static BOOL mediacodec_feed_buffer(MEDIACODEC_AAC* mc, const BYTE* data, size_t 
 	}
 
 	memcpy(inBuf, data, length);
+	/* captantan fork: TEMPORARY audio diagnostics */
+	captantan_aus_in++;
+	captantan_bytes_in += length;
 
 	/* Monotonically increasing PTS in microseconds */
 	uint64_t ptsUs = 0;
@@ -442,6 +482,33 @@ BOOL mediacodec_aac_dsp_init(FREERDP_DSP_COMMON_CONTEXT* context, size_t frames_
 		}
 
 		AMediaFormat_setBuffer(format, MEDIACODEC_KEY_CSD_0, asc, ascSize);
+
+		/* captantan fork: TEMPORARY audio diagnostics and experiment switch */
+		{
+			char hex[80] = { 0 };
+			char hex2[80] = { 0 };
+			const int drc = captantan_audio_prop("drc", 0);
+			if (drc != 0)
+			{
+				/* no loudness normalisation, no dynamic range compression */
+				AMediaFormat_setInt32(format, "aac-target-ref-level", -1);
+				AMediaFormat_setInt32(format, "aac-drc-heavy-compression", 0);
+				AMediaFormat_setInt32(format, "aac-drc-boost-level", 0);
+				AMediaFormat_setInt32(format, "aac-drc-cut-level", 0);
+				AMediaFormat_setInt32(format, "aac-drc-effect-type", -1);
+			}
+			WLog_INFO(CAPTANTAN_AUDIO_TAG,
+			          "AAC decoder configure: %" PRIu32 " Hz %" PRIu16 " ch, %" PRIu32
+			          " bytes/s, align %" PRIu16 ", format extra [%s], csd-0 [%s] (%s), drc switch %d",
+			          mc->sampleRate, mc->channels, context->format.nAvgBytesPerSec,
+			          context->format.nBlockAlign,
+			          captantan_audio_hex(context->format.data, context->format.cbSize, hex,
+			                              sizeof(hex)),
+			          captantan_audio_hex(asc, ascSize, hex2, sizeof(hex2)),
+			          (asc == built) ? "built by the client" : "from the server format", drc);
+			WLog_INFO(CAPTANTAN_AUDIO_TAG, "AAC decoder input format: %s",
+			          AMediaFormat_toString(format));
+		}
 	}
 
 	media_status_t status =
@@ -464,6 +531,14 @@ BOOL mediacodec_aac_dsp_init(FREERDP_DSP_COMMON_CONTEXT* context, size_t frames_
 	}
 
 	mc->started = TRUE;
+	/* captantan fork: TEMPORARY audio diagnostics */
+	{
+		AMediaFormat* of = AMediaCodec_getOutputFormat(mc->codec);
+		WLog_INFO(CAPTANTAN_AUDIO_TAG, "AAC %scoder started, output format: %s",
+		          context->encoder ? "en" : "de", of ? AMediaFormat_toString(of) : "?");
+		if (of)
+			AMediaFormat_delete(of);
+	}
 	WLog_DBG(TAG, "MediaCodec AAC %scoder started: %" PRIu32 " Hz, %" PRIu16 " ch",
 	         context->encoder ? "en" : "de", mc->sampleRate, mc->channels);
 	return TRUE;
@@ -593,6 +668,10 @@ BOOL mediacodec_aac_dsp_supports_format(const AUDIO_FORMAT* format, BOOL encode)
 		return FALSE;
 
 	if (encode && (format->nChannels > 2))
+		return FALSE;
+
+	/* captantan fork: TEMPORARY experiment switch: do not accept AAC from the server */
+	if (!encode && (captantan_audio_prop("noaac", 0) != 0))
 		return FALSE;
 
 	if (!encode)
