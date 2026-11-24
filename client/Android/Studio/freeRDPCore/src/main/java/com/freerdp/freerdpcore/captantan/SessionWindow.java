@@ -6,7 +6,6 @@
 
 package com.freerdp.freerdpcore.captantan;
 
-import android.app.AlertDialog;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.Rect;
@@ -15,6 +14,10 @@ import android.net.Uri;
 import android.util.Log;
 import android.view.WindowManager;
 import android.widget.Toast;
+
+import androidx.appcompat.app.AlertDialog;
+
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import com.freerdp.freerdpcore.R;
 import com.freerdp.freerdpcore.application.SessionState;
@@ -523,7 +526,7 @@ public final class SessionWindow
 		if (backDialog != null && backDialog.isShowing())
 			return true;
 		backDialog =
-		    new AlertDialog.Builder(activity)
+		    new MaterialAlertDialogBuilder(activity)
 		        .setTitle(shownNow.getTitle())
 		        .setMessage(R.string.captantan_back_message)
 		        .setPositiveButton(R.string.captantan_back_leave, (d, w) -> leave())

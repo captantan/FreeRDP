@@ -6,10 +6,14 @@
 
 package com.freerdp.freerdpcore.captantan;
 
-import android.app.AlertDialog;
 import android.content.Intent;
+import android.util.TypedValue;
 import android.view.View;
 import android.widget.EditText;
+
+import androidx.appcompat.app.AlertDialog;
+
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import com.freerdp.freerdpcore.R;
 import com.freerdp.freerdpcore.presentation.ApplicationSettingsActivity;
@@ -68,6 +72,15 @@ public final class SessionPrompts
 
 		Credentials entered = prompts.ask(null, (activity, answer) -> {
 			View view = activity.getLayoutInflater().inflate(R.layout.credentials, null);
+			// Upstream's layout has no side padding; give it the dialog's own.
+			TypedValue pad = new TypedValue();
+			if (activity.getTheme().resolveAttribute(
+			        androidx.appcompat.R.attr.dialogPreferredPadding, pad, true))
+			{
+				int px = TypedValue.complexToDimensionPixelSize(
+				    pad.data, activity.getResources().getDisplayMetrics());
+				view.setPaddingRelative(px, view.getPaddingTop(), px, view.getPaddingBottom());
+			}
 			final EditText u = view.findViewById(R.id.editTextUsername);
 			final EditText d = view.findViewById(R.id.editTextDomain);
 			final EditText p = view.findViewById(R.id.editTextPassword);
@@ -76,7 +89,7 @@ public final class SessionPrompts
 			p.setText(p0);
 
 			AlertDialog dialog =
-			    new AlertDialog.Builder(activity)
+			    new MaterialAlertDialogBuilder(activity)
 			        .setView(view)
 			        .setTitle(R.string.dlg_title_credentials)
 			        .setPositiveButton(android.R.string.ok,
@@ -115,7 +128,7 @@ public final class SessionPrompts
 	{
 		prompts.ask(Boolean.FALSE, (activity, answer) -> {
 			AlertDialog dialog =
-			    new AlertDialog.Builder(activity)
+			    new MaterialAlertDialogBuilder(activity)
 			        .setTitle(R.string.dlg_title_experimental_feature)
 			        .setMessage(
 			            activity.getString(R.string.dlg_msg_experimental_feature, featureName))
