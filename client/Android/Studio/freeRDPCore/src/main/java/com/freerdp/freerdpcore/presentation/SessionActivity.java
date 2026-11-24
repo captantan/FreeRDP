@@ -53,7 +53,9 @@ import android.widget.Toast;
 import com.freerdp.freerdpcore.R;
 import com.freerdp.freerdpcore.application.GlobalApp;
 import com.freerdp.freerdpcore.application.SessionState;
+import com.freerdp.freerdpcore.captantan.BlockingPrompts;   // captantan fork
 import com.freerdp.freerdpcore.captantan.CertificatePrompt; // captantan fork
+import com.freerdp.freerdpcore.captantan.SessionPrompts;    // captantan fork
 import com.freerdp.freerdpcore.domain.BookmarkBase;
 import com.freerdp.freerdpcore.domain.ConnectionReference;
 import com.freerdp.freerdpcore.services.LibFreeRDP;
@@ -141,7 +143,9 @@ public class SessionActivity extends AppCompatActivity
 	private ClipboardManagerProxy mClipboardManager;
 	private SessionInputManager inputManager;
 	private SessionDialogs dialogs;
+	private BlockingPrompts prompts;             // captantan fork
 	private CertificatePrompt certificatePrompt; // captantan fork
+	private SessionPrompts sessionPrompts;       // captantan fork
 
 	private FloatingToolbar floatingToolbar;
 
@@ -296,8 +300,11 @@ public class SessionActivity extends AppCompatActivity
 				connectCancelledByUser = true;
 			}
 		});
-		// captantan fork: a rejected certificate is the user's choice, not an error to report
-		certificatePrompt = new CertificatePrompt(this, () -> connectCancelledByUser = true);
+		// captantan fork: the dialogs the session thread waits on, released in onDestroy; a rejected
+		// certificate or cancelled login is the user's choice, not an error to report
+		prompts = new BlockingPrompts(this);
+		certificatePrompt = new CertificatePrompt(prompts, () -> connectCancelledByUser = true);
+		sessionPrompts = new SessionPrompts(prompts, () -> connectCancelledByUser = true);
 
 		// Wire up the input manager (instance is attached later in bindSession()).
 		inputManager =
@@ -378,9 +385,9 @@ public class SessionActivity extends AppCompatActivity
 		super.onDestroy();
 		Log.v(TAG, "Session.onDestroy");
 
-		// captantan fork: answer a waiting certificate prompt (reject) before the session is freed;
-		// freeing a connected session waits for its thread, which would wait for the prompt forever
-		certificatePrompt.close();
+		// captantan fork: answer a waiting prompt (certificate, credentials) before the session is
+		// freed; freeing a connected session waits for its thread, which would wait for it forever
+		prompts.close();
 
 		// Cancel running disconnect timers.
 		GlobalApp.cancelDisconnectTimer();
@@ -827,14 +834,14 @@ public class SessionActivity extends AppCompatActivity
 	public boolean OnAuthenticate(StringBuilder username, StringBuilder domain,
 	                              StringBuilder password)
 	{
-		return dialogs.promptCredentials(username, domain, password);
+		return sessionPrompts.credentials(username, domain, password); // captantan fork
 	}
 
 	@Override
 	public boolean OnGatewayAuthenticate(StringBuilder username, StringBuilder domain,
 	                                     StringBuilder password)
 	{
-		return dialogs.promptCredentials(username, domain, password);
+		return sessionPrompts.credentials(username, domain, password); // captantan fork
 	}
 
 	@Override
@@ -877,7 +884,7 @@ public class SessionActivity extends AppCompatActivity
 			return true;
 		// suppress the generic failure toast; the dialog explains the abort
 		connectCancelledByUser = true;
-		dialogs.showExperimentalBlocked(displayName);
+		sessionPrompts.experimentalBlocked(displayName); // captantan fork
 		return false;
 	}
 
