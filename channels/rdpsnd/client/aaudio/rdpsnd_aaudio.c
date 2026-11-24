@@ -43,12 +43,6 @@
 
 #include "rdpsnd_main.h"
 
-/* captantan fork: TEMPORARY audio diagnostics */
-#include <freerdp/captantan_audio_diag.h>
-static CaptantanAudioMeter captantan_played_meter = { 0 };
-static uint64_t captantan_dropped_frames = 0;
-static uint64_t captantan_write_errors = 0;
-
 /* Buffer cushion (ms) used when the server requests no explicit latency. */
 #define AAUDIO_DEFAULT_LATENCY_MS 100
 
@@ -187,12 +181,6 @@ static BOOL rdpsnd_aaudio_open_stream(rdpsndAAudioPlugin* aaudio)
 			target = capacity;
 
 		const aaudio_result_t size = AAudioStream_setBufferSizeInFrames(aaudio->stream, target);
-		/* captantan fork: TEMPORARY audio diagnostics */
-		WLog_INFO(CAPTANTAN_AUDIO_TAG,
-		          "AAudio stream: asked %" PRIu32 " Hz %" PRIu32 " ch I16, got %d Hz %d ch format %d, "
-		          "burst %d, capacity %d, buffer size %d, volume 0x%08" PRIX32,
-		          aaudio->rate, aaudio->channels, actualRate, actualChannels, (int)actualFormat,
-		          burst, capacity, size, aaudio->volume);
 		if (size < 0)
 			WLog_WARN(TAG, "AAudioStream_setBufferSizeInFrames(%d): %s", target,
 			          AAudio_convertResultToText(size));
@@ -322,15 +310,6 @@ static BOOL rdpsnd_aaudio_set_volume(rdpsndDevicePlugin* device, UINT32 value)
 {
 	rdpsndAAudioPlugin* aaudio = (rdpsndAAudioPlugin*)device;
 	WINPR_ASSERT(aaudio);
-	/* captantan fork: TEMPORARY audio diagnostics and experiment switch */
-	if (captantan_audio_prop("novol", 0) != 0)
-	{
-		WLog_INFO(CAPTANTAN_AUDIO_TAG, "AAudio set volume 0x%08" PRIX32 " IGNORED (novol)", value);
-		return TRUE;
-	}
-	WLog_INFO(CAPTANTAN_AUDIO_TAG, "AAudio set volume 0x%08" PRIX32 " (left %" PRIu32 ", right %" PRIu32
-	          " of 65535)",
-	          value, value & 0xFFFF, (value >> 16) & 0xFFFF);
 	EnterCriticalSection(&aaudio->lock);
 	aaudio->volume = value;
 	LeaveCriticalSection(&aaudio->lock);
@@ -414,20 +393,6 @@ static UINT rdpsnd_aaudio_play(rdpsndDevicePlugin* device, const BYTE* data, siz
 		size_t frames = size / bytesPerFrame;
 		const BYTE* pos = (const BYTE*)samples;
 
-		/* captantan fork: TEMPORARY audio diagnostics */
-		captantan_audio_meter_add(&captantan_played_meter, samples, frames * bytesPerFrame,
-		                          aaudio->channels);
-		if (captantan_audio_meter_due(&captantan_played_meter))
-		{
-			char extra[160] = { 0 };
-			(void)snprintf(extra, sizeof(extra),
-			               "volume 0x%08" PRIX32 ", frames dropped so far %" PRIu64
-			               ", write errors %" PRIu64,
-			               aaudio->volume, captantan_dropped_frames, captantan_write_errors);
-			captantan_audio_meter_log(&captantan_played_meter, "PCM after volume, to AAudio",
-			                          aaudio->channels, extra);
-		}
-
 		while (frames > 0)
 		{
 			const int32_t chunk =
@@ -437,9 +402,6 @@ static UINT rdpsnd_aaudio_play(rdpsndDevicePlugin* device, const BYTE* data, siz
 
 			if (written < 0)
 			{
-				/* captantan fork: TEMPORARY audio diagnostics */
-				captantan_write_errors++;
-				captantan_dropped_frames += frames;
 				/* A timeout is transient. Everything else (route change, audioserver restart,
 				 * internal fault) leaves the stream unusable, so drop it and let the next play
 				 * call reopen; keeping it would mute audio for the rest of the session. */
@@ -459,11 +421,7 @@ static UINT rdpsnd_aaudio_play(rdpsndDevicePlugin* device, const BYTE* data, siz
 			}
 
 			if ((written == 0) || (written > chunk))
-			{
-				/* captantan fork: TEMPORARY audio diagnostics */
-				captantan_dropped_frames += frames;
 				break;
-			}
 
 			pos += (size_t)written * bytesPerFrame;
 			frames -= (size_t)written;

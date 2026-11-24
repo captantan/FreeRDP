@@ -51,13 +51,6 @@
 #include "rdpsnd_common.h"
 #include "rdpsnd_main.h"
 
-/* captantan fork: TEMPORARY audio diagnostics */
-#include <freerdp/captantan_audio_diag.h>
-static CaptantanAudioMeter captantan_decoded_meter = { 0 };
-static uint64_t captantan_wave_bytes_in = 0;
-static uint64_t captantan_wave_bytes_out = 0;
-static uint64_t captantan_wave_count = 0;
-
 struct rdpsnd_plugin
 {
 	IWTSPlugin iface;
@@ -200,27 +193,8 @@ static void rdpsnd_select_supported_audio_formats(rdpsndPlugin* rdpsnd)
 			continue;
 
 		WINPR_ASSERT(rdpsnd->device->FormatSupported);
-		/* captantan fork: TEMPORARY audio diagnostics */
-		const BOOL captantanDsp = freerdp_dsp_supports_format(serverFormat, FALSE);
-		const BOOL captantanDev = rdpsnd->device->FormatSupported(rdpsnd->device, serverFormat);
-		{
-			char hex[80] = { 0 };
-			WLog_INFO(CAPTANTAN_AUDIO_TAG,
-			          "%s server format %" PRIu16 ": %s (0x%04" PRIX16 ") %" PRIu32 " Hz %" PRIu16
-			          " ch %" PRIu16 " bit, %" PRIu32 " bytes/s, align %" PRIu16 ", extra %" PRIu16
-			          " [%s] -> %s",
-			          rdpsnd_is_dyn_str(rdpsnd->dynamic), index,
-			          audio_format_get_tag_string(serverFormat->wFormatTag),
-			          serverFormat->wFormatTag, serverFormat->nSamplesPerSec,
-			          serverFormat->nChannels, serverFormat->wBitsPerSample,
-			          serverFormat->nAvgBytesPerSec, serverFormat->nBlockAlign,
-			          serverFormat->cbSize,
-			          captantan_audio_hex(serverFormat->data, serverFormat->cbSize, hex,
-			                              sizeof(hex)),
-			          captantanDev ? "offered (device plays it)"
-			                       : (captantanDsp ? "offered (decoded)" : "not offered"));
-		}
-		if (captantanDsp || captantanDev)
+		if (freerdp_dsp_supports_format(serverFormat, FALSE) ||
+		    rdpsnd->device->FormatSupported(rdpsnd->device, serverFormat))
 		{
 			AUDIO_FORMAT* clientFormat = &rdpsnd->ClientFormats[rdpsnd->NumberOfClientFormats++];
 			audio_format_copy(serverFormat, clientFormat);
@@ -432,9 +406,6 @@ static BOOL rdpsnd_apply_volume(rdpsndPlugin* rdpsnd)
 	if (rdpsnd->isOpen && rdpsnd->applyVolume && rdpsnd->device)
 	{
 		BOOL rc = IFCALLRESULT(TRUE, rdpsnd->device->SetVolume, rdpsnd->device, rdpsnd->volume);
-		/* captantan fork: TEMPORARY audio diagnostics */
-		WLog_INFO(CAPTANTAN_AUDIO_TAG, "%s volume 0x%08" PRIX32 " applied to the device: %s",
-		          rdpsnd_is_dyn_str(rdpsnd->dynamic), rdpsnd->volume, rc ? "ok" : "failed");
 		if (!rc)
 			return FALSE;
 		rdpsnd->applyVolume = FALSE;
@@ -476,24 +447,6 @@ static BOOL rdpsnd_ensure_device_is_open(rdpsndPlugin* rdpsnd, UINT16 wFormatNo,
 		           audio_format_get_tag_string(deviceFormat.wFormatTag));
 		rc = IFCALLRESULT(FALSE, rdpsnd->device->Open, rdpsnd->device, &deviceFormat,
 		                  rdpsnd->latency);
-		/* captantan fork: TEMPORARY audio diagnostics */
-		{
-			char hex[80] = { 0 };
-			WLog_INFO(CAPTANTAN_AUDIO_TAG,
-			          "%s open: wave format %" PRIu16 " %s (0x%04" PRIX16 ") %" PRIu32 " Hz %" PRIu16
-			          " ch %" PRIu16 " bit, %" PRIu32 " bytes/s, align %" PRIu16 ", extra [%s]; device "
-			          "%s %" PRIu32 " Hz %" PRIu16 " ch %" PRIu16 " bit (%s), latency %" PRIu32
-			          ", open %s, pending volume 0x%08" PRIX32 " apply=%d",
-			          rdpsnd_is_dyn_str(rdpsnd->dynamic), wFormatNo,
-			          audio_format_get_tag_string(format->wFormatTag), format->wFormatTag,
-			          format->nSamplesPerSec, format->nChannels, format->wBitsPerSample,
-			          format->nAvgBytesPerSec, format->nBlockAlign,
-			          captantan_audio_hex(format->data, format->cbSize, hex, sizeof(hex)),
-			          audio_format_get_tag_string(deviceFormat.wFormatTag),
-			          deviceFormat.nSamplesPerSec, deviceFormat.nChannels,
-			          deviceFormat.wBitsPerSample, supported ? "played directly" : "through the DSP",
-			          rdpsnd->latency, rc ? "ok" : "failed", rdpsnd->volume, rdpsnd->applyVolume);
-		}
 
 		if (!rc)
 			return FALSE;
@@ -712,21 +665,8 @@ static UINT rdpsnd_treat_wave(rdpsndPlugin* rdpsnd, wStream* s, size_t size)
 	{
 		wStream* pcmData = StreamPool_Take(rdpsnd->pool, 4096);
 
-		/* captantan fork: TEMPORARY audio diagnostics */
-		captantan_wave_count++;
-		captantan_wave_bytes_in += size;
-		if (captantan_wave_count <= 4)
-		{
-			char hex[80] = { 0 };
-			WLog_INFO(CAPTANTAN_AUDIO_TAG, "%s wave %" PRIu64 ": %" PRIuz " bytes, starts [%s]",
-			          rdpsnd_is_dyn_str(rdpsnd->dynamic), captantan_wave_count, size,
-			          captantan_audio_hex(data, (size < 24) ? size : 24, hex, sizeof(hex)));
-		}
-
 		if (rdpsnd->device->FormatSupported(rdpsnd->device, format))
 		{
-			captantan_wave_bytes_out += size;
-			captantan_audio_meter_add(&captantan_decoded_meter, data, size, format->nChannels);
 			if (rdpsnd->device->PlayEx)
 				latency = rdpsnd->device->PlayEx(rdpsnd->device, format, data, size);
 			else
@@ -735,15 +675,6 @@ static UINT rdpsnd_treat_wave(rdpsndPlugin* rdpsnd, wStream* s, size_t size)
 		else if (freerdp_dsp_decode(rdpsnd->dsp_context, format, data, size, pcmData))
 		{
 			Stream_SealLength(pcmData);
-
-			/* captantan fork: TEMPORARY audio diagnostics */
-			captantan_wave_bytes_out += Stream_Length(pcmData);
-			if (captantan_wave_count <= 4)
-				WLog_INFO(CAPTANTAN_AUDIO_TAG, "%s wave %" PRIu64 ": decoded to %" PRIuz " bytes",
-				          rdpsnd_is_dyn_str(rdpsnd->dynamic), captantan_wave_count,
-				          Stream_Length(pcmData));
-			captantan_audio_meter_add(&captantan_decoded_meter, Stream_Buffer(pcmData),
-			                          Stream_Length(pcmData), format->nChannels);
 
 			/* Decoders with priming delay (e.g. AAC) may legitimately produce no PCM yet */
 			if (Stream_Length(pcmData) == 0)
@@ -768,20 +699,6 @@ static UINT rdpsnd_treat_wave(rdpsndPlugin* rdpsnd, wStream* s, size_t size)
 		}
 
 		Stream_Release(pcmData);
-
-		/* captantan fork: TEMPORARY audio diagnostics */
-		if (captantan_audio_meter_due(&captantan_decoded_meter))
-		{
-			char extra[160] = { 0 };
-			(void)snprintf(extra, sizeof(extra),
-			                "%s %s waves so far %" PRIu64 ", bytes in %" PRIu64 ", PCM bytes %" PRIu64
-			                ", bad %" PRIu64,
-			                rdpsnd_is_dyn_str(rdpsnd->dynamic),
-			                audio_format_get_tag_string(format->wFormatTag), captantan_wave_count,
-			                captantan_wave_bytes_in, captantan_wave_bytes_out, rdpsnd->badWaves);
-			captantan_audio_meter_log(&captantan_decoded_meter, "PCM before volume",
-			                          format->nChannels, extra);
-		}
 	}
 
 	end = GetTickCount64();
@@ -881,10 +798,6 @@ static UINT rdpsnd_recv_volume_pdu(rdpsndPlugin* rdpsnd, wStream* s)
 	Stream_Read_UINT32(s, dwVolume);
 	WLog_Print(rdpsnd->log, WLOG_DEBUG, "%s Volume: 0x%08" PRIX32 "",
 	           rdpsnd_is_dyn_str(rdpsnd->dynamic), dwVolume);
-
-	/* captantan fork: TEMPORARY audio diagnostics */
-	WLog_INFO(CAPTANTAN_AUDIO_TAG, "%s server volume PDU 0x%08" PRIX32 " (device open: %d)",
-	          rdpsnd_is_dyn_str(rdpsnd->dynamic), dwVolume, rdpsnd->isOpen);
 
 	rdpsnd->volume = dwVolume;
 	rdpsnd->applyVolume = TRUE;
