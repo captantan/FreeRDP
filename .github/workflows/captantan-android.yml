@@ -96,6 +96,16 @@ jobs:
           grep -Eq '^BUILD_UNIVERSAL: +false$' "$RUNNER_TEMP/config.txt" || fail "BUILD_UNIVERSAL is not false"
           grep -Eq '^CMAKE_ARGUMENTS: .*-DWITH_FFMPEG=OFF' "$RUNNER_TEMP/config.txt" || fail "CMAKE_ARGUMENTS does not turn FFmpeg off"
 
+      - name: Check make job cap
+        run: |
+          # The superbuild's ExternalProject steps live in the top-level build.ninja. Every make
+          # there must have a number after -j (CaptantanMakeJobs.cmake).
+          nj=$(find freeRDPCore/.cxx -path '*/arm64-v8a/build.ninja' -not -path '*-prefix*' | head -n 1)
+          [ -n "$nj" ] || { echo "::error::top-level build.ninja not found"; exit 1; }
+          echo "$nj"
+          grep -oE '(^| )-j[0-9]*( |$)' "$nj" | tr -d ' ' | sort | uniq -c
+          if grep -qE '(^| )-j( |$)' "$nj"; then echo "::error::a bare make -j is left"; exit 1; fi
+
       - name: Build preview (test build)
         run: |
           start=$SECONDS
@@ -199,10 +209,10 @@ jobs:
             done || true
             echo "-- compiler flags of one libfreerdp3 object:"
             f=$(find freeRDPCore/.cxx -path '*freerdp-build*' -name build.ninja | head -n 1)
-            [ -n "$f" ] && grep -m 1 -A 3 'libfreerdp/core/.*\.c\.o: C_COMPILER' "$f" | grep -E '^\s*FLAGS =' || true
+            [ -n "$f" ] && grep -m 1 -A 6 '^build libfreerdp/.*\.c\.o: C_COMPILER' "$f" | grep -m 1 -E '^ +FLAGS =' || true
             for c in "$ANDROID_HOME"/cmake/*/bin/cmake; do [ -x "$c" ] && "$c" --version | head -n 1; done
             for n in "$ANDROID_HOME"/ndk/*/source.properties; do [ -f "$n" ] && grep Pkg.Revision "$n"; done
-            grep -rh "captantan fork: make job count" freeRDPCore/.cxx 2>/dev/null | sort -u || true
+            grep -rh "captantan fork: make job count" freeRDPCore/.cxx freeRDPCore/build/intermediates/cxx 2>/dev/null | sort -u || true
             echo '```'
             echo
             echo "### Project configuration"
