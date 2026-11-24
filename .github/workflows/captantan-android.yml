@@ -208,7 +208,7 @@ jobs:
               echo "$(grep -h '^CMAKE_BUILD_TYPE:' "$c" | cut -d= -f2) ${c#freeRDPCore/.cxx/}"
             done || true
             echo "-- compiler flags of one libfreerdp3 object:"
-            f=$(find freeRDPCore/.cxx -path '*freerdp-build*' -name build.ninja | head -n 1)
+            f=$(find freeRDPCore/.cxx -path '*freerdp-build*' -name build.ninja 2>/dev/null | head -n 1 || true)
             [ -n "$f" ] && grep -m 1 -A 6 '^build libfreerdp/.*\.c\.o: C_COMPILER' "$f" | grep -m 1 -E '^ +FLAGS =' || true
             for c in "$ANDROID_HOME"/cmake/*/bin/cmake; do [ -x "$c" ] && "$c" --version | head -n 1; done
             for n in "$ANDROID_HOME"/ndk/*/source.properties; do [ -f "$n" ] && grep Pkg.Revision "$n"; done
