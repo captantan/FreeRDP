@@ -217,6 +217,17 @@ public final class SessionHost implements LibFreeRDP.UIEventListener, GlobalApp.
 		return phase != Phase.ENDED;
 	}
 
+	/**
+	 * True once {@link #disconnect} was asked for: the session is ending and is listed only until
+	 * its thread has ended (at once for a connected session; a connect in its first moments can
+	 * take until the attempt ends). The switcher shows it as ending and offers nothing for it. UI
+	 * thread.
+	 */
+	public boolean isEnding()
+	{
+		return endRequested && phase != Phase.ENDED;
+	}
+
 	/** True while the session waits for an answer (certificate, login) and no window shows it. */
 	public boolean needsAttention()
 	{
@@ -368,6 +379,7 @@ public final class SessionHost implements LibFreeRDP.UIEventListener, GlobalApp.
 		Log.i(TAG, "disconnect asked: " + this + " (" + reason + ")");
 		endRequested = true;
 		quiet = true;
+		SessionRegistry.changed(); // lists show it as ending (package 2.2)
 		// A session thread waiting for an answer goes on at once (reject, cancel).
 		prompts.close();
 		// The native disconnect whatever the state: it queues a disconnect, sets the abort event

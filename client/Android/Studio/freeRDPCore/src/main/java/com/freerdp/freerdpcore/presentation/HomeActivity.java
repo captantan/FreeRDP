@@ -128,6 +128,8 @@ public class HomeActivity extends AppCompatActivity
 
 		binding.recyclerViewBookmarks.setLayoutManager(new LinearLayoutManager(this));
 		binding.recyclerViewBookmarks.setAdapter(bookmarkListAdapter);
+		// captantan fork: live sessions in the list, and the way to the session switcher
+		com.freerdp.freerdpcore.captantan.HomeSessions.attach(this, binding.getRoot());
 
 		viewModel.getBookmarks().observe(this,
 		                                 bookmarks -> bookmarkListAdapter.setItems(bookmarks));

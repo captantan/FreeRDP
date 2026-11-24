@@ -49,10 +49,9 @@ public class SessionRequestHandlerActivity extends AppCompatActivity
 		Intent sessionIntent = new Intent(this, SessionActivity.class);
 		sessionIntent.putExtras(bundle);
 
-		// captantan fork: into the session window, as every other launch (was launcher.launch(), which
-		// put the session on top of this activity's task and waited for it to end)
-		sessionIntent.addFlags(com.freerdp.freerdpcore.captantan.SessionWindow.LAUNCH_FLAGS);
-		startActivity(sessionIntent);
+		// captantan fork: into the session window or a new one, as every other launch (was
+		// launcher.launch(), which put the session on top of this activity's task and waited for it)
+		com.freerdp.freerdpcore.captantan.SessionLauncher.launch(this, sessionIntent, null);
 		finish();
 	}
 

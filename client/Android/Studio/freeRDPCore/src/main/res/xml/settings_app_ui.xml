@@ -7,6 +7,15 @@
         android:entryValues="@array/pref_theme_values"
         android:key="@string/pref_key_theme"
         android:title="@string/pref_title_theme" />
+    <!-- captantan fork: where a new connection opens (roadmap 2.2, captantan/SessionLauncher) -->
+    <ListPreference
+        xmlns:app="http://schemas.android.com/apk/res-auto"
+        android:defaultValue="desktop"
+        android:entries="@array/captantan_new_connection_entries"
+        android:entryValues="@array/captantan_new_connection_values"
+        android:key="@string/captantan_pref_key_new_connection_window"
+        android:title="@string/captantan_pref_new_connection_title"
+        app:useSimpleSummaryProvider="true" />
     <CheckBoxPreference
         android:key="@string/preference_key_ui_hide_status_bar"
         android:title="@string/settings_ui_hide_status_bar" />

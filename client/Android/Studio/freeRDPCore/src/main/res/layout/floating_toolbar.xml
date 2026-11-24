@@ -43,6 +43,16 @@
             app:tint="#FFFFFF"
             android:src="@drawable/ic_keyboard" />
 
+        <!-- captantan fork: the session switcher (captantan/SessionWindow sets its click) -->
+        <ImageButton
+            android:id="@+id/captantan_floating_toolbar_sessions"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="?android:attr/selectableItemBackground"
+            android:contentDescription="@string/captantan_toolbar_sessions"
+            app:tint="#FFFFFF"
+            android:src="@drawable/captantan_ic_sessions" />
+
     </LinearLayout>
 
 </LinearLayout>

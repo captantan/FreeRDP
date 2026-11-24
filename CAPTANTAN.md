@@ -86,6 +86,13 @@ own screens to match).
   app's own "Theme" setting under Settings) and with any wallpaper: on Android 12 and later the colours
   come from the wallpaper, on Android 10 and 11 from the fallback scheme. Check a new screen on a device in
   both modes. Nothing in the app may assume a particular hue.
+- **Over a session window**, fork UI is a dialog or a bottom sheet (as the session switcher): it takes
+  input focus, so held physical keys are released on the session and nothing is typed into it behind
+  the sheet. Dismiss it before something that may show a session's prompt (a switch, an attach).
+- **Live sessions in a list** are marked with the primary colour and their state in words; a session
+  waiting for an answer with the error colours (the switcher's row: `colorErrorContainer` /
+  `colorOnErrorContainer`). Words for states and places come from `captantan_state_*` and
+  `captantan_where_*`, so the switcher, the list and the notification (2.3) say the same.
 - **Where things go.** Theme-only resources (the theme, its colours) are in the app module
   (`aFreeRDP/src/main/res/values*/captantan_*.xml`). Styles, layouts and drawables that fork code in
   `freeRDPCore` uses go in `freeRDPCore/src/main/res/` under `captantan_*` names, since the library cannot
@@ -294,7 +301,8 @@ session. Two rules: a session is shown in at most one window, and a window shows
   goes on), "Disconnect", or Cancel. Upstream's "press back again to disconnect" is no longer reached.
   A long press on a hardware Back key still disconnects (upstream, `SessionInputManager`).
 - **Closing a window** (Back and "Leave running", swiping it out of Recents, the system destroying it)
-  detaches. To come back, open the same bookmark again. A window whose session ends closes, as upstream.
+  detaches. To come back, open the same bookmark again, or the session from the switcher (package 2.2). A
+  window whose session ends closes, as upstream.
 - **A session that no window shows** keeps running in full. What that means, so that the switcher (2.2)
   and the notification (2.3) can be built knowing it:
   - Its redirections stay on: sound keeps playing, and a redirected microphone or camera stays open to
@@ -368,6 +376,123 @@ session. Two rules: a session is shown in at most one window, and a window shows
   `session size`, `session connected`, `focus`, `detach`, `disconnect asked`, `session end`,
   `session gone`, `window closed`, `prompt:` lines and the reconnect gate, each naming the session
   (`s<n> "<title>"`) and the window (`w<n>`).
+
+**Session switcher, in-window switch, open in new window** (package 2.2)
+
+Built on the session model of 2.1: a session belongs to the process, a window shows one session, a session
+is shown in at most one window.
+
+- `freeRDPCore/.../captantan/SessionSwitcher.java` (new): the switcher, a Material bottom sheet
+  (`BottomSheetDialog`) over the window it was opened from. It lists every live session: title, host, state
+  (connecting, connected, ending), where it is shown ("in this window", "in another window", "in no
+  window"), and a thumbnail. A session that waits for an answer while no window shows it gets the error
+  container colours and "Waiting for your answer: open it". A tap on a session: switch this window to it;
+  if another window shows it, that window comes to the front instead; from the connection list, show it
+  (its window to the front, or where the setting says). Per session: "Open in new window" (only for a
+  session that no window shows; one that a window shows is reached by bringing that window to the front)
+  and "Disconnect" (asks first). At the bottom: "Connection list" and "New connection" (the list with its
+  search field open, where a host name is typed for a quick connect). `SessionSwitcher.open(SessionWindow)`
+  is the one public way to open it for a window (package 5.3: with `SessionRegistry.getFocusedWindow()`);
+  `openFromList(Activity)` opens it over the list.
+  - **Why a bottom sheet** on both devices: on a folded phone it is at the thumb and leaves the session
+    visible above it; on a wide window Material caps a bottom sheet at 640 dp and centres it. A side sheet
+    is Material's form for wide windows, but it fills a phone's width, and a desktop window can be phone
+    sized. It opens fully expanded and scrolls when the window is short.
+  - **Thumbnails** are made when the sheet opens and when a session connects, with
+    `SessionHost.makeThumbnail` on a worker thread, longer edge 112 dp, and dropped when it closes. No full
+    frame is kept.
+- `freeRDPCore/.../captantan/SessionLauncher.java` (new): every launch of a session window from inside the
+  app. A launch for a connection whose session a window shows brings that window to the front
+  (`ActivityManager.AppTask.moveToFront`); otherwise the setting decides between the session window
+  (`SessionWindow.LAUNCH_FLAGS`, re-points the session window used last) and a new window
+  (`NEW_WINDOW_FLAGS`: `NEW_TASK | NEW_DOCUMENT | MULTIPLE_TASK | LAUNCH_ADJACENT`, a new document task with
+  its own Recents entry, put beside the current one where the system honours "adjacent"). Launched from a
+  session window it also carries `FLAG_ACTIVITY_PREVIOUS_IS_TOP`: the session activity is singleTop, and
+  Android otherwise delivers the launch to the session window on top, even with `MULTIPLE_TASK`
+  (`ActivityStarter.deliverToCurrentTopIfNeeded`; seen on a device, where "open in new window" only
+  re-pointed the window). The launch
+  carries the session's token (`SessionWindow.EXTRA_SESSION`) and its connection reference or link
+  (`intentFor`).
+- **The setting** "Open new connections" (Settings, User interface; key `captantan_new_connection_window`):
+  "In a new window in desktop windowing, else in the session window" (`desktop`, the default), "In the
+  session window" (`this_window`), "In a new window" (`new_window`). So a phone gets one window that
+  switches. **Desktop windowing** is detected per launch from the launching activity: Android's desktop
+  windowing and DeX run apps in freeform windows (also when maximised), which the activity's
+  configuration prints as `mWindowingMode=freeform` (Android has no public call for it); older DeX also
+  has `Configuration.semDesktopModeEnabled`, read by reflection where it exists. Split screen is not
+  desktop windowing.
+- **How windows are keyed.** A window is not keyed by its connection: it shows what it was last pointed at.
+  Its activity's intent always names the session it shows (set in `SessionWindow.show`) and is kept in the
+  activity's saved state (`SessionWindow.onSaveInstanceState`, restored in its constructor). So a window
+  that the system recreates (a configuration change outside `configChanges`, a restore from Recents after
+  the process died) shows the session it showed last: it attaches if the session lives, and connects the
+  same connection again if the process had died. A new window is a document task, removed from Recents
+  when it closes (`autoRemoveFromRecents`); a plain launch reaches the most recently used session window.
+  On a phone without desktop windowing, "Open in new window" opens a second task. On the Android 17
+  foldable it was measured on (folded), the system honoured `LAUNCH_ADJACENT` and put the new window in
+  split screen beside the one it was opened from; dragging the divider to an edge makes either full
+  screen, and each is its own entry in Recents. Back in either asks the 2.1 question as usual.
+- `freeRDPCore/.../captantan/HomeSessions.java` (new): the connection list. A row whose connection has a
+  live session is marked: its icon in the primary colour (error colour while it waits for an answer) and its
+  second line "Connected · host" (or Connecting, Ending, waiting). While any session is live an extended
+  floating action button at the bottom ("2 sessions", "A session needs your answer" in the error container
+  colours) opens the switcher, which also lists sessions that have no row (quick connect, links). A tap on a
+  marked row returns to its session (through `SessionLauncher.launch`). It also opens the search field for
+  "New connection" (`SessionLauncher.EXTRA_NEW_CONNECTION`, through a `MenuProvider` that runs after
+  HomeActivity's own menu code, and `addOnNewIntentListener`).
+- `SessionWindow.java` (ours, changed): `switchTo(host, askedFrom)` (the in-window switch, no reconnect;
+  brings the other window to the front if one shows the target); `leaveFor` no longer takes a session from
+  the window that shows it: a launch that only names such a session (the list, a shortcut, a notification)
+  brings that window to the front and leaves this one as it was; the constructor takes the saved state and
+  wires the toolbar button; `onSaveInstanceState`; a switcher open over a window closes with it.
+- `SessionHost.java` (ours, changed): `isEnding()` (disconnect asked, the session not yet gone: shown as
+  "Ending" and offered nothing), and `disconnect` tells the registry's listeners. `SessionRegistry` is
+  unchanged.
+- **Held keys and focus through a switch.** The sheet is a dialog: opening it takes input focus from the
+  session window, which releases what a physical keyboard holds down on the session (5.1). The switch then
+  runs `SessionWindow.show`, whose `unbind` releases again and cuts the window's input off from the old
+  instance before the new one is bound (2.1); when the sheet closes, focus returns to the window and the
+  log's `focus:` line names the new session. The switch also hides the on-screen keyboard (`unbind` calls
+  `hideKeyboards`). The sheet is dismissed before the switch, so a prompt the new session has open is shown
+  on top in the window.
+- **Log** (tag `captantan.session`, INFO): `switcher open in <window|the connection list>`,
+  `switch: w<n> s<a> -> s<b> (..., no reconnect)`, `open in new window: s<n> (asked from ...)`,
+  `bring to front: w<n> (s<n>, task <id>), asked from ...`, `launch from <activity>: ... opens in a new
+  window|the session window (setting ..., desktop windowing yes|no)`, `launch: s<n> is live, shown in
+  w<n> (was in w<m>)`, `window open: w<n> (recreated)`.
+- Upstream files edited (each marked):
+  - `res/layout/floating_toolbar.xml`: one `ImageButton` (`captantan_floating_toolbar_sessions`), styled like
+    its siblings (their hard-coded white tint). `FloatingToolbar.java` is not edited: it makes every button in
+    the layout draggable, and `SessionWindow` sets the click. Milestone 4 replaces the bar.
+  - `SessionActivity.java`: the `SessionWindow` constructor gets `savedInstanceState`; a new
+    `onSaveInstanceState` calls `window.onSaveInstanceState`.
+  - `HomeActivity.java`: one line in `onCreate`, `HomeSessions.attach(this, binding.getRoot())`.
+  - `BookmarkListAdapter.java`: one line at the end of `onBindViewHolder`, `HomeSessions.mark(holder.itemView,
+    refStr)`.
+  - `ExternalDisplayManager.java`, `SessionRequestHandlerActivity.java`: the session launch is
+    `SessionLauncher.launch(...)` (was the 2.1 `LAUNCH_FLAGS` and `startActivity`).
+  - `res/xml/settings_app_ui.xml`: the setting's `ListPreference`, after the theme.
+- New resources: `res/layout/captantan_session_switcher{,_item}.xml`, `res/drawable/captantan_ic_{sessions,
+  open_in_new_window,disconnect}.xml` (the last two are Material icons, Apache-2.0),
+  `res/values/captantan_{dimens,ids}.xml`, strings in `captantan_strings.xml` (English only).
+- **Measured on a device** (Android 17 foldable, folded, test build of pull request 12, 2026-11-24, three
+  bookmarks): two sessions live, switched ten times in one window (`switch:` lines, each a
+  detach and an attach of a connected session, no `session start`, no reconnect); one session task (and
+  the list's) with two sessions, two after "Open in new window" from the session window and from the
+  list; "bring to front" from the list (tap on a row whose session a window shows) and from the switcher
+  of the other window, with focus following; in split screen focus followed the half that was tapped;
+  disconnect from the switcher (in the other window and in the list) ended only that session and closed
+  only its window; "New connection" brought the list to the front and a third connection was made with
+  the other session live; launches from the list with the default setting went to the session window,
+  and the session it showed went on. No crash. Not exercised: a physical keyboard (held keys through a
+  switch), a prompt following a switch, a session waiting for an answer while shown nowhere, quick
+  connect and link sessions in the switcher, a window recreated or restored after process death, the
+  settings "In a new window" and "In the session window", desktop windowing and DeX (the tablet).
+  Seen and left for 2.3: with the app hidden for about ten seconds or more, every session's connection
+  dropped and reconnected when the app came back; two or three seconds hidden did not.
+- Not in this package: the notification (2.3), the fork's session bar (4.1), resizing a session to the
+  window it attaches to (milestone 3), key combinations (5.3), window titles and bounds (6.1), restyling the
+  list rows beyond the marking (7.2b).
 
 **Per-connection settings and graphics mode** (package 1.4)
 
@@ -708,8 +833,21 @@ compile check runs on the merge.
    - `freeRDPCore/src/main/AndroidManifest.xml` (session activity): keep `launchMode="singleTop"` and
      no `documentLaunchMode`. The compile check fails if `documentLaunchMode` comes back.
    - `ExternalDisplayManager.java` and `SessionRequestHandlerActivity.java`: keep
-     `SessionWindow.LAUNCH_FLAGS` on the session launch (no `FLAG_ACTIVITY_MULTIPLE_TASK`, no launch for a
-     result). A new place in upstream that starts `SessionActivity` needs the same flags.
+     `SessionLauncher.launch(...)` as the session launch (package 2.2; it adds `SessionWindow.LAUNCH_FLAGS` or
+     the new-window flags itself, so no flags on the intent, no `FLAG_ACTIVITY_MULTIPLE_TASK`, no launch for a
+     result). A new place in upstream that starts `SessionActivity` from inside the app goes through
+     `SessionLauncher.launch` too.
+   - Package 2.2 in upstream files: `SessionActivity.java` keeps `savedInstanceState` in the
+     `SessionWindow` constructor and the `onSaveInstanceState` override (if upstream adds its own
+     `onSaveInstanceState`, call `window.onSaveInstanceState` from it); `HomeActivity.java` keeps
+     `HomeSessions.attach` after the adapter is set, and `BookmarkListAdapter.java` keeps `HomeSessions.mark`
+     at the end of `onBindViewHolder`. `HomeSessions` relies on the ids `recyclerViewBookmarks`,
+     `bookmark_icon1`, `bookmark_text2` and `action_search`, on the list root being a `RelativeLayout`
+     (home.xml), on upstream setting the row's icon and second line on every bind, and on the search field
+     being the `action_search` item's action view: if upstream renames or restyles these (7.2b may too), fix
+     `HomeSessions`. `floating_toolbar.xml`: keep the sessions button inside `floating_toolbar_buttons`;
+     if upstream rewrites the toolbar, put it back where its buttons are (it needs only its id).
+     `settings_app_ui.xml`: keep the `captantan_new_connection_window` preference.
    - `KeyboardAccessibilityService.java`: keep `SessionRegistry.getFocusedActivity()` in both places.
      Any new reader of "the active session" must ask the registry.
    - `GlobalApp.java`: keep `SessionRegistry.init(this)` in `onCreate` and `SessionRegistry.disconnectAll`
@@ -803,7 +941,9 @@ The workflow `.github/workflows/captantan-android.yml` runs on pull requests int
   `captantan/PhysicalKeyboard` with its four native methods and `libfreerdp-android.so` exports a function
   for each (package 5.1: they are found by name at run time, so a misnamed one would compile and fail at
   the first key); the dex has the package 2.1 classes (`SessionHost`, `SessionRegistry`,
-  `SessionWindow`), and no activity in the manifest has `documentLaunchMode`;
+  `SessionWindow`), and no activity in the manifest has `documentLaunchMode`; the package 2.2 classes
+  (`SessionSwitcher`, `SessionLauncher`, `HomeSessions`), the toolbar button's id and the switcher's
+  layouts;
 - test build: package `dev.captantan.freerdp.debug`, label `RDP debug`, the same version, signed with the
   committed public key, and byte-identical native libraries to the release APK.
 

@@ -60,12 +60,12 @@ class ExternalDisplayManager
 	{
 		Intent intent = new Intent(activity, SessionActivity.class);
 		intent.putExtra(SessionActivity.PARAM_CONNECTION_REFERENCE, refStr);
-		// captantan fork: the one session window is reused, a second is only made on purpose (was
-		// FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_MULTIPLE_TASK: a new task for every launch)
-		intent.addFlags(com.freerdp.freerdpcore.captantan.SessionWindow.LAUNCH_FLAGS);
 		ActivityOptions opts = ActivityOptions.makeBasic();
 		opts.setLaunchDisplayId(displayId);
-		activity.startActivity(intent, opts.toBundle());
+		// captantan fork: the session window or a new one, as the app's setting says, and the
+		// window that shows a live session to the front (was FLAG_ACTIVITY_NEW_TASK |
+		// FLAG_ACTIVITY_MULTIPLE_TASK and startActivity: a new task for every launch)
+		com.freerdp.freerdpcore.captantan.SessionLauncher.launch(activity, intent, opts.toBundle());
 	}
 
 	private Display[] getSecondaryDisplays()
