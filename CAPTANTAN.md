@@ -126,6 +126,34 @@ the table and the decoder name in use are in the same capture.
 - If neither subsystem line appears during a session, the server did not send H.264 (for example it chose
   RemoteFX Progressive).
 
+**Session audio** (measured on a device on 2026-11-24, no source change)
+
+Sound takes this path, all of it upstream code that the package 1.3 flag turned on, unedited: the rdpsnd
+dynamic channel, then the wave format the server picks from those the client accepted, then for AAC
+`libfreerdp/codec/dsp_mediacodec.c` (Android's software decoder `c2.android.aac.decoder`, 16-bit PCM out),
+then `channels/rdpsnd/client/aaudio/rdpsnd_aaudio.c` (an AAudio stream at the format's rate and channels).
+
+- A Windows 11 host offers eight AAC formats (44.1 kHz stereo, 192 down to 16 kbit/s), then PCM, ADPCM and
+  A-law. The client accepts the AAC formats (decoded) and PCM (played directly); Windows picked AAC at
+  96 kbit/s, where PCM would be 1411 kbit/s. Its AAC formats carry no extra data, so the decoder is
+  configured with an AudioSpecificConfig the client builds (AAC-LC).
+- Each wave is one AAC frame (about 279 bytes) and decodes to 1024 frames of PCM. The first two waves
+  return nothing while the decoder starts.
+- Windows 11 sent no volume PDU, not even when the session's volume slider moved: it scales the sound on
+  the host. The client's software volume (`rdpsnd_aaudio_apply_volume`) stayed at full, and the PCM reached
+  AAudio exactly as decoded, with no frames dropped.
+- Level: music peaked at 22276 of 32768 (-3.4 dBFS).
+
+**If a session is silent or very quiet, check the host first.** The case that was measured: music players
+in the session could not be heard while Windows' own sounds could. The client was decoding digital silence
+(peak 0 to 2 of 32768) for as long as the music played, and Windows' own sounds in the same stream at
+-9 dBFS, so the host was sending silence for those programs. It was seen after a game-streaming server had
+been used on the host, and restarting the host cured it with the same client build. The quick test: if the
+sample sound of the session's volume slider is heard but a media player is not, the fault is on the host.
+The diagnostics that measured this (formats, volume values, and peak and RMS of the PCM before and after
+volume scaling every two seconds, in logcat) are the first commit of pull request 8 in this repository,
+reverted by the second: cherry-pick it onto a branch to measure again.
+
 **Hard-coded identifiers checked at 3.33.1** (repeat this check after each merge, step 5 below): the only
 two that collided were the clipboard authority (above) and the application ID. Left alone on purpose:
 `android:taskAffinity="com.freerdp.session"` (tasks are not shared between apps with different UIDs),
