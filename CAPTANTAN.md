@@ -418,7 +418,9 @@ is released on the server when the window loses focus (a dialog, a menu, another
 when the view leaves its window, when the window shows another session, and for one device when it is
 removed; other keys first, then modifiers. When Alt or the Windows key is among them and no Ctrl is held, a
 Ctrl press and release is sent first, so that the forced release does not open the menu bar or the Start
-menu. A held key is not pressed again when focus returns. Nothing is sent to a session that has been freed
+menu. The same Ctrl press goes in front of an Alt or Windows key up that Android marks as cancelled
+(`KeyEvent.isCanceled()`): that is Android taking the key away because it kept the rest of a shortcut for
+itself, not the user letting go. A held key is not pressed again when focus returns. Nothing is sent to a session that has been freed
 (`GlobalApp.getSession(instance)` is null).
 
 **The setting.** Upstream already has it: "Use Android keyboard layout" under Settings, User interface
@@ -443,8 +445,9 @@ session's window does not have focus, so it goes where the focus is.
 
 **Logging.** Tag `captantan.keys`. Always, at INFO: each keyboard device when it first sends a key (name,
 IDs, sources), lock states sent, and each release of held keys with its reason. One line per key
-transition (`key down|repeat|up scan=<evdev> keycode=<android> rdp=0x<code> extended=<0|1> device=<id>`)
-is written at INFO only while the tag is switched to DEBUG, because it is everything that is typed:
+transition (`key down|repeat|up scan=<evdev> keycode=<android> rdp=0x<code> extended=<0|1> device=<id>
+flags=0x<KeyEvent flags>`), and one for a key down that was refused or a repeat that was not sent, is
+written at INFO only while the tag is switched to DEBUG, because it is everything that is typed:
 
 ```bash
 adb shell setprop log.tag.captantan.keys DEBUG
@@ -456,7 +459,25 @@ adb logcat -s captantan.keys
 
 Set it back to `INFO` afterwards (it also resets when the device restarts). Beside
 `adb shell getevent -l`, one `EV_KEY ... DOWN` and one `UP` of the kernel should give one `key down` and
-one `key up` line.
+one `key up` line. `getevent -lt` stamps its lines with the monotonic clock, not the time of day: line the
+two captures up on one key that is in both.
+
+**Measured on a device on 2026-11-24** (an Android 17 phone, two keyboards, a Windows host, the
+accessibility service off; 348 kernel key events beside 235 key lines of ours):
+
+- Every key that reached the app gave one `key down` and one `key up` line, about 20 ms after the kernel's
+  event, and a held key repeated on the remote side. No key was left down.
+- Without the accessibility service Android keeps some keys, and they never reach the app (package 5.2):
+  Tab while Alt is held, and the Meta key. With Alt+Tab the app does get Alt down and its repeats, then an
+  Alt up at the moment Tab goes down (Android's, not the user's), so the remote side sees Alt pressed and
+  released alone. The cancelled-key rule above is for that case; whether Android flags that key up as
+  cancelled is not confirmed yet (the `flags=` field of the key line shows it).
+- Unplugging a keyboard with a key held: the kernel itself sends the key up when the device goes, Android
+  passes it on, and it is sent like any other. The device listener is a second line of defence.
+- A keyboard that also has a pointer reports sources beyond the keyboard class (mouse, joystick) for the
+  device, and one keyboard was reported as not alphabetic by `InputDevice.getKeyboardType()` on its first
+  key and as alphabetic later. Its key events carry the plain keyboard source. That is why the test looks
+  at the event's source and does not ask for an alphabetic device.
 
 ## Package and version scheme
 

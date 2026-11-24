@@ -478,7 +478,10 @@ public final class PhysicalKeyboard
 		// The accessibility service hands over keys whichever window has focus. A session takes
 		// them only while its own window has it; otherwise they belong to that other window.
 		if (!sessionView.hasWindowFocus() || !isAlive())
+		{
+			logKey("down refused (the window has no focus, or the session is gone)", event, rdp);
 			return REFUSED;
+		}
 
 		noteDevice(event);
 
@@ -488,7 +491,10 @@ public final class PhysicalKeyboard
 			// A held key: Android's repeat, or the accessibility service's. One whose first down
 			// was not sent (it went down before the window had focus) stays unsent.
 			if (held == null)
+			{
+				logKey("repeat not sent (its down was not)", event, rdp);
 				return HANDLED;
+			}
 			if (held != NOTHING_TO_RELEASE)
 			{
 				nativeSendKey(instance, held, true, true);
@@ -530,7 +536,13 @@ public final class PhysicalKeyboard
 
 		final boolean alive = isAlive();
 		if (held != NOTHING_TO_RELEASE && !isDown(held) && alive)
+		{
+			// A cancelled key up is Android taking the key away, not the user letting go: it kept
+			// the rest of a shortcut for itself (Alt+Tab, for example).
+			if (event.isCanceled() && opensMenuAlone(held))
+				tapCtrlUnlessHeld();
 			nativeSendKey(instance, held, false, false);
+		}
 		logKey("up", event, held);
 
 		// An on-screen modifier that was tapped holds for one key, as it does for an on-screen
@@ -588,6 +600,22 @@ public final class PhysicalKeyboard
 		}
 	}
 
+	private static boolean opensMenuAlone(int rdp)
+	{
+		return rdp == RDP_LMENU || rdp == RDP_RMENU || rdp == RDP_LWIN || rdp == RDP_RWIN;
+	}
+
+	// Alt or the Windows key going up with nothing pressed in between opens a menu on the remote
+	// machine (the menu bar, the Start menu). When it goes up although the user did not let go of
+	// it, a Ctrl press in between, which opens nothing, prevents that.
+	private void tapCtrlUnlessHeld()
+	{
+		if (isDown(RDP_LCONTROL) || isDown(RDP_RCONTROL))
+			return;
+		nativeSendKey(instance, RDP_LCONTROL, true, false);
+		nativeSendKey(instance, RDP_LCONTROL, false, false);
+	}
+
 	// Releases on the server the keys of one device, or of all, and forgets them.
 	private void release(int deviceId, String reason)
 	{
@@ -607,18 +635,12 @@ public final class PhysicalKeyboard
 		int released = 0;
 		if (isAlive())
 		{
-			// Alt or the Windows key going up with nothing pressed in between opens a menu on the
-			// remote machine (the menu bar, the Start menu). The user did not let go of it, so
-			// put a Ctrl press in between, which opens nothing.
+			// the keys were taken from the table above, so a Ctrl among them counts as held
 			boolean opensMenu = false;
 			for (int rdp : codes)
-				opensMenu |= (rdp == RDP_LMENU || rdp == RDP_RMENU || rdp == RDP_LWIN ||
-				              rdp == RDP_RWIN);
+				opensMenu |= opensMenuAlone(rdp);
 			if (opensMenu && !ctrlDown)
-			{
-				nativeSendKey(instance, RDP_LCONTROL, true, false);
-				nativeSendKey(instance, RDP_LCONTROL, false, false);
-			}
+				tapCtrlUnlessHeld();
 
 			// other keys first, then the modifiers, as the X11 client does
 			for (int pass = 0; pass < 2; pass++)
@@ -662,7 +684,7 @@ public final class PhysicalKeyboard
 		Log.i(TAG, "key " + what + " scan=" + event.getScanCode() + " keycode=" +
 		               event.getKeyCode() + " rdp=0x" + Integer.toHexString(rdp & 0xFF) +
 		               " extended=" + ((rdp & RDP_EXTENDED) != 0 ? 1 : 0) + " device=" +
-		               event.getDeviceId());
+		               event.getDeviceId() + " flags=0x" + Integer.toHexString(event.getFlags()));
 	}
 
 	// captantan_keyboard.c. The library is loaded by LibFreeRDP; a session handle exists only
