@@ -60,15 +60,23 @@ jobs:
             echo "preinstalled $d: $(ls "$ANDROID_HOME/$d" 2>/dev/null | tr '\n' ' ')"
           done
 
-      - name: Install the NDK
+      - name: Find the NDK
         run: |
-          # The runner image does not carry NDK 29.0.13113456 and has not accepted its licence, so
-          # Gradle refuses to download it. Install exactly the version build.gradle names.
-          ndk=$(sed -n "s/.*NDK_VERSION', '\(.*\)')$/\1/p" build.gradle)
-          [ -n "$ndk" ] || { echo "::error::no NDK_VERSION default in build.gradle"; exit 1; }
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$ndk" | grep -v '^\[=' || true
+          # The NDK is the one release.properties names (the stable r29, which the runner image
+          # carries); without that line it is the default in build.gradle. Gradle will not download
+          # an NDK whose licence is not accepted, so install it here if the image lacks it.
+          ndk=$(sed -n 's/^NDK_VERSION=//p' release.properties)
+          [ -n "$ndk" ] || ndk=$(sed -n "s/.*NDK_VERSION', '\(.*\)')$/\1/p" build.gradle)
+          [ -n "$ndk" ] || { echo "::error::no NDK_VERSION in release.properties or build.gradle"; exit 1; }
+          if [ ! -f "$ANDROID_HOME/ndk/$ndk/source.properties" ]; then
+            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$ndk" | grep -v '^\[=' || true
+          fi
           test -f "$ANDROID_HOME/ndk/$ndk/source.properties"
           grep Pkg.Revision "$ANDROID_HOME/ndk/$ndk/source.properties"
+          if grep -Eq 'Pkg.Revision.*(beta|rc|canary)' "$ANDROID_HOME/ndk/$ndk/source.properties"; then
+            echo "::error::NDK $ndk is not a stable release"; exit 1
+          fi
+          echo "NDK_VERSION=$ndk" >> "$GITHUB_ENV"
 
       - name: Prepare as the builder does
         run: |
@@ -161,7 +169,11 @@ jobs:
           case "$REL" in *-unsigned.apk) ;; *) fail "release APK is not named *-unsigned.apk" ;; esac
           if "$BT/apksigner" verify "$REL" > /dev/null 2>&1; then fail "release APK is signed"; fi
           if grep -Eq 'lib(avcodec|avformat|avutil|swscale|swresample)' "$RUNNER_TEMP/release-libs.txt"; then fail "FFmpeg libraries are packaged"; fi
-          READELF="$ANDROID_HOME/ndk/$(sed -n "s/.*NDK_VERSION', '\(.*\)')$/\1/p" build.gradle)/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          READELF="$ANDROID_HOME/ndk/$NDK_VERSION/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          # The native build must have used the NDK that release.properties names.
+          used=$(find freeRDPCore/.cxx -name CMakeCache.txt -path '*arm64-v8a*' -exec grep -hE '^(CMAKE_)?ANDROID_NDK:' {} + | sed 's/^[^=]*=//' | sort -u)
+          echo "NDK the native build used: $used"
+          [ "$used" = "$ANDROID_HOME/ndk/$NDK_VERSION" ] || fail "native build did not use only NDK $NDK_VERSION"
           while read -r lib; do
             unzip -p "$REL" "$lib" > "$RUNNER_TEMP/lib.so"
             "$READELF" -S "$RUNNER_TEMP/lib.so" > "$RUNNER_TEMP/sections.txt"
