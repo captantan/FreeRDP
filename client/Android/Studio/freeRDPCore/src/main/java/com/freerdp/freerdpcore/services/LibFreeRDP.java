@@ -410,7 +410,8 @@ public class LibFreeRDP
 		{
 			if (flags.getH264() && mHasH264)
 			{
-				args.add("/gfx:AVC444,AVC420,RFX,progressive");
+				// captantan fork: graphics mode per connection (was "/gfx:AVC444,AVC420,RFX,progressive")
+				args.add(com.freerdp.freerdpcore.captantan.GraphicsMode.gfxArgument(context, bookmark));
 			}
 			else
 			{

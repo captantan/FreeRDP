@@ -86,6 +86,7 @@ public class HomeViewModel extends AndroidViewModel
 	{
 		executor.execute(() -> {
 			manualBookmarkGateway.delete(id);
+			com.freerdp.freerdpcore.captantan.ConnectionPrefs.forget(getApplication(), id); // captantan fork
 			loadBookmarks(currentQuery);
 		});
 	}

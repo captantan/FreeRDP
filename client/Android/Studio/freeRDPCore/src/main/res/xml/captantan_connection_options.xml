@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- captantan fork (roadmap 1.4): the "RDP options" screen (captantan/ConnectionOptionsFragment).
+     Each preference's key is a field of captantan/ConnectionPrefs; values are kept by the editor's
+     ConnectionOptions.Draft and saved with the bookmark, not in SharedPreferences of their own. -->
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory
+        android:title="@string/captantan_options_cat_graphics">
+        <ListPreference
+            android:key="graphics_mode"
+            android:title="@string/captantan_graphics_mode"
+            android:entries="@array/captantan_graphics_mode_entries"
+            android:entryValues="@array/captantan_graphics_mode_values"
+            android:defaultValue="best"
+            app:useSimpleSummaryProvider="true" />
+        <Preference
+            android:selectable="false"
+            android:persistent="false"
+            android:summary="@string/captantan_graphics_mode_note" />
+    </PreferenceCategory>
+
+</PreferenceScreen>

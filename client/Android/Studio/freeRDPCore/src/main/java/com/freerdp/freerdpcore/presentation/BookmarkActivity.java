@@ -189,6 +189,7 @@ public class BookmarkActivity
 			getPreferenceManager().setSharedPreferencesName(PREFS_NAME);
 			getPreferenceManager().setSharedPreferencesMode(MODE_PRIVATE);
 			setPreferencesFromResource(R.xml.bookmark_settings, rootKey);
+			com.freerdp.freerdpcore.captantan.ConnectionOptions.addTo(this); // captantan fork
 
 			Preference credPref = findPreference("bookmark.credentials");
 			if (credPref != null)
