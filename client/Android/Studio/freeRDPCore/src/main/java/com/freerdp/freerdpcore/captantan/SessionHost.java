@@ -14,6 +14,7 @@ import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
+import android.widget.Toast;
 
 import com.freerdp.freerdpcore.R;
 import com.freerdp.freerdpcore.application.GlobalApp;
@@ -22,6 +23,7 @@ import com.freerdp.freerdpcore.domain.BookmarkBase;
 import com.freerdp.freerdpcore.presentation.ApplicationSettingsActivity;
 import com.freerdp.freerdpcore.services.LibFreeRDP;
 
+import java.util.Locale;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -221,6 +223,40 @@ public final class SessionHost implements LibFreeRDP.UIEventListener, GlobalApp.
 		return prompts.isWaitingUnattended();
 	}
 
+	/**
+	 * True if the session redirects this device's microphone or camera to the remote side. That
+	 * goes on while the session is shown nowhere, like its sound: nothing in this class can pause
+	 * a channel. So whatever lets a session run without a window has to say so: the Back question
+	 * does, and the notification of package 2.3 must. For a bookmark this is its two settings;
+	 * for a freerdp:// link it is a best-effort reading of the link's parameters.
+	 */
+	public boolean redirectsMicrophoneOrCamera()
+	{
+		final BookmarkBase bookmark = state.getBookmark();
+		if (bookmark != null)
+		{
+			final BookmarkBase.AdvancedSettings advanced = bookmark.getAdvancedSettings();
+			return advanced.getRedirectMicrophone() || advanced.getRedirectCamera();
+		}
+		final Uri uri = state.getOpenUri();
+		if (uri == null || !uri.isHierarchical())
+			return false;
+		for (String name : uri.getQueryParameterNames())
+		{
+			final String key = name.toLowerCase(Locale.ROOT);
+			if (key.equals("microphone") || key.equals("mic") || key.equals("camera"))
+				return true;
+			final String value = uri.getQueryParameter(name);
+			if (value != null)
+			{
+				final String v = value.toLowerCase(Locale.ROOT);
+				if (v.contains("rdpecam") || v.contains("audin"))
+					return true;
+			}
+		}
+		return false;
+	}
+
 	/** The window that shows the session, or null. UI thread. */
 	public SessionWindow getWindow()
 	{
@@ -314,9 +350,16 @@ public final class SessionHost implements LibFreeRDP.UIEventListener, GlobalApp.
 	}
 
 	/**
-	 * Ends the session on purpose: aborts a connection that is being made, disconnects one that is
-	 * up. Returns at once; the session is over when its thread has sent its last callback, which is
-	 * when the registry drops it and the window showing it closes. UI thread.
+	 * Ends the session on purpose. Returns at once; the session is over when its thread has sent
+	 * its last callback, which is when the registry drops it and the window showing it closes. UI
+	 * thread.
+	 *
+	 * <p>How fast that is depends on where the session is. Connected: at once. Waiting for an
+	 * answer: at once (the answer becomes reject or cancel). In the first moments of a connect
+	 * the native abort can be lost, because freerdp_connect_begin resets the abort event (as
+	 * upstream): the session then ends when the connect attempt does, which for a host that
+	 * does not answer is the TCP timeout, or right after it connects (onConnectionSuccess asks
+	 * again). Until then the session is still listed, as CONNECTING.
 	 */
 	public void disconnect(String reason)
 	{
@@ -327,9 +370,9 @@ public final class SessionHost implements LibFreeRDP.UIEventListener, GlobalApp.
 		quiet = true;
 		// A session thread waiting for an answer goes on at once (reject, cancel).
 		prompts.close();
-		// The native disconnect whatever the state: it queues a disconnect, aborts a connect that is
-		// in progress and wakes a held reconnect. The instance is still allocated: it is freed only
-		// after ENDED, on this thread's say-so.
+		// The native disconnect whatever the state: it queues a disconnect, sets the abort event
+		// (see above for when a connect loses it) and wakes a held reconnect. The instance is still
+		// allocated: it is freed only after ENDED, on this thread's say-so.
 		LibFreeRDP.cancelConnection(instance);
 	}
 
@@ -380,7 +423,18 @@ public final class SessionHost implements LibFreeRDP.UIEventListener, GlobalApp.
 		// The window first: it stops sending input to the instance before the instance is freed.
 		final SessionWindow w = window;
 		if (w != null)
+		{
 			w.onSessionEnded(this, failure, quiet);
+		}
+		else if (!quiet && SessionRegistry.isAppVisible())
+		{
+			// No window to say it: a session that was left running and ended by itself (the
+			// server, the network) must not just vanish from under the user. With the app not
+			// visible nothing is shown; that is the notification's job (package 2.3).
+			Toast.makeText(context, context.getString(R.string.captantan_session_ended, title),
+			               Toast.LENGTH_LONG)
+			    .show();
+		}
 		window = null;
 		shown = false;
 		painting = false;
@@ -421,7 +475,12 @@ public final class SessionHost implements LibFreeRDP.UIEventListener, GlobalApp.
 		// Open questions stay open, without a dialog, until the next window or the timeout.
 		prompts.setWindow(null);
 		Log.i(TAG, "detach: " + this + " <- " + w.getName() + " (" + reason + "); session " +
-		               (phase == Phase.ENDED ? "ended" : "stays " + describe()));
+		               (phase == Phase.ENDED
+		                    ? "ended"
+		                    : "stays " + describe() +
+		                          (redirectsMicrophoneOrCamera()
+		                               ? ", microphone or camera redirection stays on"
+		                               : "")));
 		SessionRegistry.changed();
 	}
 

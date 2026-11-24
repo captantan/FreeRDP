@@ -295,6 +295,30 @@ session. Two rules: a session is shown in at most one window, and a window shows
   A long press on a hardware Back key still disconnects (upstream, `SessionInputManager`).
 - **Closing a window** (Back and "Leave running", swiping it out of Recents, the system destroying it)
   detaches. To come back, open the same bookmark again. A window whose session ends closes, as upstream.
+- **A session that no window shows** keeps running in full. What that means, so that the switcher (2.2)
+  and the notification (2.3) can be built knowing it:
+  - Its redirections stay on: sound keeps playing, and a redirected microphone or camera stays open to
+    the remote side. Nothing in the Java layer can pause a channel, so 2.1 does not stop them; it says
+    so. The Back question carries a warning for a session that redirects the microphone or camera, the
+    `detach` log line says it, and `SessionHost.redirectsMicrophoneOrCamera()` is there for the
+    notification of 2.3, which must show it. Not covered by a warning: a window that is closed some
+    other way (Recents, a launch that reuses it). Android itself stops microphone and camera capture
+    for an app with no visible activity and no foreground service, and shows its indicator while a
+    capture runs; that is the platform's rule and was not measured here.
+  - If it fails or the server ends it, it is dropped from the registry. A toast ("<title>: the session
+    has ended") is shown if the app is visible; with the app hidden nothing is shown (2.3).
+  - A change of the remote clipboard is dropped and not replayed on attach (replaying could overwrite
+    something copied on the device since). On attach the device's clipboard is sent to the session, as
+    on every focus gain.
+  - It is ended by the screen-off timer like every other session. That timer now also ends sessions
+    that are still connecting; upstream's only disconnected connected ones.
+- **A late launch is dropped.** A bookmark is loaded off the UI thread. If its window was closed or given
+  another launch before it arrives, `SessionWindow.start` frees the native instance instead of
+  connecting (`launch dropped before it connected` in the log).
+- **Disconnecting during a connect.** In the first moments of a connect the native abort can be lost
+  (`freerdp_connect_begin` resets the abort event; upstream's behaviour). The session then ends when the
+  connect attempt does (for a host that does not answer, the TCP timeout) or right after it connects.
+  It stays in the registry as `CONNECTING` until then.
 - **Focus.** Keys caught outside the view system (`KeyboardAccessibilityService.java`, two lines) go to
   `SessionRegistry.getFocusedActivity()`: the session window whose window has input focus
   (`onWindowFocusChanged`), not the one that was resumed last. `SessionActivity.activeSession` is gone.

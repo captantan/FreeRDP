@@ -26,6 +26,9 @@
     <string name="captantan_back_message">Leave this session running and go to the connection list, or disconnect it?</string>
     <string name="captantan_back_leave">Leave running</string>
     <string name="captantan_back_disconnect">Disconnect</string>
+    <string name="captantan_back_capture_note">This session redirects the microphone or the camera. That stays on while the session runs, also when no window shows it.</string>
+    <!-- A session that no window shows ended by itself (captantan/SessionHost.java) -->
+    <string name="captantan_session_ended">%1$s: the session has ended</string>
     <!-- RDP options (roadmap 1.4) -->
     <string name="captantan_options_title">RDP options</string>
     <string name="captantan_options_summary">Graphics mode and other settings of this app</string>

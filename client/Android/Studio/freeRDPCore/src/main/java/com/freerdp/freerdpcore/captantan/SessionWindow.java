@@ -236,15 +236,29 @@ public final class SessionWindow
 	{
 		if (state == null)
 			return;
-		if (destroyed)
+
+		final String key = launchKey(state);
+
+		// The bookmark of a launch is loaded off the UI thread (and a permission question can sit
+		// in between). By the time upstream's code gets here the window may have been closed (Back
+		// on the still empty window, or destroyed) or given another launch (onNewIntent). Such a
+		// late arrival must not become a session: nobody is asking for it any more.
+		final String asked = launchKey(activity.getIntent());
+		final String stale =
+		    destroyed ? "its window was closed"
+		              : activity.isFinishing() ? "its window is closing"
+		                                       : (asked != null && !asked.equals(key))
+		                                             ? "its window was given another launch"
+		                                             : null;
+		if (stale != null)
 		{
-			// The bookmark of a launch arrived after its window was closed.
-			ports.setSession(null);
+			Log.i(TAG, "launch dropped before it connected, in " + name + ": " + stale);
+			// upstream's connect() has already put it into the activity's session field
+			ports.setSession(host != null ? host.getState() : null);
 			SessionRegistry.free(state);
 			return;
 		}
 
-		final String key = launchKey(state);
 		final SessionHost live = SessionRegistry.find(key);
 		if (live != null)
 		{
@@ -301,13 +315,19 @@ public final class SessionWindow
 
 		host = target;
 		ports.setSession(target.getState());
+
+		// Before attach(): attaching shows the session's open questions (certificate, login) in
+		// this window at once, and a dialog shown later lies on top of one shown earlier. The
+		// progress dialog is modal and cannot be dismissed, so it has to be the one underneath.
+		final boolean connected = (target.getPhase() == SessionHost.Phase.CONNECTED);
+		if (!connected)
+			dialogs.showProgress(target.getTitle(), () -> target.disconnect("connecting cancelled"));
+
 		target.attach(this);
 		target.setPainting(started);
 
-		if (target.getPhase() == SessionHost.Phase.CONNECTED)
+		if (connected)
 			bind();
-		else
-			dialogs.showProgress(target.getTitle(), () -> target.disconnect("connecting cancelled"));
 
 		SessionRegistry.focusedSessionChanged(this);
 	}
@@ -537,7 +557,7 @@ public final class SessionWindow
 		backDialog =
 		    new MaterialAlertDialogBuilder(activity)
 		        .setTitle(shownNow.getTitle())
-		        .setMessage(R.string.captantan_back_message)
+		        .setMessage(backMessage(shownNow))
 		        .setPositiveButton(R.string.captantan_back_leave, (d, w) -> leave())
 		        .setNegativeButton(R.string.captantan_back_disconnect,
 		                           (d, w) -> shownNow.disconnect("asked for in " + name))
@@ -545,6 +565,15 @@ public final class SessionWindow
 		        .create();
 		backDialog.show();
 		return true;
+	}
+
+	/** The Back question, with a warning when leaving the session leaves a microphone or camera on. */
+	private CharSequence backMessage(SessionHost session)
+	{
+		final String question = activity.getString(R.string.captantan_back_message);
+		if (!session.redirectsMicrophoneOrCamera())
+			return question;
+		return question + "\n\n" + activity.getString(R.string.captantan_back_capture_note);
 	}
 
 	/**
