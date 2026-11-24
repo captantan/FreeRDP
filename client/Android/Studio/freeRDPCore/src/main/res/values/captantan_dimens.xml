@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- captantan fork: sizes of the session switcher (roadmap 2.2). The thumbnail is made with its
+     longer edge at the width (SessionSwitcher), so a frame is scaled down before it is kept. -->
+<resources>
+    <dimen name="captantan_switcher_thumbnail_width">112dp</dimen>
+    <dimen name="captantan_switcher_thumbnail_height">72dp</dimen>
+</resources>

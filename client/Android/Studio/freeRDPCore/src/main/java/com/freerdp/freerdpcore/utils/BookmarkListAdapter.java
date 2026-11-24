@@ -154,6 +154,8 @@ public class BookmarkListAdapter extends RecyclerView.Adapter<BookmarkListAdapte
 			if (callbacks != null)
 				callbacks.onItemClick(v.getTag().toString());
 		});
+		// captantan fork: a row whose connection has a live session says so
+		com.freerdp.freerdpcore.captantan.HomeSessions.mark(holder.itemView, refStr);
 	}
 
 	@Override public int getItemCount()

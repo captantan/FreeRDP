@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- captantan fork: view tag keys of the session switcher and the connection list's marking
+     (roadmap 2.2, captantan/HomeSessions.java). -->
+<resources>
+    <item name="captantan_tag_default_text_colors" type="id" />
+    <item name="captantan_tag_row_session" type="id" />
+</resources>
