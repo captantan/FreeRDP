@@ -125,11 +125,11 @@ jobs:
           "$AAPT" dump badging "$REL" > "$RUNNER_TEMP/release-badging.txt"
           grep -E "^(package|sdkVersion|targetSdkVersion|application-label|native-code|alt-native-code)" "$RUNNER_TEMP/release-badging.txt" | tee "$RUNNER_TEMP/release-badging-short.txt"
           grep -q "^package: name='$APP_ID' " "$RUNNER_TEMP/release-badging.txt" || fail "release package is not $APP_ID"
+          unzip -l "$REL" | awk '{print $4}' | grep '^lib/' | sort > "$RUNNER_TEMP/release-libs.txt"
+          cat "$RUNNER_TEMP/release-libs.txt"
           [ "$(grep -E '^(alt-)?native-code' "$RUNNER_TEMP/release-badging.txt")" = "native-code: 'arm64-v8a'" ] || fail "release native code is not arm64-v8a only"
           case "$REL" in *-unsigned.apk) ;; *) fail "release APK is not named *-unsigned.apk" ;; esac
           if "$BT/apksigner" verify "$REL" > /dev/null 2>&1; then fail "release APK is signed"; fi
-          unzip -l "$REL" | awk '{print $4}' | grep '^lib/' | sort > "$RUNNER_TEMP/release-libs.txt"
-          cat "$RUNNER_TEMP/release-libs.txt"
           if grep -Eq 'lib(avcodec|avformat|avutil|swscale|swresample)' "$RUNNER_TEMP/release-libs.txt"; then fail "FFmpeg libraries are packaged"; fi
           echo "MediaCodec strings in libfreerdp3.so (not required until package 1.3): $(unzip -p "$REL" lib/arm64-v8a/libfreerdp3.so | strings | grep -c 'MediaCodec using' || true)"
 

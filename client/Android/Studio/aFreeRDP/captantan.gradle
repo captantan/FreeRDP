@@ -2,6 +2,15 @@
 // captantan fork: build types that exist only in the fork. Applied at the end of build.gradle.
 
 android {
+    defaultConfig {
+        // ABI_FILTERS from release.properties reaches only :freeRDPCore's own native build.
+        // Prebuilt libraries in dependencies (SQLCipher ships armeabi-v7a, arm64-v8a, x86 and
+        // x86_64) are packaged for every ABI unless the app module filters too.
+        ndk {
+            abiFilters rootProject.ext.abiFilters
+        }
+    }
+
     signingConfigs {
         // A throwaway key committed to the repo; see preview-key/README.md. It protects nothing.
         preview {
