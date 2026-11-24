@@ -6,7 +6,7 @@
 
 package com.freerdp.freerdpcore.captantan;
 
-import android.app.Activity;
+import android.content.Context;
 import android.graphics.Typeface;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
@@ -41,9 +41,10 @@ import java.util.Map;
  * handshake and so ends the connection.
  *
  * <p>The calls come on the session's native thread, which waits here until the user answers
- * ({@link BlockingPrompts}). When the window is destroyed, {@link BlockingPrompts#close()} answers a
- * waiting call with {@link #REJECT}, so the thread is never left waiting for a dialog that no longer
- * exists.
+ * ({@link BlockingPrompts}). One of these belongs to one session ({@link SessionHost}), not to a
+ * window: the dialog is shown in whichever window shows the session, and a call that gets no answer
+ * (no window for too long, or the session told to end) returns {@link #REJECT}, so the thread is
+ * never left waiting for a dialog that no longer exists.
  */
 public final class CertificatePrompt
 {
@@ -57,28 +58,32 @@ public final class CertificatePrompt
 	private static final String TAG = "CertificatePrompt";
 
 	private final BlockingPrompts prompts;
-	private final Activity activity;
+	/** For the strings only; the dialogs are built with the window that shows them. */
+	private final Context context;
 	private final Runnable onReject;
 
 	/**
 	 * Guarded by itself. What the user answered earlier in this session for a certificate at a host and
 	 * port (key: host, port and fingerprint), so that one session never asks twice about the same
 	 * certificate at the same place: after "only this time" FreeRDP keeps no record, and a reconnect
-	 * through a connection broker starts again from the original settings and would ask again. The
+	 * through a connection broker starts again from the original settings and would ask again. It
+	 * lives as long as the session, whichever windows show it, so a reconnect while the session is
+	 * shown nowhere is answered from here without a window. The
 	 * same certificate at a different host or port is asked about again, as FreeRDP's store keeps
 	 * one entry per host and port.
 	 */
 	private final Map<String, Integer> answered = new HashMap<>();
 
 	/**
-	 * @param prompts  shows the dialogs; the activity closes it when it is destroyed
+	 * @param context  for the strings (the application context will do)
+	 * @param prompts  shows the dialogs; the session closes it when it ends
 	 * @param onReject run on the asking thread when a certificate is rejected (the connection
 	 *                 failure that follows is then the user's choice, not an error to report)
 	 */
-	public CertificatePrompt(BlockingPrompts prompts, Runnable onReject)
+	public CertificatePrompt(Context context, BlockingPrompts prompts, Runnable onReject)
 	{
 		this.prompts = prompts;
-		this.activity = prompts.getActivity();
+		this.context = context;
 		this.onReject = onReject;
 	}
 
@@ -88,14 +93,14 @@ public final class CertificatePrompt
 	{
 		final boolean pem = (flags & LibFreeRDP.VERIFY_CERT_FLAG_FP_IS_PEM) != 0;
 		SpannableStringBuilder msg = new SpannableStringBuilder();
-		msg.append(activity.getString(R.string.captantan_cert_msg_new, hostPort(host, port)));
+		msg.append(context.getString(R.string.captantan_cert_msg_new, hostPort(host, port)));
 		appendNotes(msg, commonName, flags);
 		msg.append("\n\n");
 		appendCertificate(msg, null, subject, issuer, fingerprint, pem);
 
 		return ask(answerKey(host, port, fingerprint),
-		           activity.getString(R.string.captantan_cert_title_new), msg,
-		           activity.getString(R.string.captantan_cert_trust));
+		           context.getString(R.string.captantan_cert_title_new), msg,
+		           context.getString(R.string.captantan_cert_trust));
 	}
 
 	/** For OnVerifyChangedCertificateEx: the host presents a different certificate from the stored one. */
@@ -105,18 +110,18 @@ public final class CertificatePrompt
 	{
 		final boolean pem = (flags & LibFreeRDP.VERIFY_CERT_FLAG_FP_IS_PEM) != 0;
 		SpannableStringBuilder msg = new SpannableStringBuilder();
-		msg.append(activity.getString(R.string.captantan_cert_msg_changed, hostPort(host, port)));
+		msg.append(context.getString(R.string.captantan_cert_msg_changed, hostPort(host, port)));
 		appendNotes(msg, commonName, flags);
 		msg.append("\n\n");
-		appendCertificate(msg, activity.getString(R.string.captantan_cert_heading_old), oldSubject,
+		appendCertificate(msg, context.getString(R.string.captantan_cert_heading_old), oldSubject,
 		                  oldIssuer, oldFingerprint, pem);
 		msg.append("\n\n");
-		appendCertificate(msg, activity.getString(R.string.captantan_cert_heading_new), subject,
+		appendCertificate(msg, context.getString(R.string.captantan_cert_heading_new), subject,
 		                  issuer, fingerprint, pem);
 
 		return ask(answerKey(host, port, fingerprint),
-		           activity.getString(R.string.captantan_cert_title_changed), msg,
-		           activity.getString(R.string.captantan_cert_trust_new));
+		           context.getString(R.string.captantan_cert_title_changed), msg,
+		           context.getString(R.string.captantan_cert_trust_new));
 	}
 
 	private static String answerKey(String host, long port, String fingerprint)
@@ -180,19 +185,19 @@ public final class CertificatePrompt
 		{
 			msg.append("\n\n");
 			if (commonName != null && !commonName.isEmpty())
-				msg.append(activity.getString(R.string.captantan_cert_mismatch, commonName));
+				msg.append(context.getString(R.string.captantan_cert_mismatch, commonName));
 			else
-				msg.append(activity.getString(R.string.captantan_cert_mismatch_no_name));
+				msg.append(context.getString(R.string.captantan_cert_mismatch_no_name));
 		}
 		if ((flags & LibFreeRDP.VERIFY_CERT_FLAG_GATEWAY) != 0)
 		{
 			msg.append("\n\n");
-			msg.append(activity.getString(R.string.captantan_cert_gateway));
+			msg.append(context.getString(R.string.captantan_cert_gateway));
 		}
 		else if ((flags & LibFreeRDP.VERIFY_CERT_FLAG_REDIRECT) != 0)
 		{
 			msg.append("\n\n");
-			msg.append(activity.getString(R.string.captantan_cert_redirect));
+			msg.append(context.getString(R.string.captantan_cert_redirect));
 		}
 	}
 
@@ -207,11 +212,11 @@ public final class CertificatePrompt
 			            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
 			msg.append("\n");
 		}
-		msg.append(activity.getString(R.string.captantan_cert_subject)).append(": ")
+		msg.append(context.getString(R.string.captantan_cert_subject)).append(": ")
 		    .append(orNone(subject)).append("\n");
-		msg.append(activity.getString(R.string.captantan_cert_issuer)).append(": ")
+		msg.append(context.getString(R.string.captantan_cert_issuer)).append(": ")
 		    .append(orNone(issuer)).append("\n");
-		msg.append(activity.getString(pem ? R.string.captantan_cert_pem
+		msg.append(context.getString(pem ? R.string.captantan_cert_pem
 		                                  : R.string.captantan_cert_fingerprint))
 		    .append(":\n");
 		int start = msg.length();
@@ -222,7 +227,7 @@ public final class CertificatePrompt
 
 	private String orNone(String s)
 	{
-		return (s == null || s.isEmpty()) ? activity.getString(R.string.captantan_cert_none) : s;
+		return (s == null || s.isEmpty()) ? context.getString(R.string.captantan_cert_none) : s;
 	}
 
 	private static String hostPort(String host, long port)

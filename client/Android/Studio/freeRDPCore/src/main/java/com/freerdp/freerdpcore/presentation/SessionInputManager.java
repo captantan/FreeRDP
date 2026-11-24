@@ -208,6 +208,13 @@ public class SessionInputManager
 		physicalKeyboard.forget(); // captantan fork: the session is gone, nothing is held on it
 	}
 
+	// captantan fork: for captantan/SessionWindow. The window lets go of a session that goes on:
+	// keys of a physical keyboard that are held down on it are released there first.
+	public void releasePhysicalKeys(String reason)
+	{
+		physicalKeyboard.releaseAll(reason);
+	}
+
 	// Forwards a physical-mouse scroll event (e.g. external mouse wheel) into the session.
 	public boolean onGenericMotionEvent(MotionEvent e)
 	{

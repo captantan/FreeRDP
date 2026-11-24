@@ -19,10 +19,11 @@ import com.freerdp.freerdpcore.R;
 import com.freerdp.freerdpcore.presentation.ApplicationSettingsActivity;
 
 /**
- * The other two dialogs a FreeRDP session thread waits on, on {@link BlockingPrompts} so that the
- * window can release them when it is destroyed. They replace {@code SessionDialogs.promptCredentials}
- * and {@code SessionDialogs.showExperimentalBlocked}, which look the same but wait with a bare
- * {@code wait()} that nothing wakes once the window is gone.
+ * The other two dialogs a FreeRDP session thread waits on, on {@link BlockingPrompts} so that they
+ * follow the session from window to window and are released when it ends. They replace
+ * {@code SessionDialogs.promptCredentials} and {@code SessionDialogs.showExperimentalBlocked},
+ * which look the same but wait with a bare {@code wait()} that nothing wakes once the window is
+ * gone.
  *
  * <p>Credentials: FreeRDP's AuthenticateEx (android_freerdp.c, android_authenticate_int) reads the
  * three buffers back only when the callback returns true; false fails the connection.
@@ -33,7 +34,7 @@ public final class SessionPrompts
 	private final Runnable onCancel;
 
 	/**
-	 * @param prompts  shows the dialogs; the activity closes it when it is destroyed
+	 * @param prompts  shows the dialogs; the session closes it when it ends
 	 * @param onCancel run on the asking thread when the credentials prompt is cancelled (the
 	 *                 connection failure that follows is then the user's choice, not an error)
 	 */

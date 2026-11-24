@@ -30,7 +30,9 @@ public class KeyboardAccessibilityService extends AccessibilityService
 	private final Runnable repeatRunnable = new Runnable() {
 		@Override public void run()
 		{
-			SessionActivity session = SessionActivity.activeSession;
+			// captantan fork: the session window with input focus (was SessionActivity.activeSession)
+			SessionActivity session =
+			    com.freerdp.freerdpcore.captantan.SessionRegistry.getFocusedActivity();
 			if (repeatEvent == null || session == null)
 			{
 				stopRepeat();
@@ -45,7 +47,9 @@ public class KeyboardAccessibilityService extends AccessibilityService
 
 	@Override public boolean onKeyEvent(KeyEvent event)
 	{
-		SessionActivity session = SessionActivity.activeSession;
+		// captantan fork: the session window with input focus (was SessionActivity.activeSession)
+		SessionActivity session =
+		    com.freerdp.freerdpcore.captantan.SessionRegistry.getFocusedActivity();
 		if (session == null)
 		{
 			stopRepeat();
