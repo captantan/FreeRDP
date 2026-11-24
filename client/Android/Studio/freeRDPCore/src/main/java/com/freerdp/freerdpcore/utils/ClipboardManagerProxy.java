@@ -68,7 +68,8 @@ public abstract class ClipboardManagerProxy
 		{
 			ClipboardImageProvider.setImageData(pngData);
 			ClipData clip = new ClipData("rdp-clipboard", new String[] { "image/png" },
-			                             new ClipData.Item(ClipboardImageProvider.CONTENT_URI));
+			                             new ClipData.Item(
+			                                 ClipboardImageProvider.getContentUri(mContext))); // captantan fork
 			mClipboardManager.setPrimaryClip(clip);
 		}
 

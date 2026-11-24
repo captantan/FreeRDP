@@ -4,7 +4,8 @@ android {
     buildToolsVersion = rootProject.ext.toolsVersion
 
     defaultConfig {
-        applicationId "com.freerdp.afreerdp"
+        // captantan fork: was "com.freerdp.afreerdp". Never change this (roadmap 2.5).
+        applicationId "dev.captantan.freerdp"
         minSdkVersion rootProject.ext.minApi
         targetSdkVersion rootProject.ext.targetApi
         versionName = rootProject.ext.versionName

@@ -12,6 +12,7 @@ package com.freerdp.freerdpcore.utils;
 
 import android.content.ContentProvider;
 import android.content.ContentValues;
+import android.content.Context;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.ParcelFileDescriptor;
@@ -21,8 +22,19 @@ import java.io.OutputStream;
 
 public class ClipboardImageProvider extends ContentProvider
 {
-	public static final String AUTHORITY = "com.freerdp.freerdpcore.clipboard";
-	public static final Uri CONTENT_URI = Uri.parse("content://" + AUTHORITY + "/image");
+	// captantan fork: the authority was the constant "com.freerdp.freerdpcore.clipboard", which
+	// two installed apps cannot both declare. It is now "<application ID>.clipboard", the same
+	// value the manifest declares as "${applicationId}.clipboard" (a build type's
+	// applicationIdSuffix is part of both).
+	public static String getAuthority(Context ctx)
+	{
+		return ctx.getPackageName() + ".clipboard";
+	}
+
+	public static Uri getContentUri(Context ctx)
+	{
+		return Uri.parse("content://" + getAuthority(ctx) + "/image");
+	}
 
 	private static volatile byte[] sImageData;
 

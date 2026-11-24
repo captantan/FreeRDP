@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_title" translatable="false">aFreeRDP</string>
+    <!-- captantan fork: the app is called "RDP" (roadmap 1.2) -->
+    <string name="app_title" translatable="false">RDP</string>
+    <!-- captantan fork: override the two core strings that say aFreeRDP. The app module's
+         resources win over the library's, so freeRDPCore/src/main/res/values/strings.xml
+         is left as upstream has it. -->
+    <string name="accessibility_keyboard_label">RDP Physical Keyboard</string>
+    <string name="preference_default_client_name" translatable="false">RDP</string>
     <!-- Search strings -->
 </resources>

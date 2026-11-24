@@ -1,7 +1,6 @@
 # Preview signing key: a public test key
 
-`preview.p12` signs only the `preview` build type (`dev.captantan.freerdp.debug` once the app
-identity package lands, `com.freerdp.afreerdp.debug` before that). It exists so that the test
+`preview.p12` signs only the `preview` build type (`dev.captantan.freerdp.debug`). It exists so that the test
 build from the compile check can be installed with `adb install -r`, and so that each newer test
 build installs over the older one.
 
