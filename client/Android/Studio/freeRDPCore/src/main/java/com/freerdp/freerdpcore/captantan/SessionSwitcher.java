@@ -100,9 +100,20 @@ public final class SessionSwitcher implements SessionRegistry.Listener
 		show(new SessionSwitcher(activity, null));
 	}
 
+	/** The window is going away: a switcher open over it goes with it. UI thread. */
+	static void closeFor(Activity activity)
+	{
+		if (current != null && current.activity == activity)
+		{
+			if (current.dialog.isShowing())
+				current.dialog.dismiss();
+			current = null;
+		}
+	}
+
 	private static void show(SessionSwitcher switcher)
 	{
-		if (current != null && current.dialog.isShowing())
+		if (current != null && current.dialog.isShowing() && !current.activity.isDestroyed())
 		{
 			if (current.activity == switcher.activity)
 				return; // already open here

@@ -19,7 +19,6 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.util.Consumer;
 import androidx.core.view.MenuProvider;
 import androidx.core.widget.ImageViewCompat;
 import androidx.lifecycle.DefaultLifecycleObserver;
@@ -101,7 +100,7 @@ public final class HomeSessions implements SessionRegistry.Listener, DefaultLife
 		searchPending = activity.getIntent() != null &&
 		                activity.getIntent().getBooleanExtra(SessionLauncher.EXTRA_NEW_CONNECTION,
 		                                                     false);
-		activity.addOnNewIntentListener(newIntent);
+		activity.addOnNewIntentListener(this::onNewIntent);
 		activity.addMenuProvider(searchOpener, activity);
 		activity.getLifecycle().addObserver(this);
 	}
@@ -222,13 +221,14 @@ public final class HomeSessions implements SessionRegistry.Listener, DefaultLife
 	// ****************************************************************************
 	// "New connection": the search field
 
-	private final Consumer<Intent> newIntent = intent -> {
+	private void onNewIntent(Intent intent)
+	{
 		if (intent.getBooleanExtra(SessionLauncher.EXTRA_NEW_CONNECTION, false))
 		{
 			searchPending = true;
 			activity.invalidateOptionsMenu();
 		}
-	};
+	}
 
 	/** Runs after HomeActivity's own onCreateOptionsMenu, so its search field is set up. */
 	private final MenuProvider searchOpener = new MenuProvider() {

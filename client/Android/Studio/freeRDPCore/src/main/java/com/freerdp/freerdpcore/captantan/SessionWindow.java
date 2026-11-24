@@ -666,6 +666,7 @@ public final class SessionWindow
 		if (destroyed)
 			return;
 		destroyed = true;
+		SessionSwitcher.closeFor(activity);
 		release("window closed");
 		dropUnstarted();
 		SessionRegistry.setFocus(this, false);
