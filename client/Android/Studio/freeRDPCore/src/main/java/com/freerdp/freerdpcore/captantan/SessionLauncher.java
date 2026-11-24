@@ -186,7 +186,7 @@ public final class SessionLauncher
 			intent.putExtra(SessionWindow.EXTRA_SESSION, live.getToken());
 
 		final boolean newWindow = opensInNewWindow(from);
-		intent.addFlags(newWindow ? NEW_WINDOW_FLAGS : SessionWindow.LAUNCH_FLAGS);
+		intent.addFlags(newWindow ? newWindowFlags(from) : SessionWindow.LAUNCH_FLAGS);
 		Log.i(TAG, "launch from " + from.getLocalClassName() + ": " +
 		               (live != null ? live.toString() : "new connection") + " opens in " +
 		               (newWindow ? "a new window" : "the session window") + " (setting " +
@@ -219,12 +219,27 @@ public final class SessionLauncher
 		if (host == null || !host.isLive())
 			return;
 		final Intent intent = intentFor(from, host);
-		intent.addFlags(NEW_WINDOW_FLAGS);
+		intent.addFlags(newWindowFlags(from));
 		Log.i(TAG, "open in new window: " + host + " (asked from " + askedFrom + "; was " +
 		               (host.getWindow() != null ? "in " + host.getWindow().getName()
 		                                         : "in no window") +
 		               ")");
 		from.startActivity(intent);
+	}
+
+	/**
+	 * The flags of a new window launched from {@code from}. The session activity is singleTop, and
+	 * Android delivers a launch to the top activity of the focused task when it is of the same
+	 * class, even with FLAG_ACTIVITY_MULTIPLE_TASK (ActivityStarter.deliverToCurrentTopIfNeeded):
+	 * from a session window, "open in new window" would only re-point that window (seen on a
+	 * device). FLAG_ACTIVITY_PREVIOUS_IS_TOP tells Android not to count the launching activity as
+	 * the top for that decision, so the launch makes its new task.
+	 */
+	private static int newWindowFlags(Activity from)
+	{
+		return (from instanceof SessionActivity)
+		           ? NEW_WINDOW_FLAGS | Intent.FLAG_ACTIVITY_PREVIOUS_IS_TOP
+		           : NEW_WINDOW_FLAGS;
 	}
 
 	/**
