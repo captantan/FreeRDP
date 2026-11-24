@@ -83,6 +83,39 @@ identity). There are no `sharedUserId`, account types or custom permissions.
 
 Both apps still offer to open `.rdp` files and `rdp://` and `freerdp://` links; Android shows a chooser.
 
+**Certificate checking** (package 1.6)
+
+Certificates are trusted on first use. The first connection to a host shows the certificate (subject,
+issuer, SHA-256 fingerprint) and asks; later connections are silent; a changed certificate shows a warning
+with the trusted and the presented certificate and asks again. A certificate whose name does not match the
+host (normal for a self-signed certificate reached by IP address or another name) gets the same prompt, with
+a note.
+
+- `freeRDPCore/.../captantan/CertificatePrompt.java` (new): the dialogs behind FreeRDP's
+  `VerifyCertificateEx` and `VerifyChangedCertificateEx`. Trust returns 1 (store), "Only this time" 2 (this
+  session only), Cancel or Back 0 (reject). `close()` answers a waiting prompt with reject when the window is
+  destroyed. Answers are remembered for the session by host, port and fingerprint.
+- `freeRDPCore/.../captantan/NativeSessionThreads.java` (new): an instance whose native session thread still
+  runs (for example waiting in the prompt) is not freed under it; the connection is aborted and the instance
+  freed once the thread's last callback (`OnConnectionFailure` or `OnDisconnected`) has arrived.
+- `freeRDPCore/.../captantan/CertificateStore.java` (new): where FreeRDP keeps accepted certificates, and
+  clearing them.
+- `freeRDPCore/src/main/res/values/captantan_strings.xml` (new): the prompts' strings (English only).
+- `LibFreeRDP.java` (edited): `/cert:ignore` is no longer passed; `NativeSessionThreads` hooks in `connect`,
+  `freeInstance`, `OnConnectionFailure` and `OnDisconnected`.
+- `SessionActivity.java` (edited): the two verify callbacks call `CertificatePrompt`; `onDestroy` calls
+  `close()` before the session is freed (freeing a connected session waits for its thread, which would
+  otherwise wait for the prompt forever).
+- `ApplicationSettingsActivity.java` (edited): "Clear certificate cache" calls `CertificateStore.clear`.
+  Upstream deleted `files/.freerdp`, FreeRDP 2's directory, which FreeRDP 3 no longer uses.
+- `freeRDPCore/src/main/res/xml/settings_app_security.xml` (edited): "Accept all certificates" removed. It
+  returned 0, which FreeRDP reads as reject, so with it on every connection failed; making it work would
+  mean `/cert:ignore` again. Its strings and `getAcceptAllCertificates()` are left in place, unused.
+- **Where accepted certificates are stored:** `files/.config/freerdp/server/<host>_<port>.pem` in the app's
+  private storage. The native library sets `HOME` to the files directory, and FreeRDP's config directory is
+  `$HOME/.config/freerdp`. The store is keyed by the host name or address of the bookmark and the port, so
+  reaching one machine by two names gives two entries.
+
 ## Package and version scheme
 
 - `versionName = <upstream release>-captantan.<R>`, for example `3.33.1-captantan.1`.
@@ -145,6 +178,13 @@ compile check runs on the merge.
    - `SessionActivity.java`, `LibFreeRDP.java`, `KeyboardMapper.java`: upstream edits these often. Re-apply
      our hooks (find them with `git grep -n "captantan fork"`). If upstream has landed the same feature,
      prefer upstream's and drop ours, and update this file.
+   - `LibFreeRDP.java`: besides the removed `/cert:ignore`, keep the `NativeSessionThreads` calls in
+     `connect`, `freeInstance`, `OnConnectionFailure` and `OnDisconnected` together; one missing makes
+     `freeInstance` free a running session or never free one. If upstream starts waiting for connecting
+     sessions itself, drop ours.
+   - `ApplicationSettingsActivity.java` (`clearCertificateCache`) and `settings_app_security.xml`: keep the
+     call to `CertificateStore.clear` and the removed "Accept all certificates". If upstream moves its
+     certificate store again, update `CertificateStore`.
    - `release.properties` and everything else that is ours only: never conflicts.
 5. **Repeat the identifier search**; look at anything new that must follow the application ID:
    `git grep -n -E 'authorities|sharedUserId|accountType|<permission|targetPackage|taskAffinity|"com\.freerdp\.[a-z.]*"' -- client/Android`

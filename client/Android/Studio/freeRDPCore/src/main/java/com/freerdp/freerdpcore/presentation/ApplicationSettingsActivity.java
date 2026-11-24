@@ -24,6 +24,7 @@ import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
 
 import com.freerdp.freerdpcore.R;
+import com.freerdp.freerdpcore.captantan.CertificateStore; // captantan fork
 
 import java.io.File;
 import java.util.UUID;
@@ -185,18 +186,12 @@ public class ApplicationSettingsActivity
 		private void clearCertificateCache()
 		{
 			Context context = requireContext();
-			File dir = new File(context.getFilesDir() + "/.freerdp");
-			if (dir.exists())
-			{
-				if (deleteDirectory(dir))
-					Toast.makeText(context, R.string.info_reset_success, Toast.LENGTH_LONG).show();
-				else
-					Toast.makeText(context, R.string.info_reset_failed, Toast.LENGTH_LONG).show();
-			}
-			else
-			{
+			// captantan fork: FreeRDP 3 keeps accepted certificates in files/.config/freerdp/server,
+			// not in files/.freerdp (FreeRDP 2), which is all upstream deleted
+			if (CertificateStore.clear(context))
 				Toast.makeText(context, R.string.info_reset_success, Toast.LENGTH_LONG).show();
-			}
+			else
+				Toast.makeText(context, R.string.info_reset_failed, Toast.LENGTH_LONG).show();
 		}
 	}
 

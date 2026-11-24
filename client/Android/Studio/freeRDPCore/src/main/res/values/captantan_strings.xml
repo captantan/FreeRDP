@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- captantan fork: strings of the certificate prompts (captantan/CertificatePrompt.java). -->
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
+    <string name="captantan_cert_title_new">Check the server certificate</string>
+    <string name="captantan_cert_title_changed">Server certificate changed</string>
+    <string name="captantan_cert_msg_new">The certificate of %1$s has not been trusted before. Compare its fingerprint with the server\'s before you trust it.</string>
+    <string name="captantan_cert_msg_changed">Warning: the certificate of %1$s is not the one you trusted before. If the server\'s certificate was not replaced or renewed, someone may be intercepting this connection: cancel.</string>
+    <string name="captantan_cert_mismatch">The certificate is issued to \"%1$s\", not to the name or address you connect to. This is normal for a self-signed certificate reached by IP address or by another name.</string>
+    <string name="captantan_cert_mismatch_no_name">The certificate does not name the host or address you connect to. This is normal for a self-signed certificate reached by IP address or by another name.</string>
+    <string name="captantan_cert_redirect">The server redirected this connection here.</string>
+    <string name="captantan_cert_gateway">This is the certificate of the RD Gateway.</string>
+    <string name="captantan_cert_heading_old">Trusted before</string>
+    <string name="captantan_cert_heading_new">Presented now</string>
+    <string name="captantan_cert_subject">Subject</string>
+    <string name="captantan_cert_issuer">Issuer</string>
+    <string name="captantan_cert_fingerprint">SHA-256 fingerprint</string>
+    <string name="captantan_cert_pem">Certificate</string>
+    <string name="captantan_cert_none">(none)</string>
+    <string name="captantan_cert_trust">Trust</string>
+    <string name="captantan_cert_trust_new">Trust new</string>
+    <string name="captantan_cert_once">Only this time</string>
+</resources>
