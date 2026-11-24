@@ -400,7 +400,7 @@ final class SessionNotifications
 	private static int accent(Context context)
 	{
 		final Context themed = new ContextThemeWrapper(context, R.style.Theme_Main);
-		return MaterialColors.getColor(themed, com.google.android.material.R.attr.colorPrimary,
+		return MaterialColors.getColor(themed, androidx.appcompat.R.attr.colorPrimary,
 		                               NotificationCompat.COLOR_DEFAULT);
 	}
 }

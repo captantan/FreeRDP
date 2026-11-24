@@ -59,7 +59,9 @@ own screens to match).
   ...).
 - **Colours only through theme attributes:** `?attr/colorPrimary`, `?attr/colorOnSurface`,
   `?attr/colorSurfaceContainer`, ... in layouts and drawables, `MaterialColors.getColor(view,
-  com.google.android.material.R.attr.colorPrimary)` in code. Never a hex value or an `@color/` resource
+  androidx.appcompat.R.attr.colorPrimary)` in code (R classes are not transitive: an attribute is in
+  the R of the library that defines it, `colorPrimary` in AppCompat's, `colorSurfaceContainer` in
+  Material's). Never a hex value or an `@color/` resource
   in fork UI. Pair each container colour with its "on" colour. Errors use the `colorError` family. The
   only fixed colours are `aFreeRDP/src/main/res/values*/captantan_colors.xml`, which feed the theme.
 - **Dialogs:** `MaterialAlertDialogBuilder` (`com.google.android.material.dialog`), which returns an
@@ -368,6 +370,127 @@ session. Two rules: a session is shown in at most one window, and a window shows
   `session size`, `session connected`, `focus`, `detach`, `disconnect asked`, `session end`,
   `session gone`, `window closed`, `prompt:` lines and the reconnect gate, each naming the session
   (`s<n> "<title>"`) and the window (`w<n>`).
+
+**Sessions in the background** (package 2.3)
+
+A foreground service runs exactly while at least one session is live (connecting, connected or waiting
+for an answer), and its notification lists the sessions (decision D8: shown while a session is
+connected, gone when the last one ends, as Microsoft's Windows App does). Without it Android may freeze
+or kill the process once no activity is visible, and on Android 17 an app that targets API 37 cannot
+play sound or use the microphone or camera with no visible activity unless a foreground service that was
+started while the app was visible is running.
+
+- `freeRDPCore/.../captantan/SessionKeeper.java` (new): the one `SessionRegistry` listener, set up by one
+  line in `GlobalApp.onCreate`. It asks for the service when the first session is started (always from a
+  visible session window, which Android requires of a foreground service start), the service stops when
+  the list is empty, and it raises the alerts below. It also asks for the notification permission once
+  per installation, at the first connect, with a one-line reason (a toast) in front of Android's dialog.
+- `freeRDPCore/.../captantan/SessionKeepAliveService.java` (new): the service. Type `specialUse` (no other
+  type describes a remote desktop session; see the platform rules below), plus `microphone` and `camera`
+  while a live session redirects them and the app holds `RECORD_AUDIO` or `CAMERA`; `startForeground` is
+  called again when that set changes. Not sticky: the sessions die with the process, so a restarted
+  service would have nothing to keep. The notification's Disconnect buttons come back to it.
+- `freeRDPCore/.../captantan/SessionNotifications.java` (new): two channels of their own.
+  "Running sessions" (`captantan_sessions`, low importance: silent, no heads-up, no badge) carries the
+  ongoing notification: one session shows its title and state (Connecting, Connected, Waiting for your
+  answer) and a Disconnect button; two show "2 sessions running", a line per session, and
+  "Disconnect <title>" for each plus "Disconnect all"; three or more only "Disconnect all" (a
+  notification has room for three buttons). A session that redirects the microphone or camera is named
+  in it. On the lock screen only the count shows. "Session alerts" (`captantan_session_events`, high
+  importance: sound and heads-up) carries the alerts.
+- `freeRDPCore/.../captantan/SessionOpenActivity.java` (new): where a tap goes. No UI
+  (`Theme.NoDisplay`, finishes in `onCreate`, its own empty task affinity, not in Recents). It looks the
+  session up at the moment of the tap: live, it is shown through 2.1's launch path
+  (`SessionWindow.EXTRA_SESSION`, plus the connection reference for a bookmark or quick connect, never a
+  `freerdp://` link, which can carry a password); gone, the connection list opens. So a notification
+  never starts a connection by itself. A tap on the ongoing notification opens the session that was last
+  on screen, else the newest. Package 2.2's switcher can be opened from `SessionOpenActivity.open`.
+- **Alerts.** A session that waits for an answer (certificate, login) that is not on screen, because no
+  window shows it or its window is not visible, raises "<title> needs an answer"; a tap shows the session
+  and with it the question. When no window shows it, 2.1 rejects the question after five minutes
+  (`BlockingPrompts.UNATTENDED_TIMEOUT_MS`, unchanged) and the alert says so and times out with it. A
+  question waiting in a window that is not visible has no timeout (it was not 2.1's case either); the
+  server usually gives up first. A session that failed or was ended by the server (the two look the same
+  from Java) while no visible window showed it leaves "<title>: the session has ended". A session that a
+  visible window shows says it itself, as upstream did; an ending that was asked for or explained
+  (disconnect, rejected certificate, cancelled login, the screen-off timer) raises nothing.
+- **Without the notification permission** the sessions stay alive all the same: the service runs, and
+  Android lists the app under the active apps in the quick settings (where "Stop" ends the whole app,
+  with every session). Nothing is in the notification shade, so the alerts are not seen; while the app is
+  visible a toast stands in for them (2.1's "<title>: the session has ended", and "<title> needs an
+  answer"). Upstream already asks for the permission when the connection list opens (`HomeActivity`,
+  unedited); the fork's own ask comes once, at the first connect, if it is still missing.
+- **Reconnects.** Upstream held a dropped session's automatic reconnect while the app was not visible
+  (`LibFreeRDP.setForeground`). With the service running they are allowed in the background too
+  (`SessionRegistry.setKeptAlive`, new); upstream's retry limit (`AutoReconnectMaxRetries`) still ends
+  the attempts.
+- **The screen-off timer** ("Close idle connections" under Settings, Power saving) is unchanged and still
+  ends every session when it fires. Its default is off: nothing stores a default and
+  `getDisconnectTimeout` reads 0 when it is unset, but the setting showed 5. `settings_app_power.xml`
+  (edited, one attribute) now shows 0. A value a user typed in stays. With sessions meant to outlive the
+  screen, off is the right default; set it to end sessions on purpose.
+- **What a session that is not shown still costs:** its connection, its sound, and the decoding of every
+  frame (H.264 or RemoteFX) and the copy into its bitmap on the session thread; only painting stops
+  (2.1). Suspending decoding needs native help (3.1 or later).
+- **Nothing else drops a session in the background:** the client has no Wi-Fi, battery or connectivity
+  handling of its own (`ACCESS_WIFI_STATE` is declared and unused); the reconnect gate was the only
+  foreground/background rule.
+- **Manifest** (`aFreeRDP/src/main/AndroidManifest.xml`, edited, kept out of the core manifest):
+  `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_SPECIAL_USE`, `FOREGROUND_SERVICE_MICROPHONE`,
+  `FOREGROUND_SERVICE_CAMERA`; the service (not exported, `foregroundServiceType=
+  "specialUse|microphone|camera"`, with the `android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE` property that
+  explains the special use); `SessionOpenActivity`. `RECORD_AUDIO`, `CAMERA` and `POST_NOTIFICATIONS`
+  were already declared by the core manifest.
+- Changed for it in 2.1's files (ours): `SessionHost` (`isWaitingForAnswer`, `isOnScreen` with a
+  registry change when it flips, `getEndCause`, `wasOnScreenAtEnd`; the "session has ended" toast moved
+  to `SessionKeeper`), `BlockingPrompts` (`isWaiting`), `SessionRegistry` (`setKeptAlive`). No existing
+  signature changed.
+- **Log.** `adb logcat -s captantan.background`, at INFO: `service: start asked`, `service start`,
+  `notification: <n> sessions: <each session and its state> [types ...]` on every change of what the
+  notification shows, `notification: Disconnect ...`, `notification tapped: ...`, `alert: ...` and
+  `event: ...` for every alert, `service stop`, `notifications allowed / not allowed`, and at app start
+  the reason the previous process ended (`previous process exit: reason <n>`, `ApplicationExitInfo`; 10
+  is `REASON_USER_REQUESTED`, for example the quick settings' Stop).
+- **For measuring without the service:** `adb shell setprop log.tag.captantan.nokeepalive DEBUG` keeps
+  the service from being started for sessions started from then on (`INFO` or a restart of the device
+  undoes it). The alerts still work.
+
+**The platform rules this rests on** (checked against the Android documentation on 2026-11-24, for target
+API 37 on Android 14 to 17):
+
+- A foreground service needs a type from Android 14 on, each type its `FOREGROUND_SERVICE_<TYPE>`
+  permission, and some a runtime permission granted before `startForeground` (`microphone`:
+  `RECORD_AUDIO`; `camera`: `CAMERA`), else `SecurityException`
+  ([service types](https://developer.android.com/develop/background-work/services/fgs/service-types),
+  [changes](https://developer.android.com/develop/background-work/services/fgs/changes)). No type names a
+  remote desktop session: `connectedDevice` is for external devices and needs device permissions,
+  `dataSync` (data transfer) and `mediaProcessing` are limited to 6 hours a day from Android 15
+  ([timeout](https://developer.android.com/develop/background-work/services/fgs/timeout)), `mediaPlayback`
+  is for media and a session need not have sound. `specialUse` covers valid uses no other type covers, has
+  no time limit and no runtime prerequisite, and wants the subtype property.
+- Starting a foreground service from the background is refused from Android 12 on, except in listed
+  cases; starting it while an activity is visible is allowed
+  ([background start](https://developer.android.com/develop/background-work/services/fgs/restrictions-bg-start)).
+  A `microphone` or `camera` service cannot be created from the background from Android 14 on; it must
+  be started while the app has a visible activity (same page). Types can be added later by calling
+  `startForeground` again with all of them
+  ([launch](https://developer.android.com/develop/background-work/services/fgs/launch)); whether that works
+  from the background is not documented, so the service adds them when a session starts (the app is
+  visible then) and falls back to `specialUse` alone, logged, if Android refuses.
+- A service started while the app is visible has "while-in-use" capabilities: the microphone and camera
+  while no activity is visible, and on Android 17, for an app that targets 37, also sound: background
+  playback (AudioTrack, AAudio, OpenSL ES) is silenced without an error unless such a service runs
+  ([Android 17 background audio](https://developer.android.com/about/versions/17/changes/bg-audio)).
+  Without a foreground service a background app's microphone gets silence, not an error (Android 9 and
+  later; [sharing audio input](https://developer.android.com/guide/topics/media/sharing-audio-input)).
+- `POST_NOTIFICATIONS` is not needed to start a foreground service. Refused, the service runs and is
+  listed in the Task Manager, not in the notification shade
+  ([notification permission](https://developer.android.com/develop/ui/views/notifications/notification-permission)).
+  The Task Manager's Stop (Android 13 and later) ends the whole app
+  ([user stopping](https://developer.android.com/develop/background-work/services/fgs/handle-user-stopping)).
+- From Android 14 an ongoing notification can be swiped away except on the lock screen
+  ([Android 14 changes](https://developer.android.com/about/versions/14/behavior-changes-all)); the service
+  goes on, and the notification is posted again at the next change.
 
 **Per-connection settings and graphics mode** (package 1.4)
 
@@ -712,8 +835,8 @@ compile check runs on the merge.
      result). A new place in upstream that starts `SessionActivity` needs the same flags.
    - `KeyboardAccessibilityService.java`: keep `SessionRegistry.getFocusedActivity()` in both places.
      Any new reader of "the active session" must ask the registry.
-   - `GlobalApp.java`: keep `SessionRegistry.init(this)` in `onCreate` and `SessionRegistry.disconnectAll`
-     in `DisconnectTask`. Upstream's `registerSessionListener` / `dispatch` (connection events posted to
+   - `GlobalApp.java`: keep `SessionRegistry.init(this)` and, after it, `SessionKeeper.init(this)`
+     (package 2.3) in `onCreate`, and `SessionRegistry.disconnectAll` in `DisconnectTask`. Upstream's `registerSessionListener` / `dispatch` (connection events posted to
      the UI thread, one listener per instance) is what `SessionHost` listens with: if upstream changes
      it, fix `SessionHost.connect`.
    - `SessionInputManager.java` (package 2.1): keep `releasePhysicalKeys`, which `SessionWindow` calls
@@ -765,6 +888,15 @@ compile check runs on the merge.
      `setSettingsChanged`: if upstream changes those, fix `ConnectionOptions.Draft`.
    - `HomeViewModel.java` (`deleteBookmark`): keep `ConnectionPrefs.forget`. If upstream adds another way
      to delete bookmarks, add the call there too.
+   - `aFreeRDP/src/main/AndroidManifest.xml` (package 2.3): keep the four `FOREGROUND_SERVICE*`
+     permissions, the `SessionKeepAliveService` service with its types and subtype property, and
+     `SessionOpenActivity`. The compile check fails if the service, a type or a permission goes
+     missing. If upstream adds a foreground service of its own, check that its types and ours do not
+     need permissions the other lacks. If upstream ever requests a permission in `SessionActivity` with
+     the request code 2301, change `SessionKeeper.REQUEST_NOTIFICATIONS`: `SessionActivity` must keep
+     ignoring that code in `onRequestPermissionsResult`.
+   - `settings_app_power.xml` (package 2.3): keep `bounds_default="0"` on the disconnect timeout. If
+     upstream gives the setting a stored default, check that it is still off.
    - `freeRDPCore/build.gradle`: keep the Material line. If upstream adds Material itself, keep the newer
      version and drop ours (and its mention here).
    - `freeRDPCore/src/main/res/values*/theme.xml` never conflicts (not edited), but read upstream's change:
@@ -803,7 +935,12 @@ The workflow `.github/workflows/captantan-android.yml` runs on pull requests int
   `captantan/PhysicalKeyboard` with its four native methods and `libfreerdp-android.so` exports a function
   for each (package 5.1: they are found by name at run time, so a misnamed one would compile and fail at
   the first key); the dex has the package 2.1 classes (`SessionHost`, `SessionRegistry`,
-  `SessionWindow`), and no activity in the manifest has `documentLaunchMode`;
+  `SessionWindow`), and no activity in the manifest has `documentLaunchMode`; the dex has the package 2.3
+  classes (`SessionKeeper`, `SessionKeepAliveService`, `SessionNotifications`, `SessionOpenActivity`), and
+  the merged manifest has the service, not exported, with the types `specialUse`, `microphone` and
+  `camera` and its subtype property, the permissions `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_SPECIAL_USE`,
+  `FOREGROUND_SERVICE_MICROPHONE`, `FOREGROUND_SERVICE_CAMERA`, `POST_NOTIFICATIONS`, `RECORD_AUDIO` and
+  `CAMERA`, and `SessionOpenActivity`;
 - test build: package `dev.captantan.freerdp.debug`, label `RDP debug`, the same version, signed with the
   committed public key, and byte-identical native libraries to the release APK.
 
