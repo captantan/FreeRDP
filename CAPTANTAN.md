@@ -462,22 +462,34 @@ Set it back to `INFO` afterwards (it also resets when the device restarts). Besi
 one `key up` line. `getevent -lt` stamps its lines with the monotonic clock, not the time of day: line the
 two captures up on one key that is in both.
 
-**Measured on a device on 2026-11-24** (an Android 17 phone, two keyboards, a Windows host, the
-accessibility service off; 348 kernel key events beside 235 key lines of ours):
+**Measured on a device on 2026-11-24** (an Android 17 phone, two keyboards, a Windows host; `getevent`
+beside the key lines, two runs):
 
 - Every key that reached the app gave one `key down` and one `key up` line, about 20 ms after the kernel's
-  event, and a held key repeated on the remote side. No key was left down.
-- Without the accessibility service Android keeps some keys, and they never reach the app (package 5.2):
-  Tab while Alt is held, and the Meta key. With Alt+Tab the app does get Alt down and its repeats, then an
-  Alt up at the moment Tab goes down (Android's, not the user's), so the remote side sees Alt pressed and
+  event, and a held key repeated on the remote side at Android's rate (once, also with the accessibility
+  service on). No key was left down. In the second run all 30 key presses the kernel saw are accounted for:
+  22 sent, 6 refused, 2 that are not keys (below).
+- **Accessibility service off:** Android keeps some keys, and they never reach the app (package 5.2): Tab
+  while Alt is held, and the Meta key. With Alt+Tab the app does get Alt down and its repeats, then an Alt
+  up at the moment Tab goes down (Android's, not the user's), so the remote side sees Alt pressed and
   released alone. The cancelled-key rule above is for that case; whether Android flags that key up as
-  cancelled is not confirmed yet (the `flags=` field of the key line shows it).
+  cancelled is not confirmed (the `flags=` field of the key line shows it; it was added after that run).
+- **Accessibility service on:** Alt held with Tab pressed three times, and the Meta key alone, arrive as
+  ordinary keys and work on the remote side (the switcher cycles, the Start menu opens). A key that is
+  not taken is then seen twice, once from the service and once from the window; both are left alone.
+- Ctrl+click and Shift+click work: the modifier is down on the server when the click arrives.
+- A key pressed while the notification shade has focus is refused (`key down refused`) and does not reach
+  the remote side, with the service on.
 - Unplugging a keyboard with a key held: the kernel itself sends the key up when the device goes, Android
-  passes it on, and it is sent like any other. The device listener is a second line of defence.
+  passes it on, and it is sent like any other. The device listener is a second line of defence. After
+  plugging it in again (a new device ID) keys are taken as before.
 - A keyboard that also has a pointer reports sources beyond the keyboard class (mouse, joystick) for the
   device, and one keyboard was reported as not alphabetic by `InputDevice.getKeyboardType()` on its first
   key and as alphabetic later. Its key events carry the plain keyboard source. That is why the test looks
-  at the event's source and does not ask for an alphabetic device.
+  at the event's source and does not ask for an alphabetic device. One keyboard's pointer button also
+  sends a key event with scan code 240 and key code 0: it has no RDP scan code and is not taken.
+- Not measured: a GNOME Remote Desktop host, function keys, Menu, Print Screen, Pause, Escape, the JIS,
+  Korean and ABNT keys, Num Lock and Scroll Lock, and the setting "Use Android keyboard layout" on.
 
 ## Package and version scheme
 
