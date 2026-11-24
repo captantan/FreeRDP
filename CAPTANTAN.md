@@ -446,8 +446,8 @@ session's window does not have focus, so it goes where the focus is.
 **Logging.** Tag `captantan.keys`. Always, at INFO: each keyboard device when it first sends a key (name,
 IDs, sources), lock states sent, and each release of held keys with its reason. One line per key
 transition (`key down|repeat|up scan=<evdev> keycode=<android> rdp=0x<code> extended=<0|1> device=<id>
-flags=0x<KeyEvent flags>`), and one for a key down that was refused or a repeat that was not sent, is
-written at INFO only while the tag is switched to DEBUG, because it is everything that is typed:
+flags=0x<KeyEvent flags>`), and one for each key of a real device that was refused or not taken, with the
+reason, is written at INFO only while the tag is switched to DEBUG, because it is everything that is typed:
 
 ```bash
 adb shell setprop log.tag.captantan.keys DEBUG

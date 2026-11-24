@@ -284,7 +284,15 @@ public final class PhysicalKeyboard
 		if (action != KeyEvent.ACTION_DOWN && action != KeyEvent.ACTION_UP)
 			return NOT_OURS;
 		if (!isFromPhysicalKeyboard(event))
+		{
+			// a real device's key that is not taken is worth a line; the on-screen keyboard's
+			// (the virtual device) is not
+			if (event.getDeviceId() != KeyCharacterMap.VIRTUAL_KEYBOARD)
+				logKey("not taken (not a keyboard's key event: source 0x" +
+				           Integer.toHexString(event.getSource()) + ")",
+				       event, 0);
 			return NOT_OURS;
+		}
 
 		final long id = keyId(event);
 		return (action == KeyEvent.ACTION_UP) ? onUp(id, event) : onDown(id, event);
@@ -466,14 +474,23 @@ public final class PhysicalKeyboard
 		// "Use Android keyboard layout" (upstream's setting): Android chooses the characters and
 		// upstream's path sends them. Read on every key, as upstream does.
 		if (ApplicationSettingsActivity.getPhysicalKeyboardDeviceLayout(context))
+		{
+			logKey("not taken (\"Use Android keyboard layout\" is on)", event, 0);
 			return NOT_OURS;
+		}
 		if (leftToAndroid(event))
+		{
+			logKey("not taken (left to Android)", event, 0);
 			return NOT_OURS;
+		}
 
 		final int evdev = evdevOf(event);
 		final int rdp = rdpOf(evdev);
 		if (rdp == 0)
+		{
+			logKey("not taken (no RDP scan code)", event, 0);
 			return NOT_OURS;
+		}
 
 		// The accessibility service hands over keys whichever window has focus. A session takes
 		// them only while its own window has it; otherwise they belong to that other window.
@@ -532,7 +549,10 @@ public final class PhysicalKeyboard
 	{
 		final Integer held = down.remove(id);
 		if (held == null)
-			return NOT_OURS; // its down was not sent by this class
+		{
+			logKey("up not taken (its down was not sent)", event, 0);
+			return NOT_OURS;
+		}
 
 		final boolean alive = isAlive();
 		if (held != NOTHING_TO_RELEASE && !isDown(held) && alive)
