@@ -340,8 +340,12 @@ upstream theme or layout file is edited.
 - `captantan/CertificatePrompt.java`, `SessionPrompts.java` (ours): `MaterialAlertDialogBuilder`
   instead of `android.app.AlertDialog.Builder`, with the same buttons, answers, Back and touch-outside
   behaviour; `BlockingPrompts.java` takes `androidx.appcompat.app.AlertDialog` (only the type changed).
-- `assets/captantan_notices.html`: Material Components and the AndroidX libraries it brings.
-- APK size: the release APK went from 26,379,782 to APK_AFTER bytes.
+- `assets/captantan_notices.html`: Material Components, the AndroidX libraries it brings and Error Prone
+  annotations; also the Kotlin standard library, kotlinx.coroutines and JetBrains annotations, which AndroidX
+  had already brought into the APK unlisted.
+- APK size: the release APK went from 26,379,782 to 30,757,695 bytes (+4.4 MB: Material's code and
+  resources and the AndroidX libraries it needs, unshrunk because upstream's release build has
+  `minifyEnabled false`). Native libraries are unchanged.
 
 ## Package and version scheme
 
@@ -497,6 +501,6 @@ The repository's `LICENSE` is Apache-2.0. Most of the Android client's own files
 at 3.33.1, including `SessionActivity`, `LibFreeRDP`, `GlobalApp` and `KeyboardMapper`) are MPL-2.0, the
 JNI glue's CMake files and `android_disp.*` are Apache-2.0. Keep each file's header. The About page names the
 source repository; the third-party notices page lists what else is in the APK (OpenSSL, OpenH264, Opus,
-libwebp, libpng, libjpeg-turbo, uriparser, cJSON, SQLCipher, Material Components, AndroidX). FFmpeg is not packaged, which removes
+libwebp, libpng, libjpeg-turbo, uriparser, cJSON, SQLCipher, Material Components, AndroidX, Kotlin). FFmpeg is not packaged, which removes
 the only LGPL component; if it is turned back on (`-DWITH_FFMPEG=ON` in `release.properties`), its notice
 and LGPL obligations come back with it.
