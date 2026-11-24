@@ -38,6 +38,59 @@ maintainer decides otherwise, case by case.
    captantan/FreeRDP` shows whether a new one arrived; disable it with `gh workflow disable <file> -R
    captantan/FreeRDP`.
 
+## UI conventions
+
+Every screen the fork adds or changes follows these (package 7.2a set them up; 7.2b restyles upstream's
+own screens to match).
+
+- **Theme.** Every activity uses upstream's theme names, `Theme.Main` (with the action bar) or
+  `Theme.Main.Session` (the session window, none), and both are the fork's `Theme.Captantan`: Material 3
+  Expressive from Material Components for Android (`com.google.android.material:material`). A new
+  activity gets `android:theme="@style/Theme.Main"`, or a style whose parent is `Theme.Main`. Never a
+  `Theme.AppCompat.*`, `Theme.MaterialComponents.*` or framework theme, and never a theme overlay that
+  changes colours.
+- **Components.** Material components (`com.google.android.material.*`), in their `Material3Expressive`
+  style where Material has one, else `Material3`; the theme already makes them the default (a `<Button>`
+  in a layout inflates as a `MaterialButton`). For example `MaterialButton`, `MaterialSwitch`,
+  `MaterialCardView`, `Slider`, chips, `MaterialToolbar`, `BottomSheetDialog`, `Snackbar`, Material's list
+  items. Not their framework or AppCompat counterparts. Text uses the Material 3 type scale
+  (`?attr/textAppearanceTitleMedium`, `?attr/textAppearanceBodyLarge`, ...), never sizes in `sp` or
+  `?android:attr/textAppearanceLarge`; corners use the shape scale (`?attr/shapeAppearanceCornerMedium`,
+  ...).
+- **Colours only through theme attributes:** `?attr/colorPrimary`, `?attr/colorOnSurface`,
+  `?attr/colorSurfaceContainer`, ... in layouts and drawables, `MaterialColors.getColor(view,
+  com.google.android.material.R.attr.colorPrimary)` in code. Never a hex value or an `@color/` resource
+  in fork UI. Pair each container colour with its "on" colour. Errors use the `colorError` family. The
+  only fixed colours are `aFreeRDP/src/main/res/values*/captantan_colors.xml`, which feed the theme.
+- **Dialogs:** `MaterialAlertDialogBuilder` (`com.google.android.material.dialog`), which returns an
+  `androidx.appcompat.app.AlertDialog`. A dialog that a session thread waits on goes through
+  `captantan/BlockingPrompts`, as `CertificatePrompt` and `SessionPrompts` do. Never
+  `android.app.AlertDialog` or `ProgressDialog`. Bottom sheets: `BottomSheetDialog`.
+- **Preference screens:** an AndroidX `PreferenceFragmentCompat` with its XML in `res/xml/`, inside an
+  activity on `Theme.Main`, as `ConnectionOptionsFragment` is. Use the library's own preferences
+  (`SwitchPreferenceCompat`, `ListPreference`, `SeekBarPreference`, ...) and no custom preference
+  layouts; they take their colours and type from the theme. Material has no preference theme of its own;
+  whether the screens get Material list styling is a 7.2b decision.
+- **Edge to edge.** With target SDK 37 every window is edge to edge on Android 15 and later: the system
+  bars are transparent and the window draws behind them, and the bar colours in the theme only apply on
+  Android 10 to 14. On a screen with the action bar, AppCompat keeps the action bar below the status bar
+  and hands the remaining insets to the content; upstream's root layouts take them with
+  `android:fitsSystemWindows="true"`. A new screen does the same, or, for a list that should scroll
+  behind the navigation bar, applies `WindowInsetsCompat.Type.systemBars() | displayCutout()` as padding
+  with `ViewCompat.setOnApplyWindowInsetsListener` and `android:clipToPadding="false"`. A window without
+  the action bar (the session, a full-screen overlay) handles all insets itself, as `SessionActivity`
+  does. Nothing may sit under a system bar unreadably, on a phone with gesture navigation or three
+  buttons, or a tablet's taskbar. Never set the bar colours or icon colours in code: the theme sets dark
+  icons for the light theme and light icons for the dark one.
+- **Light, dark and dynamic colour.** Every screen works in light and dark (the system setting, or the
+  app's own "Theme" setting under Settings) and with any wallpaper: on Android 12 and later the colours
+  come from the wallpaper, on Android 10 and 11 from the fallback scheme. Check a new screen on a device in
+  both modes. Nothing in the app may assume a particular hue.
+- **Where things go.** Theme-only resources (the theme, its colours) are in the app module
+  (`aFreeRDP/src/main/res/values*/captantan_*.xml`). Styles, layouts and drawables that fork code in
+  `freeRDPCore` uses go in `freeRDPCore/src/main/res/` under `captantan_*` names, since the library cannot
+  see the app's resources; Material's attributes are available there.
+
 ## What differs from upstream
 
 New files of ours, and every edit to an upstream file (each marked `captantan fork` in the file unless the
@@ -258,6 +311,48 @@ whose `android:key` is the field's key (a `ListPreference` for an enum, a `SeekB
 new kind of preference needs its getter and setter in `ConnectionOptions.Draft.Store`). Callers read
 `ConnectionPrefs.load(context, bookmark.getId()).getX()`. Nothing else changes; never rename a key.
 
+**Material 3 theme** (package 7.2a)
+
+The theme foundation: Material 3 Expressive, the newest Material iteration that is stable for Views
+(Material Components for Android 1.14.0, the first stable release with the `Material3Expressive` themes;
+it needs minSdk 23 and compileSdk 35 or later). Upstream's layouts are not restyled (that is 7.2b), and no
+upstream theme or layout file is edited.
+
+- `freeRDPCore/build.gradle` (edited, one line): `com.google.android.material:material:1.14.0`. It is in
+  the library because fork code there uses `MaterialAlertDialogBuilder`; the app module gets it from there.
+- `aFreeRDP/src/main/res/values/captantan_theme.xml` (new): `Base.Theme.Captantan` (the colours, parent
+  `Theme.Material3Expressive.DayNight`, with the fallback scheme), `Theme.Captantan` (system bars) and
+  `Theme.Main` with parent `Theme.Captantan`. `values-night/captantan_theme.xml` (new) repeats
+  `Theme.Main`, `values-v31/captantan_theme.xml` (new) makes `Base.Theme.Captantan` the
+  `Theme.Material3Expressive.DynamicColors.DayNight` theme, so Android 12 and later take the colours from
+  the wallpaper (no `DynamicColors` call in `GlobalApp`). The app module's resources override the
+  library's of the same name and configuration, so `freeRDPCore/src/main/res/values{,-night}/theme.xml`
+  are left as they are but no longer used for `Theme.Main`; upstream's `Theme.Main.Session` (parent
+  `Theme.Main`, no action bar) follows. Upstream's hard-coded white status bar with dark icons, its
+  "temporary workaround" for the light theme, is gone: `captantan_bools.xml` (new, `values` and
+  `values-night`) gives dark bar icons on the light theme and light ones on the dark theme, and on Android
+  15 and later the window background, the same tone as the action bar, shows behind the status bar.
+- The same files restyle two things every upstream screen shows, by theme attribute only:
+  `Widget.Captantan.ActionBar` (the action bar on `colorSurface` without a shadow, a Material 3 top app
+  bar at rest; Material's own action bar style uses the "scrolled" colour and AppCompat's shadow) and
+  `ThemeOverlay.Captantan.Dialog.Alert` with `drawable/captantan_dialog_background.xml` (new): AppCompat
+  alert dialogs, which upstream and the preference screens use, get Material 3's extra-large corners on
+  `colorSurfaceContainerHigh`, like the `MaterialAlertDialogBuilder` ones.
+- `aFreeRDP/src/main/res/values{,-night}/captantan_colors.xml` (new): the fallback scheme for Android 10
+  and 11, generated from the seed `#3A6EA5` (steel blue) by `aFreeRDP/captantan-palette.py` (new), which
+  implements Material's tonal palettes (`--check` compares its output for Material's baseline seed with
+  Material's published palette). The error colours are Material's. To change the fallback, change `SEED`
+  in the script, run it from anywhere, and commit both files.
+- `captantan/CertificatePrompt.java`, `SessionPrompts.java` (ours): `MaterialAlertDialogBuilder`
+  instead of `android.app.AlertDialog.Builder`, with the same buttons, answers, Back and touch-outside
+  behaviour; `BlockingPrompts.java` takes `androidx.appcompat.app.AlertDialog` (only the type changed).
+- `assets/captantan_notices.html`: Material Components, the AndroidX libraries it brings and Error Prone
+  annotations; also the Kotlin standard library, kotlinx.coroutines and JetBrains annotations, which AndroidX
+  had already brought into the APK unlisted.
+- APK size: the release APK went from 26,379,782 to 30,758,687 bytes (+4.4 MB: Material's code and
+  resources and the AndroidX libraries it needs, unshrunk because upstream's release build has
+  `minifyEnabled false`). Native libraries are unchanged.
+
 **Physical keyboard: real key down and key up** (package 5.1)
 
 Upstream sends a key of a physical keyboard as an instant press and release when Android reports the key
@@ -465,6 +560,15 @@ compile check runs on the merge.
      `setSettingsChanged`: if upstream changes those, fix `ConnectionOptions.Draft`.
    - `HomeViewModel.java` (`deleteBookmark`): keep `ConnectionPrefs.forget`. If upstream adds another way
      to delete bookmarks, add the call there too.
+   - `freeRDPCore/build.gradle`: keep the Material line. If upstream adds Material itself, keep the newer
+     version and drop ours (and its mention here).
+   - `freeRDPCore/src/main/res/values*/theme.xml` never conflicts (not edited), but read upstream's change:
+     an item upstream adds to `Theme.Main` is not used (the app module's `Theme.Main` replaces it), so
+     carry what is still needed into `aFreeRDP/src/main/res/values/captantan_theme.xml`, and an item added
+     to `Theme.Main.Session` applies on top of ours. If upstream defines `Theme.Main` in a new
+     configuration (say `values-v35/theme.xml`), add `Theme.Main` with parent `Theme.Captantan` to the app
+     module in that configuration too; the compile check fails until then (it wants `Theme.Captantan` as
+     the parent of `Theme.Main` in every configuration).
    - `release.properties` and everything else that is ours only: never conflicts.
 5. **Repeat the identifier search**; look at anything new that must follow the application ID:
    `git grep -n -E 'authorities|sharedUserId|accountType|<permission|targetPackage|taskAffinity|"com\.freerdp\.[a-z.]*"' -- client/Android`
@@ -489,9 +593,11 @@ The workflow `.github/workflows/captantan-android.yml` runs on pull requests int
   `libmediandk.so` and `libopenh264.so` and contains the two H.264 log lines of package 1.3, and the dex
   has the package 1.4 classes (`ConnectionPrefs`, `GraphicsMode`, `ConnectionOptions`, its `Draft`,
   `ConnectionOptionsFragment`) and the three `/gfx` arguments, and the resources have
-  `xml/captantan_connection_options`, and the dex has `captantan/PhysicalKeyboard` with its four native
-  methods and `libfreerdp-android.so` exports a function for each (package 5.1: they are found by name
-  at run time, so a misnamed one would compile and fail at the first key);
+  `xml/captantan_connection_options`; every configuration of `Theme.Main` has the parent
+  `Theme.Captantan`, and the dex has Material's `MaterialAlertDialogBuilder`; the dex has
+  `captantan/PhysicalKeyboard` with its four native methods and `libfreerdp-android.so` exports a function
+  for each (package 5.1: they are found by name at run time, so a misnamed one would compile and fail at
+  the first key);
 - test build: package `dev.captantan.freerdp.debug`, label `RDP debug`, the same version, signed with the
   committed public key, and byte-identical native libraries to the release APK.
 
@@ -531,6 +637,6 @@ The repository's `LICENSE` is Apache-2.0. Most of the Android client's own files
 at 3.33.1, including `SessionActivity`, `LibFreeRDP`, `GlobalApp` and `KeyboardMapper`) are MPL-2.0, the
 JNI glue's CMake files and `android_disp.*` are Apache-2.0. Keep each file's header. The About page names the
 source repository; the third-party notices page lists what else is in the APK (OpenSSL, OpenH264, Opus,
-libwebp, libpng, libjpeg-turbo, uriparser, cJSON, SQLCipher, AndroidX). FFmpeg is not packaged, which removes
-the only LGPL component; if it is turned back on (`-DWITH_FFMPEG=ON` in `release.properties`), its notice
-and LGPL obligations come back with it.
+libwebp, libpng, libjpeg-turbo, uriparser, cJSON, SQLCipher, Material Components, AndroidX, Kotlin).
+FFmpeg is not packaged, which removes the only LGPL component; if it is turned back on (`-DWITH_FFMPEG=ON`
+in `release.properties`), its notice and LGPL obligations come back with it.

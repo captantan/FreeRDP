@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- captantan fork: the app's theme (roadmap 7.2a), Material 3 Expressive from
+     com.google.android.material:material. The conventions are in CAPTANTAN.md, "UI conventions".
+
+     Layers:
+       Base.Theme.Captantan  the colours: dynamic colour from the wallpaper on Android 12 and later
+                             (values-v31), else the fallback scheme in captantan_colors.xml, made by
+                             aFreeRDP/captantan-palette.py from one seed colour.
+       Theme.Captantan       everything else (system bars, action bar, AppCompat dialogs).
+       Theme.Main            upstream's theme name, used by every activity in the manifests. Defined
+                             here and in values-night so that it overrides freeRDPCore's
+                             values/theme.xml and values-night/theme.xml, which are left as they are.
+                             Upstream's Theme.Main.Session (parent Theme.Main) follows it. -->
+<resources>
+
+    <style name="Base.Theme.Captantan" parent="Theme.Material3Expressive.DayNight">
+        <item name="colorPrimary">@color/captantan_primary</item>
+        <item name="colorOnPrimary">@color/captantan_on_primary</item>
+        <item name="colorPrimaryContainer">@color/captantan_primary_container</item>
+        <item name="colorOnPrimaryContainer">@color/captantan_on_primary_container</item>
+        <item name="colorPrimaryInverse">@color/captantan_primary_inverse</item>
+        <item name="colorPrimaryFixed">@color/captantan_primary_fixed</item>
+        <item name="colorPrimaryFixedDim">@color/captantan_primary_fixed_dim</item>
+        <item name="colorOnPrimaryFixed">@color/captantan_on_primary_fixed</item>
+        <item name="colorOnPrimaryFixedVariant">@color/captantan_on_primary_fixed_variant</item>
+        <item name="colorSecondary">@color/captantan_secondary</item>
+        <item name="colorOnSecondary">@color/captantan_on_secondary</item>
+        <item name="colorSecondaryContainer">@color/captantan_secondary_container</item>
+        <item name="colorOnSecondaryContainer">@color/captantan_on_secondary_container</item>
+        <item name="colorSecondaryFixed">@color/captantan_secondary_fixed</item>
+        <item name="colorSecondaryFixedDim">@color/captantan_secondary_fixed_dim</item>
+        <item name="colorOnSecondaryFixed">@color/captantan_on_secondary_fixed</item>
+        <item name="colorOnSecondaryFixedVariant">@color/captantan_on_secondary_fixed_variant</item>
+        <item name="colorTertiary">@color/captantan_tertiary</item>
+        <item name="colorOnTertiary">@color/captantan_on_tertiary</item>
+        <item name="colorTertiaryContainer">@color/captantan_tertiary_container</item>
+        <item name="colorOnTertiaryContainer">@color/captantan_on_tertiary_container</item>
+        <item name="colorTertiaryFixed">@color/captantan_tertiary_fixed</item>
+        <item name="colorTertiaryFixedDim">@color/captantan_tertiary_fixed_dim</item>
+        <item name="colorOnTertiaryFixed">@color/captantan_on_tertiary_fixed</item>
+        <item name="colorOnTertiaryFixedVariant">@color/captantan_on_tertiary_fixed_variant</item>
+        <item name="android:colorBackground">@color/captantan_background</item>
+        <item name="colorOnBackground">@color/captantan_on_background</item>
+        <item name="colorSurface">@color/captantan_surface</item>
+        <item name="colorOnSurface">@color/captantan_on_surface</item>
+        <item name="colorSurfaceVariant">@color/captantan_surface_variant</item>
+        <item name="colorOnSurfaceVariant">@color/captantan_on_surface_variant</item>
+        <item name="colorSurfaceInverse">@color/captantan_surface_inverse</item>
+        <item name="colorOnSurfaceInverse">@color/captantan_on_surface_inverse</item>
+        <item name="colorSurfaceBright">@color/captantan_surface_bright</item>
+        <item name="colorSurfaceDim">@color/captantan_surface_dim</item>
+        <item name="colorSurfaceContainerLowest">@color/captantan_surface_container_lowest</item>
+        <item name="colorSurfaceContainerLow">@color/captantan_surface_container_low</item>
+        <item name="colorSurfaceContainer">@color/captantan_surface_container</item>
+        <item name="colorSurfaceContainerHigh">@color/captantan_surface_container_high</item>
+        <item name="colorSurfaceContainerHighest">@color/captantan_surface_container_highest</item>
+        <item name="colorOutline">@color/captantan_outline</item>
+        <item name="colorOutlineVariant">@color/captantan_outline_variant</item>
+    </style>
+
+    <style name="Theme.Captantan" parent="Base.Theme.Captantan">
+        <!-- System bars. From Android 15 on (target SDK 37) every window is edge to edge: the bars
+             are transparent, these two colours are ignored, and the window background
+             (colorBackground, the same tone as the action bar's colorSurface) shows behind the
+             status bar. On Android 10 to 14 the bars are painted with these colours. -->
+        <item name="android:statusBarColor">?attr/colorSurface</item>
+        <item name="android:navigationBarColor">?android:attr/colorBackground</item>
+        <!-- Dark bar icons on the light theme, light ones on the dark theme. -->
+        <item name="android:windowLightStatusBar">@bool/captantan_light_system_bars</item>
+        <item name="android:windowLightNavigationBar">@bool/captantan_light_system_bars</item>
+        <!-- The action bar as a Material 3 top app bar at rest. Material's own action bar style
+             uses the "scrolled" container colour and keeps AppCompat's shadow, so it showed as a
+             darker band under the status bar. -->
+        <item name="actionBarStyle">@style/Widget.Captantan.ActionBar</item>
+        <!-- AppCompat alert dialogs (upstream's, and those of the preference screens) with the
+             shape and colour of Material 3 dialogs, like the fork's MaterialAlertDialogBuilder ones. -->
+        <item name="alertDialogTheme">@style/ThemeOverlay.Captantan.Dialog.Alert</item>
+    </style>
+
+    <style name="Widget.Captantan.ActionBar" parent="Widget.Material3.Light.ActionBar.Solid">
+        <item name="background">?attr/colorSurface</item>
+        <item name="backgroundStacked">?attr/colorSurface</item>
+        <item name="backgroundSplit">?attr/colorSurface</item>
+        <item name="elevation">0dp</item>
+    </style>
+
+    <style name="ThemeOverlay.Captantan.Dialog.Alert" parent="ThemeOverlay.Material3Expressive.Dialog.Alert">
+        <item name="android:windowBackground">@drawable/captantan_dialog_background</item>
+    </style>
+
+    <style name="Theme.Main" parent="Theme.Captantan" />
+
+</resources>

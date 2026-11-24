@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- captantan fork: on Android 12 and later the colours come from the wallpaper (dynamic colour),
+     light or dark with the system or the app's own setting. No Application hook is needed: the
+     DynamicColors themes read the system's dynamic colour resources directly. -->
+<resources>
+
+    <style name="Base.Theme.Captantan" parent="Theme.Material3Expressive.DynamicColors.DayNight" />
+
+</resources>
