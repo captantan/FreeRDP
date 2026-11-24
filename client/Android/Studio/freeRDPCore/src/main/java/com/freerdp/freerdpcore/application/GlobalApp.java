@@ -137,6 +137,7 @@ public class GlobalApp extends Application implements LibFreeRDP.EventListener
 	@Override public void onCreate()
 	{
 		super.onCreate();
+		com.freerdp.freerdpcore.captantan.AvcDecoderLog.logOnce(); // captantan fork: roadmap 1.3
 
 		/* Initialize preferences. */
 		ApplicationSettingsActivity.get(this);

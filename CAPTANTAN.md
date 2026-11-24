@@ -75,6 +75,50 @@ file has no comment syntax):
   notices for what the APK contains. Edit that list when a library is added to or dropped from the build.
 - The launcher icon is still upstream's.
 
+**H.264 through MediaCodec, decoder logging** (package 1.3)
+
+- `release.properties`: `-DWITH_MEDIACODEC=ON` in `CMAKE_ARGUMENTS`. The superbuild
+  (`client/Android/cmake/ExternalDeps.cmake`, `ExternalFreeRDP.cmake`) forwards it to libfreerdp, which then
+  compiles `h264_mediacodec.c` and `dsp_mediacodec.c` and links the platform's `libmediandk.so`. OpenH264
+  stays built, linked and packaged. `h264_register_subsystems` (`libfreerdp/codec/h264.c`) lists MediaCodec
+  before OpenH264, and `h264_context_init` takes the first whose `Init` succeeds, so OpenH264 is used only
+  when the MediaCodec decoder cannot be created, configured or started. There is no fallback once it has
+  started: a decode that fails later is logged and the update dropped (`libfreerdp/gdi/gfx.c`). AVC420 and
+  both halves of AVC444 go through the same decoder.
+- The flag also turns on two other MediaCodec paths in libfreerdp: AAC audio decoding (`dsp.c`,
+  `dsp_mediacodec.c`: the client now accepts AAC formats the server offers, judged by the format alone, so
+  a server that prefers AAC sends AAC, decoded by MediaCodec) and the H.264 encoder for camera redirection
+  (`video.c`, used only when the server opens a redirected camera; its subsystem line says `encoder`).
+- `libfreerdp/codec/h264.c` (edited, two lines in `h264_context_init`): logs
+  `H.264 decoder subsystem: <MediaCodec|OpenH264>` at INFO when a subsystem is chosen.
+- `libfreerdp/codec/h264_mediacodec.c` (edited, one line in `mediacodec_init`): the line
+  `MediaCodec using video/avc codec [<name>]` is INFO instead of DEBUG. These two are the fork's only edits
+  to libfreerdp; upstream changes `h264_mediacodec.c` often, so re-check them after each merge.
+- `captantan/AvcDecoderLog.java` (new), started by one line in `GlobalApp.onCreate`: once per process, on a
+  background thread, logs every `video/avc` decoder from `MediaCodecList` with `isHardwareAccelerated()`,
+  `isSoftwareOnly()`, `isVendor()`, the codec it is an alias of, the largest size and low-latency support,
+  under the logcat tag `captantan.codec`.
+- No new library is packaged (`libmediandk.so` is part of Android), so `captantan_notices.html` is unchanged.
+
+**How to confirm hardware decoding.** Native log lines reach logcat under the WLog logger name
+(`com.freerdp.codec` here) at the level the bookmark's "Debug level" sets, INFO by default; WLog's root
+level is INFO before any session too. Start the app, connect with H.264 on (the default), and run:
+
+```bash
+adb logcat -s com.freerdp.codec captantan.codec
+```
+
+- Good: `H.264 decoder subsystem: MediaCodec` and `MediaCodec using video/avc codec [c2.<vendor>.avc.decoder]`
+  (or `OMX.<vendor>...`), and the `captantan.codec` table lists that name with `hardware=true`. The pair
+  appears twice per graphics surface (the context is created and then reset to the surface size) and once
+  at app start (the library's H.264 probe).
+- Software through MediaCodec: the name in use is `c2.android.avc.decoder` (or another with
+  `hardware=false softwareOnly=true` in the table). The device has no usable hardware decoder for this.
+- Fallback: `H.264 decoder subsystem: OpenH264`, after an ERROR line from `com.freerdp.codec` naming the
+  MediaCodec call that failed.
+- If neither subsystem line appears during a session, the server did not send H.264 (for example it chose
+  RemoteFX Progressive).
+
 **Hard-coded identifiers checked at 3.33.1** (repeat this check after each merge, step 5 below): the only
 two that collided were the clipboard authority (above) and the application ID. Left alone on purpose:
 `android:taskAffinity="com.freerdp.session"` (tasks are not shared between apps with different UIDs),
@@ -165,7 +209,8 @@ The workflow `.github/workflows/captantan-android.yml` runs on pull requests int
 
 - release APK: package `dev.captantan.freerdp`, label `RDP`, `versionName` and `versionCode` equal to
   `release.properties`, arm64-v8a only, no FFmpeg libraries, no debug info in the native libraries, both
-  provider authorities under the package name, and the APK is unsigned;
+  provider authorities under the package name, the APK is unsigned, and `libfreerdp3.so` links
+  `libmediandk.so` and `libopenh264.so` and contains the two H.264 log lines of package 1.3;
 - test build: package `dev.captantan.freerdp.debug`, label `RDP debug`, the same version, signed with the
   committed public key, and byte-identical native libraries to the release APK.
 

@@ -921,6 +921,9 @@ static BOOL h264_context_init(H264_CONTEXT* h264)
 		if (subsystem->Init(h264))
 		{
 			h264->subsystem = subsystem;
+			/* captantan fork: name the chosen subsystem at INFO, so logcat shows it */
+			WLog_Print(h264->log, WLOG_INFO, "H.264 %s subsystem: %s",
+			           h264->Compressor ? "encoder" : "decoder", subsystem->name);
 			return TRUE;
 		}
 	}

@@ -103,6 +103,7 @@ jobs:
           grep -Eq '^SPLIT_ENABLED: +false$' "$RUNNER_TEMP/config.txt" || fail "SPLIT_ENABLED is not false"
           grep -Eq '^BUILD_UNIVERSAL: +false$' "$RUNNER_TEMP/config.txt" || fail "BUILD_UNIVERSAL is not false"
           grep -Eq '^CMAKE_ARGUMENTS: .*-DWITH_FFMPEG=OFF' "$RUNNER_TEMP/config.txt" || fail "CMAKE_ARGUMENTS does not turn FFmpeg off"
+          grep -Eq '^CMAKE_ARGUMENTS: .*-DWITH_MEDIACODEC=ON' "$RUNNER_TEMP/config.txt" || fail "CMAKE_ARGUMENTS does not turn MediaCodec on"
 
       - name: Check make job cap
         run: |
@@ -182,7 +183,19 @@ jobs:
             fi
           done < "$RUNNER_TEMP/release-libs.txt"
           echo "native libraries in the release APK: $(unzip -l "$REL" 'lib/*' | tail -n 1 | awk '{print $1}') bytes, none with .debug_info"
-          echo "MediaCodec strings in libfreerdp3.so (not required until package 1.3): $(unzip -p "$REL" lib/arm64-v8a/libfreerdp3.so | strings | grep -c 'MediaCodec using' || true)"
+          # H.264 (roadmap 1.3): libfreerdp3.so has the MediaCodec backend, linked against the
+          # platform's libmediandk.so, with OpenH264 still linked and packaged as the software
+          # fallback, and both log lines of ours. libfreerdp tries MediaCodec first.
+          unzip -p "$REL" lib/arm64-v8a/libfreerdp3.so > "$RUNNER_TEMP/libfreerdp3.so"
+          "$READELF" -d "$RUNNER_TEMP/libfreerdp3.so" | grep NEEDED | tee "$RUNNER_TEMP/freerdp3-needed.txt"
+          grep -qF '[libmediandk.so]' "$RUNNER_TEMP/freerdp3-needed.txt" || fail "libfreerdp3.so does not link libmediandk.so (MediaCodec is not built)"
+          grep -qF '[libopenh264.so]' "$RUNNER_TEMP/freerdp3-needed.txt" || fail "libfreerdp3.so does not link libopenh264.so (no software H.264 fallback)"
+          grep -qx 'lib/arm64-v8a/libopenh264.so' "$RUNNER_TEMP/release-libs.txt" || fail "libopenh264.so is not packaged"
+          strings "$RUNNER_TEMP/libfreerdp3.so" > "$RUNNER_TEMP/freerdp3-strings.txt"
+          for s in 'MediaCodec using %s codec [%s]' 'H.264 %s subsystem: %s' 'AMediaCodec_createCodecByName failed'; do
+            grep -qF "$s" "$RUNNER_TEMP/freerdp3-strings.txt" || fail "libfreerdp3.so lacks the string '$s'"
+          done
+          echo "libfreerdp3.so: MediaCodec backend and OpenH264 fallback present"
 
           echo "== preview badging"
           "$AAPT" dump badging "$PRE" > "$RUNNER_TEMP/preview-badging.txt"
