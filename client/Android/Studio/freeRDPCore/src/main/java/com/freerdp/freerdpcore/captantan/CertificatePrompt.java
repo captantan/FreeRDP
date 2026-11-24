@@ -7,13 +7,16 @@
 package com.freerdp.freerdpcore.captantan;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.graphics.Typeface;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.style.StyleSpan;
 import android.text.style.TypefaceSpan;
 import android.util.Log;
+
+import androidx.appcompat.app.AlertDialog;
+
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import com.freerdp.freerdpcore.R;
 import com.freerdp.freerdpcore.services.LibFreeRDP;
@@ -142,7 +145,7 @@ public final class CertificatePrompt
 
 		final int result = prompts.ask(REJECT, (a, answer) -> {
 			AlertDialog dialog =
-			    new AlertDialog.Builder(a)
+			    new MaterialAlertDialogBuilder(a)
 			        .setTitle(title)
 			        .setMessage(message)
 			        .setPositiveButton(trustLabel, (d, w) -> answer.give(ACCEPT_AND_STORE))
