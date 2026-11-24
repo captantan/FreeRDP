@@ -209,6 +209,24 @@ jobs:
           "$AAPT" dump resources "$REL" > "$RUNNER_TEMP/resources.txt"
           grep -qF 'xml/captantan_connection_options' "$RUNNER_TEMP/resources.txt" || fail "the APK lacks res/xml/captantan_connection_options"
           echo "per-connection settings: classes, graphics arguments and options screen present"
+          # Material 3 theme (roadmap 7.2a): every activity uses upstream's Theme.Main, which the
+          # app module redefines (aFreeRDP/src/main/res/values*/captantan_theme.xml) over
+          # freeRDPCore's theme.xml. In the APK both of its configurations (default and night) must
+          # have the fork's Theme.Captantan as parent; and the fork's dialogs use Material's builder.
+          if [ "$(basename "$AAPT")" = aapt ]; then
+            "$AAPT" dump --values resources "$REL" > "$RUNNER_TEMP/resource-values.txt"
+            cap=$(grep -m 1 -oE 'spec resource 0x[0-9a-f]+ [^ ]*:style/Theme\.Captantan:' "$RUNNER_TEMP/resource-values.txt" | awk '{print $3}')
+            [ -n "$cap" ] || fail "the APK has no style Theme.Captantan"
+            grep -A 1 -E '^ +resource 0x[0-9a-f]+ [^ ]*:style/Theme\.Main: <bag>' "$RUNNER_TEMP/resource-values.txt" | tee "$RUNNER_TEMP/theme-main.txt"
+            n=$(grep -cE ':style/Theme\.Main: <bag>' "$RUNNER_TEMP/theme-main.txt" || true)
+            [ "$n" -eq 2 ] || fail "Theme.Main has $n configurations in the APK, expected 2 (default and night)"
+            others=$(grep -oE 'Parent=0x[0-9a-f]+' "$RUNNER_TEMP/theme-main.txt" | sed 's/Parent=//' | grep -vx "$cap" || true)
+            [ "$(grep -cE 'Parent=' "$RUNNER_TEMP/theme-main.txt")" -eq 2 ] && [ -z "$others" ] || fail "Theme.Main's parent is not Theme.Captantan ($cap) in every configuration"
+            echo "Theme.Main resolves to Theme.Captantan ($cap) in both configurations"
+          else
+            echo "::warning::aapt (v1) not found; the Theme.Main check needs its --values dump and was skipped"
+          fi
+          grep -qaF 'Lcom/google/android/material/dialog/MaterialAlertDialogBuilder;' "$RUNNER_TEMP/classes.dex.all" || fail "the APK lacks Material's MaterialAlertDialogBuilder"
 
           echo "== preview badging"
           "$AAPT" dump badging "$PRE" > "$RUNNER_TEMP/preview-badging.txt"

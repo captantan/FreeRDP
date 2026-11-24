@@ -7,10 +7,11 @@
 package com.freerdp.freerdpcore.captantan;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
+
+import androidx.appcompat.app.AlertDialog;
 
 import java.util.ArrayList;
 import java.util.HashSet;
