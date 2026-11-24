@@ -176,7 +176,8 @@ a note.
   fingerprint.
 - `freeRDPCore/.../captantan/BlockingPrompts.java` (new): shows a dialog that the session's native thread
   waits on (inside a FreeRDP callback), and `close()`, which answers every waiting dialog with its fallback
-  (reject, cancel) when the window is destroyed. All three such dialogs use it.
+  (reject, cancel). All three such dialogs use it. Since package 2.1 it belongs to the session, not to a
+  window (see "Sessions outlive their window" below).
 - `freeRDPCore/.../captantan/SessionPrompts.java` (new): the credentials prompt and the "experimental
   feature" notice, moved off `SessionDialogs.promptCredentials` / `showExperimentalBlocked` (left in place,
   unused), whose bare `wait()` nothing woke once the window was gone. Back now cancels the credentials prompt.
@@ -188,10 +189,10 @@ a note.
 - `freeRDPCore/src/main/res/values/captantan_strings.xml` (new): the prompts' strings (English only).
 - `LibFreeRDP.java` (edited): `/cert:ignore` is no longer passed; `NativeSessionThreads` hooks in `connect`,
   `freeInstance`, `OnConnectionFailure` and `OnDisconnected`.
-- `SessionActivity.java` (edited): the two verify callbacks call `CertificatePrompt`; `OnAuthenticate`,
-  `OnGatewayAuthenticate` and `OnExperimentalFeature` call `SessionPrompts`; `onDestroy` calls
-  `BlockingPrompts.close()` before the session is freed (freeing a connected session waits for its thread,
-  which would otherwise wait for the dialog forever).
+- `SessionActivity.java`: no longer edited for this. Since package 2.1 the certificate, credentials and
+  experimental-feature callbacks arrive in `captantan/SessionHost.java`, which calls `CertificatePrompt`
+  and `SessionPrompts`; the activity's own versions of those callbacks are upstream's text again and are
+  never called.
 - `ApplicationSettingsActivity.java` (edited): "Clear certificate cache" calls `CertificateStore.clear`.
   Upstream deleted `files/.freerdp`, FreeRDP 2's directory, which FreeRDP 3 no longer uses.
 - `freeRDPCore/src/main/res/xml/settings_app_security.xml` (edited): "Accept all certificates" removed. It
@@ -201,6 +202,88 @@ a note.
   private storage. The native library sets `HOME` to the files directory, and FreeRDP's config directory is
   `$HOME/.config/freerdp`. The store is keyed by the host name or address of the bookmark and the port, so
   reaching one machine by two names gives two entries.
+
+**Sessions outlive their window** (package 2.1)
+
+A session belongs to the process. A session window (`SessionActivity`) is a viewer: it attaches to one live
+session and lets go of it without ending it. Only an explicit disconnect, the server or a failure ends a
+session. Two rules: a session is shown in at most one window, and a window shows one session.
+
+- `freeRDPCore/.../captantan/SessionHost.java` (new): one per session. It is the session's
+  `LibFreeRDP.UIEventListener` for the session's whole life (in place of the activity), owns the bitmap
+  (made again on every size change), the last pointer shape and the session's prompts, and passes drawing,
+  pointer, clipboard, remote-app and state events to the window that shows it, if one does. Its class
+  comment says which call runs on which thread.
+- `freeRDPCore/.../captantan/SessionRegistry.java` (new): every live session, the window with input focus,
+  the reconnect gate, and the worker thread that frees native instances (so the UI thread never waits for
+  a session thread). This is the API the session switcher (2.2) and the notification (2.3) are built on.
+- `freeRDPCore/.../captantan/SessionWindow.java` (new): one per `SessionActivity`. Attach, detach, the
+  launch rules, what Back does. Its class comment has the state machine.
+- `BlockingPrompts.java`, `CertificatePrompt.java`, `SessionPrompts.java` (ours, changed): the prompts are
+  the session's. They are shown in whichever window shows the session and move with it. While no window
+  shows the session an open question waits without a dialog; after five minutes without a window
+  (`BlockingPrompts.UNATTENDED_TIMEOUT_MS`) it is answered with reject or cancel, which ends that
+  connection attempt. `SessionHost.needsAttention()` says that a session is waiting like this. There is no
+  notification for it yet: that is package 2.3.
+- **Launching.** `SessionActivity` is `launchMode="singleTop"` and no longer `documentLaunchMode="always"`
+  (`freeRDPCore/src/main/AndroidManifest.xml`), and every launch inside the app uses
+  `SessionWindow.LAUNCH_FLAGS` (`FLAG_ACTIVITY_NEW_TASK`): `ExternalDisplayManager.java` (was `NEW_TASK |
+  MULTIPLE_TASK`) and `SessionRequestHandlerActivity.java` (was a launch for a result, which put the
+  session into the caller's task). So there is one session window: a launch while it exists reaches it
+  through `onNewIntent`, and it lets go of the session it shows and shows what was asked for. A launch
+  whose bookmark, host name or `freerdp://` link already has a live session is shown that session instead
+  of a second connection. A second window is only made on purpose (package 2.2 adds
+  `FLAG_ACTIVITY_NEW_DOCUMENT | FLAG_ACTIVITY_MULTIPLE_TASK`; `SessionWindow.EXTRA_SESSION` names the
+  session to show). A `freerdp://` link opened by another app without `FLAG_ACTIVITY_NEW_TASK` still gets
+  a window in that app's task, as before.
+- **Back** in a session window (after upstream's own uses of it: hide the keyboards, Alt+F4 if that setting
+  is on) asks: "Leave running" (the window closes, the connection list comes to the front, the session
+  goes on), "Disconnect", or Cancel. Upstream's "press back again to disconnect" is no longer reached.
+  A long press on a hardware Back key still disconnects (upstream, `SessionInputManager`).
+- **Closing a window** (Back and "Leave running", swiping it out of Recents, the system destroying it)
+  detaches. To come back, open the same bookmark again. A window whose session ends closes, as upstream.
+- **Focus.** Keys caught outside the view system (`KeyboardAccessibilityService.java`, two lines) go to
+  `SessionRegistry.getFocusedActivity()`: the session window whose window has input focus
+  (`onWindowFocusChanged`), not the one that was resumed last. `SessionActivity.activeSession` is gone.
+  While a dialog of ours has focus (credentials, certificate, the Back question) no session window has
+  it, so a physical keyboard types into the dialog.
+- **Painting.** The bitmap is kept current whether or not a window shows the session, because the native
+  frame can only be read safely on the session thread (`SessionHost`'s class comment). A session with no
+  window, or whose window is not visible, posts nothing to the UI thread and invalidates nothing.
+- **Reconnect gate.** Upstream held a dropped session's automatic reconnect while its activity was
+  stopped (`LibFreeRDP.setForeground`). The rule is now the app's: every session may reconnect while any
+  activity of the app is visible (`SessionRegistry`, through `ActivityLifecycleCallbacks`). Package 2.3
+  changes "while visible".
+- **Freeing.** A native instance is freed after its session thread's last callback, after the window has
+  stopped sending input to it, on the registry's worker thread. `NativeSessionThreads` (1.6) still guards
+  `LibFreeRDP.freeInstance`.
+- `GlobalApp.java` (edited, two places): `SessionRegistry.init(this)` in `onCreate`; the screen-off timer
+  (`DisconnectTask`) calls `SessionRegistry.disconnectAll`. Closing a window no longer cancels that timer.
+- `SessionActivity.java` (edited): the hooks, each one line or a few and marked: the `window` field and
+  its construction in `onCreate`; `window.onFocusChanged` in `onWindowFocusChanged`; `window.onStart` /
+  `onStop` in place of the two `setForeground` calls; no `activeSession` (field, `onResume`, `onPause`);
+  `window.onDestroy()` in place of the disconnect, the free and the timer cancel in `onDestroy`; a new
+  `onNewIntent`; `window.attachExisting` at the top of `processIntent`; `window.start(session, title)` as
+  the body of `connectWithTitle`; no `setUIEventListener(this)` in `bindSession`; `window.onBack()` in
+  `handleBackPressed`; a null check in `onConfigurationChanged`; and at the end of the class
+  `windowPorts`, through which `SessionWindow` sets the activity's `session` field and calls upstream's
+  own `onSessionConnected`, `onSessionFailed` and `onSessionDisconnected`.
+- **What stayed in `SessionActivity`:** the views, input, toolbar, insets, system bars, permissions, the
+  bookmark loading and `connect()` up to the creation of the native instance, `bindSession()`, the three
+  `onSession...` reactions, and the `LibFreeRDP.UIEventListener` methods. Of those, the pointer, clipboard,
+  `OnReconnecting` and `OnRail*` methods are still used (the host passes them on, on the UI thread). The
+  other eight (`OnSettingsChanged`, `OnGraphicsUpdate`, `OnGraphicsResize`, the two `OnAuthenticate`, the
+  two certificate calls, `OnExperimentalFeature`) are never called; they are upstream's text, kept so that
+  merges stay clean. `ConnectThread`, `PARAM_INSTANCE`, the `SessionViewModel` connection state and
+  upstream's double-Back block are likewise still there and unused.
+- `res/values/captantan_strings.xml`: the Back question's strings (English only).
+- **Remote-app (RAIL) mode** works for a session that stays in one window. The overlay windows live in
+  the window (`RailWindowManager`), so a remote-app session that is detached and attached again shows
+  each remote window only after the server next updates it.
+- **Log.** `adb logcat -s captantan.session` shows, at INFO: `window open`, `session start`, `attach`,
+  `session size`, `session connected`, `focus`, `detach`, `disconnect asked`, `session end`,
+  `session gone`, `window closed`, `prompt:` lines and the reconnect gate, each naming the session
+  (`s<n> "<title>"`) and the window (`w<n>`).
 
 **Per-connection settings and graphics mode** (package 1.4)
 
@@ -320,6 +403,57 @@ compile check runs on the merge.
    - `SessionActivity.java`, `LibFreeRDP.java`, `KeyboardMapper.java`: upstream edits these often. Re-apply
      our hooks (find them with `git grep -n "captantan fork"`). If upstream has landed the same feature,
      prefer upstream's and drop ours, and update this file.
+   - `SessionActivity.java` (package 2.1) needs more than re-applying. Read upstream's change to the file
+     first (with `P=client/Android/Studio/freeRDPCore/src/main/java/com/freerdp/freerdpcore/presentation`,
+     `git diff <old tag> <new tag> -- $P/SessionActivity.java`). Then:
+     - Keep the hooks listed under "Sessions outlive their window". After the merge the activity must
+       not contain any of: `setUIEventListener(this)`, `sessionViewModel.register(`,
+       `new ConnectThread(`, `GlobalApp.freeSession(`, `LibFreeRDP.setForeground(`, `activeSession`,
+       or a `LibFreeRDP.disconnect(` in `onDestroy`. Each of those would give the session back to the
+       window. In the output of this, only comments may match:
+
+       ```bash
+       git grep -n -E 'setUIEventListener\(this\)|sessionViewModel\.register\(|new ConnectThread\(' -- $P
+       ```
+
+       ```bash
+       git grep -n -E 'GlobalApp\.freeSession\(|LibFreeRDP\.setForeground\(|activeSession' -- $P
+       ```
+
+     - A change inside one of the eight unused listener methods (`OnSettingsChanged`, `OnGraphicsUpdate`,
+       `OnGraphicsResize`, `OnAuthenticate`, `OnGatewayAuthenticate`, `OnVerifiyCertificateEx`,
+       `OnVerifyChangedCertificateEx`, `OnExperimentalFeature`) merges without a conflict and does
+       nothing. Take the merge, then carry the change into the method of the same name in
+       `captantan/SessionHost.java` (the prompts stay ours).
+     - A new method in `LibFreeRDP.UIEventListener` stops `SessionHost` from compiling. Implement it
+       there: pass it on with `toWindowUi(...)` if upstream's activity handles it on the window's side,
+       handle it in the host if it is about the session.
+     - A change in `connectWithTitle` conflicts with our one-line body. Whatever upstream now does there
+       before connecting belongs in `SessionWindow.start` or `SessionHost.connect`.
+     - A change in `onSessionConnected`, `onSessionFailed`, `onSessionDisconnected` or `bindSession`
+       merges cleanly and is live: `SessionWindow` calls them through `windowPorts`. They must stay safe
+       to call for a session that connected earlier in another window (`onSessionConnected` is called on
+       every attach), and `bindSession` must not register the activity as the session's listener.
+     - New state that the activity keeps per session must be reset in `windowPorts.setSession`, and new
+       code that uses `session` after a post or a callback must allow it to be null.
+     - If upstream separates the session from the activity itself, prefer upstream's and move what is
+       left of ours onto it.
+   - `freeRDPCore/src/main/AndroidManifest.xml` (session activity): keep `launchMode="singleTop"` and
+     no `documentLaunchMode`. The compile check fails if `documentLaunchMode` comes back.
+   - `ExternalDisplayManager.java` and `SessionRequestHandlerActivity.java`: keep
+     `SessionWindow.LAUNCH_FLAGS` on the session launch (no `FLAG_ACTIVITY_MULTIPLE_TASK`, no launch for a
+     result). A new place in upstream that starts `SessionActivity` needs the same flags.
+   - `KeyboardAccessibilityService.java`: keep `SessionRegistry.getFocusedActivity()` in both places.
+     Any new reader of "the active session" must ask the registry.
+   - `GlobalApp.java`: keep `SessionRegistry.init(this)` in `onCreate` and `SessionRegistry.disconnectAll`
+     in `DisconnectTask`. Upstream's `registerSessionListener` / `dispatch` (connection events posted to
+     the UI thread, one listener per instance) is what `SessionHost` listens with: if upstream changes
+     it, fix `SessionHost.connect`.
+   - `SessionInputManager.java`, `SessionView.java`, `SessionDialogs.java`, `TouchPointerView.java`: not
+     edited, but `SessionWindow` uses their public methods (`attachSession(0, null)` to cut the input
+     off, `setBitmap`, `cancelPendingEvents`, `hideKeyboards`, `onSurfaceChange`, `addInvalidRegion`,
+     `invalidateRegion`, `setDefaultCursor`, `setRemoteCursor`, `showProgress`, `dismissProgress`). The
+     compile check catches a changed signature; a changed meaning needs a look.
    - `LibFreeRDP.java`: besides the removed `/cert:ignore`, keep the `NativeSessionThreads` calls in
      `connect`, `freeInstance`, `OnConnectionFailure` and `OnDisconnected` together; one missing makes
      `freeInstance` free a running session or never free one. If upstream starts waiting for connecting
@@ -362,7 +496,8 @@ The workflow `.github/workflows/captantan-android.yml` runs on pull requests int
   `libmediandk.so` and `libopenh264.so` and contains the two H.264 log lines of package 1.3, and the dex
   has the package 1.4 classes (`ConnectionPrefs`, `GraphicsMode`, `ConnectionOptions`, its `Draft`,
   `ConnectionOptionsFragment`) and the three `/gfx` arguments, and the resources have
-  `xml/captantan_connection_options`;
+  `xml/captantan_connection_options`, the dex has the package 2.1 classes (`SessionHost`,
+  `SessionRegistry`, `SessionWindow`), and no activity in the manifest has `documentLaunchMode`;
 - test build: package `dev.captantan.freerdp.debug`, label `RDP debug`, the same version, signed with the
   committed public key, and byte-identical native libraries to the release APK.
 

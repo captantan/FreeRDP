@@ -209,6 +209,18 @@ jobs:
           "$AAPT" dump resources "$REL" > "$RUNNER_TEMP/resources.txt"
           grep -qF 'xml/captantan_connection_options' "$RUNNER_TEMP/resources.txt" || fail "the APK lacks res/xml/captantan_connection_options"
           echo "per-connection settings: classes, graphics arguments and options screen present"
+          # Session host (roadmap 2.1): sessions belong to the process, and a session launch reuses
+          # the one session window (singleTop) instead of making a task per launch. A merge that
+          # brings documentLaunchMode back would silently undo that.
+          for c in SessionHost SessionRegistry SessionWindow; do
+            grep -qaF "Lcom/freerdp/freerdpcore/captantan/$c;" "$RUNNER_TEMP/classes.dex.all" || fail "the APK lacks the class captantan/$c"
+          done
+          if [ "$(basename "$AAPT")" = aapt ]; then "$AAPT" dump xmltree "$REL" AndroidManifest.xml > "$RUNNER_TEMP/manifest-rel.txt"
+          else "$AAPT" dump xmltree --file AndroidManifest.xml "$REL" > "$RUNNER_TEMP/manifest-rel.txt"; fi
+          if grep -qF "documentLaunchMode" "$RUNNER_TEMP/manifest-rel.txt"; then fail "an activity has documentLaunchMode again: every session launch would make a new task"; fi
+          grep -F "launchMode" "$RUNNER_TEMP/manifest-rel.txt" | sed 's/^ *//'
+          grep -qF "launchMode" "$RUNNER_TEMP/manifest-rel.txt" || fail "no activity has a launchMode: the session activity must be singleTop"
+          echo "session host: classes present, session activity is singleTop without documentLaunchMode"
 
           echo "== preview badging"
           "$AAPT" dump badging "$PRE" > "$RUNNER_TEMP/preview-badging.txt"

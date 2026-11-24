@@ -146,6 +146,8 @@ public class GlobalApp extends Application implements LibFreeRDP.EventListener
 		sessionMap = Collections.synchronizedMap(new HashMap<Long, SessionState>());
 
 		LibFreeRDP.setEventListener(this);
+		// captantan fork: the process-level owner of the sessions (roadmap 2.1)
+		com.freerdp.freerdpcore.captantan.SessionRegistry.init(this);
 
 		printJobMonitor = new PrintJobMonitor(file -> PrintNotificationHelper.notify(this, file));
 		printJobMonitor.startWatching();
@@ -196,12 +198,9 @@ public class GlobalApp extends Application implements LibFreeRDP.EventListener
 		{
 			Log.v("DisconnectTask", "Doing action");
 
-			// disconnect any running rdp session
-			Collection<SessionState> sessions = GlobalApp.getSessions();
-			for (SessionState session : sessions)
-			{
-				LibFreeRDP.disconnect(session.getInstance());
-			}
+			// captantan fork: every live session is told to end, on the UI thread (was a loop of
+			// LibFreeRDP.disconnect over getSessions() on this timer thread)
+			com.freerdp.freerdpcore.captantan.SessionRegistry.disconnectAll("screen-off timer");
 		}
 	}
 }

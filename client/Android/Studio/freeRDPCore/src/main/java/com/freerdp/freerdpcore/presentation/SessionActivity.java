@@ -53,9 +53,7 @@ import android.widget.Toast;
 import com.freerdp.freerdpcore.R;
 import com.freerdp.freerdpcore.application.GlobalApp;
 import com.freerdp.freerdpcore.application.SessionState;
-import com.freerdp.freerdpcore.captantan.BlockingPrompts;   // captantan fork
-import com.freerdp.freerdpcore.captantan.CertificatePrompt; // captantan fork
-import com.freerdp.freerdpcore.captantan.SessionPrompts;    // captantan fork
+import com.freerdp.freerdpcore.captantan.SessionWindow; // captantan fork
 import com.freerdp.freerdpcore.domain.BookmarkBase;
 import com.freerdp.freerdpcore.domain.ConnectionReference;
 import com.freerdp.freerdpcore.services.LibFreeRDP;
@@ -67,7 +65,7 @@ public class SessionActivity extends AppCompatActivity
 	public static final String PARAM_CONNECTION_REFERENCE = "conRef";
 	public static final String PARAM_INSTANCE = "instance";
 	private static final String TAG = "FreeRDP.SessionActivity";
-	static volatile SessionActivity activeSession;
+	// captantan fork: no activeSession; input goes to the window with focus (SessionRegistry)
 	private Bitmap bitmap;
 	private SessionState session;
 	private SessionView sessionView;
@@ -143,9 +141,7 @@ public class SessionActivity extends AppCompatActivity
 	private ClipboardManagerProxy mClipboardManager;
 	private SessionInputManager inputManager;
 	private SessionDialogs dialogs;
-	private BlockingPrompts prompts;             // captantan fork
-	private CertificatePrompt certificatePrompt; // captantan fork
-	private SessionPrompts sessionPrompts;       // captantan fork
+	private SessionWindow window; // captantan fork: this window as a viewer of a live session
 
 	private FloatingToolbar floatingToolbar;
 
@@ -300,15 +296,11 @@ public class SessionActivity extends AppCompatActivity
 				connectCancelledByUser = true;
 			}
 		});
-		// captantan fork: the dialogs the session thread waits on, released in onDestroy; a rejected
-		// certificate or cancelled login is the user's choice, not an error to report
-		prompts = new BlockingPrompts(this);
-		certificatePrompt = new CertificatePrompt(prompts, () -> connectCancelledByUser = true);
-		sessionPrompts = new SessionPrompts(prompts, () -> connectCancelledByUser = true);
 
 		// Wire up the input manager (instance is attached later in bindSession()).
 		inputManager =
 		    new SessionInputManager(this, scrollView, sessionView, touchPointerView, keyboard);
+		window = new SessionWindow(this, windowPorts, inputManager, dialogs); // captantan fork
 		sessionView.setSessionViewListener(inputManager);
 		touchPointerView.setTouchPointerListener(inputManager);
 		sessionView.setScaleGestureDetector(
@@ -330,6 +322,7 @@ public class SessionActivity extends AppCompatActivity
 	@Override public void onWindowFocusChanged(boolean hasFocus)
 	{
 		super.onWindowFocusChanged(hasFocus);
+		window.onFocusChanged(hasFocus); // captantan fork: input goes to the focused window's session
 		if (hasFocus)
 		{
 			hideSystemBars();
@@ -341,8 +334,8 @@ public class SessionActivity extends AppCompatActivity
 	{
 		super.onStart();
 		Log.v(TAG, "Session.onStart");
-		if (session != null)
-			LibFreeRDP.setForeground(session.getInstance(), true);
+		// captantan fork: was setForeground(true); the reconnect gate is now SessionRegistry's
+		window.onStart();
 	}
 
 	@Override protected void onRestart()
@@ -355,15 +348,12 @@ public class SessionActivity extends AppCompatActivity
 	{
 		super.onResume();
 		Log.v(TAG, "Session.onResume");
-		activeSession = this;
 	}
 
 	@Override protected void onPause()
 	{
 		super.onPause();
 		Log.v(TAG, "Session.onPause");
-		if (activeSession == this)
-			activeSession = null;
 		// hide any visible keyboards
 		inputManager.hideKeyboards();
 	}
@@ -372,8 +362,8 @@ public class SessionActivity extends AppCompatActivity
 	{
 		super.onStop();
 		Log.v(TAG, "Session.onStop");
-		if (session != null)
-			LibFreeRDP.setForeground(session.getInstance(), false);
+		// captantan fork: was setForeground(false); the reconnect gate is now SessionRegistry's
+		window.onStop();
 	}
 
 	@Override protected void onDestroy()
@@ -385,25 +375,15 @@ public class SessionActivity extends AppCompatActivity
 		super.onDestroy();
 		Log.v(TAG, "Session.onDestroy");
 
-		// captantan fork: answer a waiting prompt (certificate, credentials) before the session is
-		// freed; freeing a connected session waits for its thread, which would wait for it forever
-		prompts.close();
-
-		// Cancel running disconnect timers.
-		GlobalApp.cancelDisconnectTimer();
-
-		// Disconnect only this activity's session.
-		if (session != null)
-			LibFreeRDP.disconnect(session.getInstance());
+		// captantan fork: closing the window lets go of its session and does not end it (was: cancel
+		// the screen-off timer, disconnect, and after the listeners below free the session)
+		window.onDestroy();
 
 		// unregister freerdp session listener
 		sessionViewModel.unregister();
 
 		// remove clipboard listener
 		mClipboardManager.removeClipboardboardChangedListener(this);
-
-		// free session
-		GlobalApp.freeSession(session.getInstance());
 
 		session = null;
 	}
@@ -419,7 +399,8 @@ public class SessionActivity extends AppCompatActivity
 		    session.getBookmark().getActiveScreenSettings().isFitScreen())
 		{
 			scrollView.post(() -> {
-				if (screen_width > 0 && screen_height > 0)
+				// captantan fork: session != null; the window may have let go of it by now
+				if (session != null && screen_width > 0 && screen_height > 0)
 					LibFreeRDP.sendMonitorLayout(session.getInstance(), screen_width,
 					                             screen_height);
 			});
@@ -517,8 +498,22 @@ public class SessionActivity extends AppCompatActivity
 		return (corner != null) ? corner.getRadius() : 0;
 	}
 
+	// captantan fork: the one session window is reused (launchMode singleTop): a later launch lets
+	// go of the session shown, which goes on, and shows what the launch asks for
+	@Override protected void onNewIntent(Intent intent)
+	{
+		super.onNewIntent(intent);
+		setIntent(intent);
+		if (sessionRunning && window.leaveFor(intent))
+			processIntent(intent);
+	}
+
 	private void processIntent(Intent intent)
 	{
+		// captantan fork: a launch whose session is live is shown that session, not connected again
+		if (window.attachExisting(intent))
+			return;
+
 		// get either session instance or create one from a bookmark/uri
 		Bundle bundle = intent.getExtras();
 		Uri openUri = intent.getData();
@@ -656,17 +651,10 @@ public class SessionActivity extends AppCompatActivity
 
 	private void connectWithTitle(String title)
 	{
-		session.setUIEventListener(this);
-
-		sessionViewModel.register(session.getInstance());
-
-		dialogs.showProgress(title, () -> {
-			connectCancelledByUser = true;
-			LibFreeRDP.cancelConnection(session.getInstance());
-		});
-
-		connectThread = new ConnectThread(getApplicationContext(), session);
-		connectThread.start();
+		// captantan fork: the session is the process's from here (captantan/SessionHost receives its
+		// callbacks and connects it); this window only shows it. Was: setUIEventListener(this),
+		// sessionViewModel.register, the progress dialog and the ConnectThread.
+		window.start(session, title);
 	}
 
 	// binds the current session to the activity by wiring it up with the
@@ -674,7 +662,7 @@ public class SessionActivity extends AppCompatActivity
 	private void bindSession()
 	{
 		Log.v(TAG, "bindSession called");
-		session.setUIEventListener(this);
+		// captantan fork: no setUIEventListener(this); the session's listener is its SessionHost
 		sessionView.onSurfaceChange(session);
 		scrollView.requestLayout();
 
@@ -704,6 +692,8 @@ public class SessionActivity extends AppCompatActivity
 			if (inputManager.handleBackAsAltF4())
 				return;
 		}
+		if (window.onBack()) // captantan fork: Back asks: leave the session running, or disconnect
+			return;
 		if (System.currentTimeMillis() - backPressedTime < 2000)
 		{
 			connectCancelledByUser = true;
@@ -760,6 +750,13 @@ public class SessionActivity extends AppCompatActivity
 
 	// ****************************************************************************
 	// LibFreeRDP UI event listener implementation
+	// captantan fork: this activity is no longer registered as any session's listener; the listener
+	// is the session's captantan/SessionHost. The pointer, clipboard, OnReconnecting and OnRail*
+	// methods below are still used: the host passes those callbacks on, on the UI thread, while
+	// this window shows its session (SessionWindow.forward). The other eight (OnSettingsChanged,
+	// OnGraphicsUpdate, OnGraphicsResize, the two OnAuthenticate, the two certificate calls and
+	// OnExperimentalFeature) are never called; they are upstream's text, kept so that merges stay
+	// clean. Port upstream's changes to those eight into SessionHost.
 	@Override public void OnSettingsChanged(int width, int height, int bpp)
 	{
 
@@ -834,22 +831,23 @@ public class SessionActivity extends AppCompatActivity
 	public boolean OnAuthenticate(StringBuilder username, StringBuilder domain,
 	                              StringBuilder password)
 	{
-		return sessionPrompts.credentials(username, domain, password); // captantan fork
+		return dialogs.promptCredentials(username, domain, password);
 	}
 
 	@Override
 	public boolean OnGatewayAuthenticate(StringBuilder username, StringBuilder domain,
 	                                     StringBuilder password)
 	{
-		return sessionPrompts.credentials(username, domain, password); // captantan fork
+		return dialogs.promptCredentials(username, domain, password);
 	}
 
 	@Override
 	public int OnVerifiyCertificateEx(String host, long port, String commonName, String subject,
 	                                  String issuer, String fingerprint, long flags)
 	{
-		// captantan fork: trust on first use; "accept all certificates" is gone (it returned 0, reject)
-		return certificatePrompt.verify(host, port, commonName, subject, issuer, fingerprint, flags);
+		if (ApplicationSettingsActivity.getAcceptAllCertificates(this))
+			return 0;
+		return dialogs.verifyCertificate(host, port, subject, issuer, fingerprint, flags);
 	}
 
 	@Override
@@ -858,9 +856,9 @@ public class SessionActivity extends AppCompatActivity
 	                                        String oldSubject, String oldIssuer,
 	                                        String oldFingerprint, long flags)
 	{
-		// captantan fork: a warning with the old and new certificate
-		return certificatePrompt.verifyChanged(host, port, commonName, subject, issuer, fingerprint,
-		                                       oldSubject, oldIssuer, oldFingerprint, flags);
+		if (ApplicationSettingsActivity.getAcceptAllCertificates(this))
+			return 0;
+		return dialogs.verifyChangedCertificate(host, port, subject, issuer, fingerprint, flags);
 	}
 
 	@Override public boolean OnExperimentalFeature(int feature)
@@ -884,7 +882,7 @@ public class SessionActivity extends AppCompatActivity
 			return true;
 		// suppress the generic failure toast; the dialog explains the abort
 		connectCancelledByUser = true;
-		sessionPrompts.experimentalBlocked(displayName); // captantan fork
+		dialogs.showExperimentalBlocked(displayName);
 		return false;
 	}
 
@@ -1076,4 +1074,40 @@ public class SessionActivity extends AppCompatActivity
 		session.setUIEventListener(null);
 		closeSessionActivity(RESULT_OK);
 	}
+
+	// ****************************************************************************
+	// captantan fork: what captantan/SessionWindow needs from this window's private parts. It keeps
+	// the session field pointing at the session the window shows (null: none) and drives upstream's
+	// own reactions above, which SessionViewModel's connection state used to drive.
+	private final SessionWindow.Ports windowPorts = new SessionWindow.Ports() {
+		@Override public void setSession(SessionState state)
+		{
+			session = state;
+			connectCancelledByUser = false;
+			backPressedTime = 0;
+			if (state == null)
+				pendingConnectBookmark = null;
+		}
+
+		@Override public SessionState getSession()
+		{
+			return session;
+		}
+
+		@Override public void connected()
+		{
+			onSessionConnected();
+		}
+
+		@Override public void failed(boolean quiet)
+		{
+			connectCancelledByUser = quiet;
+			onSessionFailed();
+		}
+
+		@Override public void disconnected()
+		{
+			onSessionDisconnected();
+		}
+	};
 }

@@ -68,6 +68,9 @@
             android:label="@string/title_application_settings"
             android:theme="@style/Theme.Main"
             android:windowSoftInputMode="stateHidden" />
+        <!-- captantan fork: launchMode="singleTop" replaces documentLaunchMode="always". A session
+             launch (FLAG_ACTIVITY_NEW_TASK) goes to the one session window and reaches it through
+             onNewIntent; before, every launch made a new task. See captantan/SessionWindow.java. -->
         <activity
             android:exported="true"
             android:name=".presentation.SessionActivity"
@@ -75,7 +78,7 @@
             android:configChanges="orientation|keyboard|keyboardHidden|screenSize|smallestScreenSize|density|screenLayout|navigation"
             android:windowSoftInputMode="adjustResize"
             android:taskAffinity="com.freerdp.session"
-            android:documentLaunchMode="always"
+            android:launchMode="singleTop"
             android:autoRemoveFromRecents="true">
             <!--android:configChanges="orientation|keyboardHidden|screenSize|keyboard"-->
             <intent-filter>
