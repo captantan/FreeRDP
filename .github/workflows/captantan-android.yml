@@ -192,7 +192,14 @@ jobs:
             echo
             echo "### Toolchain the native build used"
             echo '```'
-            find freeRDPCore/.cxx -name CMakeCache.txt -path '*arm64-v8a*' -exec grep -hE '^(CMAKE_COMMAND|CMAKE_ANDROID_NDK|ANDROID_NDK|CMAKE_BUILD_TYPE|CMAKE_C_COMPILER):' {} + 2>/dev/null | sort -u || true
+            find freeRDPCore/.cxx -name CMakeCache.txt -path '*arm64-v8a*' -exec grep -hE '^(CMAKE_COMMAND|CMAKE_ANDROID_NDK|ANDROID_NDK|CMAKE_C_COMPILER):' {} + 2>/dev/null | sort -u || true
+            echo "-- CMAKE_BUILD_TYPE per CMake build tree:"
+            find freeRDPCore/.cxx -name CMakeCache.txt -path '*arm64-v8a*' | while read -r c; do
+              echo "$(grep -h '^CMAKE_BUILD_TYPE:' "$c" | cut -d= -f2) ${c#freeRDPCore/.cxx/}"
+            done || true
+            echo "-- compiler flags of one libfreerdp3 object:"
+            f=$(find freeRDPCore/.cxx -path '*freerdp-build*' -name build.ninja | head -n 1)
+            [ -n "$f" ] && grep -m 1 -A 3 'libfreerdp/core/.*\.c\.o: C_COMPILER' "$f" | grep -E '^\s*FLAGS =' || true
             for c in "$ANDROID_HOME"/cmake/*/bin/cmake; do [ -x "$c" ] && "$c" --version | head -n 1; done
             for n in "$ANDROID_HOME"/ndk/*/source.properties; do [ -f "$n" ] && grep Pkg.Revision "$n"; done
             grep -rh "captantan fork: make job count" freeRDPCore/.cxx 2>/dev/null | sort -u || true
