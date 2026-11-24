@@ -97,7 +97,10 @@ file has no comment syntax):
 - `captantan/AvcDecoderLog.java` (new), started by one line in `GlobalApp.onCreate`: once per process, on a
   background thread, logs every `video/avc` decoder from `MediaCodecList` with `isHardwareAccelerated()`,
   `isSoftwareOnly()`, `isVendor()`, the codec it is an alias of, the largest size and low-latency support,
-  under the logcat tag `captantan.codec`.
+  under the logcat tag `captantan.codec`. Since package 1.4 the table is also logged again at every
+  connect that uses H.264 (`AvcDecoderLog.logNow()`, called from `GraphicsMode.gfxArgument` right after
+  the graphics mode line), because logcat's main buffer can rotate the start-up table away before a session
+  connects.
 - No new library is packaged (`libmediandk.so` is part of Android), so `captantan_notices.html` is unchanged.
 
 **How to confirm hardware decoding.** Native log lines reach logcat under the WLog logger name
@@ -107,6 +110,10 @@ level is INFO before any session too. Start the app, connect with H.264 on (the 
 ```bash
 adb logcat -s com.freerdp.codec captantan.codec
 ```
+
+Take the logcat after connecting: at connect `captantan.codec` logs the graphics mode line
+(`graphics mode <mode> (bookmark <id>): /gfx:...`, package 1.4) and the decoder table again, so the mode,
+the table and the decoder name in use are in the same capture.
 
 - Good: `H.264 decoder subsystem: MediaCodec` and `MediaCodec using video/avc codec [c2.<vendor>.avc.decoder]`
   (or `OMX.<vendor>...`), and the `captantan.codec` table lists that name with `hardware=true`. The pair
@@ -166,6 +173,62 @@ a note.
   private storage. The native library sets `HOME` to the files directory, and FreeRDP's config directory is
   `$HOME/.config/freerdp`. The store is keyed by the host name or address of the bookmark and the port, so
   reaching one machine by two names gives two entries.
+
+**Per-connection settings and graphics mode** (package 1.4)
+
+The fork's own per-connection settings, and the first of them: the graphics mode (decision D4). The
+bookmark editor has a new entry, "RDP options", at the end of its "Settings" category.
+
+- `freeRDPCore/.../captantan/ConnectionPrefs.java` (new): the store. One SharedPreferences file of its own
+  (`captantan_connection_prefs`), keys `<bookmark id>/<setting>`. The bookmark ID is upstream's Room
+  primary key (`BookmarkBase.getId()`, `MBMID/<id>` in a connection reference): set on insert, kept on
+  every edit, never reused after a delete (`AUTOINCREMENT`). A session without a saved bookmark (quick
+  connect, hostname search; ID -1) gets the defaults. Values equal to the default are not stored, so a
+  changed default reaches every bookmark that never changed that setting; a missing, mistyped or unknown
+  stored value reads as the default. Nothing goes into upstream's bookmark database.
+- `freeRDPCore/.../captantan/GraphicsMode.java` (new): the modes and their `/gfx` arguments, and the
+  `captantan.codec` INFO line `graphics mode <mode> (bookmark <id>): <argument>` at connect, followed by
+  the H.264 decoder table again (`AvcDecoderLog.logNow()`, new; `logOnce()` at app start is unchanged).
+
+  | Mode | Argument | What the GFX channel advertises |
+  |---|---|---|
+  | Best (default) | `/gfx:AVC444,AVC420,RFX,progressive` | caps 8, 8.1 with AVC420, 10 to 10.7 with AVC: the server may pick AVC444, AVC420 or another codec |
+  | AVC420 | `/gfx:AVC420,RFX,progressive` | caps 8 and 8.1 with AVC420 only: the 10.x caps cannot allow AVC420 without AVC444, so FreeRDP leaves them out |
+  | No H.264 | `/gfx:RFX,progressive` | caps 8, 8.1 without AVC420, 10 to 10.7 with AVC disabled |
+
+  Once a codec is named in `/gfx:`, every codec not named is off (`parse_gfx_options` in
+  `client/common/cmdline.c`); the caps are built in `rdpgfx_send_supported_caps`
+  (`channels/rdpgfx/client/rdpgfx_main.c`).
+- **How it combines with upstream's checkboxes:** the mode is used only where upstream sent
+  `/gfx:AVC444,AVC420,RFX,progressive`, that is with "GFX" and "H264" both on under Performance and
+  `LibFreeRDP.hasH264Support()` true. With GFX off nothing is sent; with H264 off (or no decoder) upstream's
+  bare `/gfx` is sent. The checkboxes are unchanged and win. `freerdp://` links do not use bookmarks or the
+  setting: their arguments come from the link, and without a `gfx`/`rfx` parameter FreeRDP's own default
+  applies (GFX with AVC444, AVC420 and RemoteFX, as Best).
+- `freeRDPCore/.../captantan/ConnectionOptions.java` (new): the editor entry and the draft the options are
+  edited in, a ViewModel of the editor activity. It is filled from the store when the editor has loaded its
+  bookmark and written under the bookmark's ID when upstream's `BookmarkViewModel` reports the bookmark
+  saved (for a new bookmark, the ID Room just gave it). A change makes the editor ask "save?" on Back;
+  leaving without saving drops it, as it drops upstream's settings. So it works for a bookmark not yet saved.
+- `freeRDPCore/.../captantan/ConnectionOptionsFragment.java` and `res/xml/captantan_connection_options.xml`
+  (new): the screen, opened inside the editor like upstream's sub-screens. A preference's key is the
+  `ConnectionPrefs` field it edits; it reads and writes the draft through a `PreferenceDataStore`.
+- `res/values/captantan_strings.xml`: the screen's strings (English only).
+- `LibFreeRDP.java` (edited, one line in `setConnectionInfo(Context, long, BookmarkBase)`): the hard-coded
+  `/gfx:AVC444,AVC420,RFX,progressive` is `GraphicsMode.gfxArgument(context, bookmark)`.
+- `BookmarkActivity.java` (edited, one line in `MainFragment.onCreatePreferences`):
+  `ConnectionOptions.addTo(this)` adds the entry. `bookmark_settings.xml` is not edited.
+- `HomeViewModel.java` (edited, one line in `deleteBookmark`): `ConnectionPrefs.forget` removes a deleted
+  bookmark's settings. Deleting is the only path that removes a bookmark, and the editor the only one that
+  creates one; it writes the whole entry on the first save, so a new bookmark never inherits an old entry
+  even if the database were recreated and its IDs started again.
+
+**Adding a per-connection setting (later packages).** In `ConnectionPrefs`: declare the field (an `EnumField`
+of an enum implementing `ConnectionPrefs.Stored`, with permanent stored names, or an `IntField` with a range),
+add it to `FIELDS` and add a getter. On the screen: add a preference to `captantan_connection_options.xml`
+whose `android:key` is the field's key (a `ListPreference` for an enum, a `SeekBarPreference` for an int; a
+new kind of preference needs its getter and setter in `ConnectionOptions.Draft.Store`). Callers read
+`ConnectionPrefs.load(context, bookmark.getId()).getX()`. Nothing else changes; never rename a key.
 
 ## Package and version scheme
 
@@ -236,6 +299,17 @@ compile check runs on the merge.
    - `ApplicationSettingsActivity.java` (`clearCertificateCache`) and `settings_app_security.xml`: keep the
      call to `CertificateStore.clear` and the removed "Accept all certificates". If upstream moves its
      certificate store again, update `CertificateStore`.
+   - `LibFreeRDP.java` (`setConnectionInfo`): keep `GraphicsMode.gfxArgument` in place of the hard-coded
+     `/gfx:AVC444,AVC420,RFX,progressive`. If upstream changes that string or the GFX/H.264 branch, carry
+     its change into `GraphicsMode` (Best must stay what upstream sends) and re-check the argument table
+     against `parse_gfx_options` and `rdpgfx_send_supported_caps`.
+   - `BookmarkActivity.java` (`MainFragment.onCreatePreferences`): keep `ConnectionOptions.addTo(this)`
+     after `setPreferencesFromResource`. If upstream renames the `category.settings` category, the entry
+     moves to the end of the screen. `ConnectionOptions` also relies on `BookmarkViewModel`'s
+     `getBookmarkLiveData`, `getSaveCompleteEvent` (posted after insert or update) and
+     `setSettingsChanged`: if upstream changes those, fix `ConnectionOptions.Draft`.
+   - `HomeViewModel.java` (`deleteBookmark`): keep `ConnectionPrefs.forget`. If upstream adds another way
+     to delete bookmarks, add the call there too.
    - `release.properties` and everything else that is ours only: never conflicts.
 5. **Repeat the identifier search**; look at anything new that must follow the application ID:
    `git grep -n -E 'authorities|sharedUserId|accountType|<permission|targetPackage|taskAffinity|"com\.freerdp\.[a-z.]*"' -- client/Android`
@@ -256,8 +330,11 @@ The workflow `.github/workflows/captantan-android.yml` runs on pull requests int
 
 - release APK: package `dev.captantan.freerdp`, label `RDP`, `versionName` and `versionCode` equal to
   `release.properties`, arm64-v8a only, no FFmpeg libraries, no debug info in the native libraries, both
-  provider authorities under the package name, the APK is unsigned, and `libfreerdp3.so` links
-  `libmediandk.so` and `libopenh264.so` and contains the two H.264 log lines of package 1.3;
+  provider authorities under the package name, the APK is unsigned, `libfreerdp3.so` links
+  `libmediandk.so` and `libopenh264.so` and contains the two H.264 log lines of package 1.3, and the dex
+  has the package 1.4 classes (`ConnectionPrefs`, `GraphicsMode`, `ConnectionOptions`, its `Draft`,
+  `ConnectionOptionsFragment`) and the three `/gfx` arguments, and the resources have
+  `xml/captantan_connection_options`;
 - test build: package `dev.captantan.freerdp.debug`, label `RDP debug`, the same version, signed with the
   committed public key, and byte-identical native libraries to the release APK.
 

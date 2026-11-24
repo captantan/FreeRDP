@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- SPDX-License-Identifier: Apache-2.0 -->
-<!-- captantan fork: strings of the certificate prompts (captantan/CertificatePrompt.java). -->
+<!-- captantan fork: strings of the certificate prompts (captantan/CertificatePrompt.java) and of
+     the "RDP options" screen of the bookmark editor (captantan/ConnectionOptions*.java). -->
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
     <string name="captantan_cert_title_new">Check the server certificate</string>
     <string name="captantan_cert_title_changed">Server certificate changed</string>
@@ -20,4 +21,22 @@
     <string name="captantan_cert_trust">Trust</string>
     <string name="captantan_cert_trust_new">Trust new</string>
     <string name="captantan_cert_once">Only this time</string>
+    <!-- RDP options (roadmap 1.4) -->
+    <string name="captantan_options_title">RDP options</string>
+    <string name="captantan_options_summary">Graphics mode and other settings of this app</string>
+    <string name="captantan_options_cat_graphics">Graphics</string>
+    <string name="captantan_graphics_mode">Graphics mode</string>
+    <string name="captantan_graphics_mode_unavailable">This build has no H.264 decoder</string>
+    <string name="captantan_graphics_mode_note">Applies when GFX and H264 are both on under Performance; with either off, this setting is not used. Best lets the server choose AVC444 (sharpest colour), AVC420 or a non-H.264 codec. Step down to AVC420 or No H.264 if the picture breaks up or stays black.</string>
+    <string-array name="captantan_graphics_mode_entries">
+        <item>Best (AVC444, AVC420, RemoteFX)</item>
+        <item>AVC420 (no AVC444)</item>
+        <item>No H.264 (RemoteFX, progressive)</item>
+    </string-array>
+    <!-- Stored names of captantan/GraphicsMode, in the same order. Never change them. -->
+    <string-array name="captantan_graphics_mode_values" translatable="false">
+        <item>best</item>
+        <item>avc420</item>
+        <item>no_h264</item>
+    </string-array>
 </resources>
