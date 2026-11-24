@@ -102,6 +102,14 @@ jobs:
           ./gradlew :aFreeRDP:assemblePreview --no-daemon --stacktrace 2>&1 | tee "$RUNNER_TEMP/preview.log"
           echo "PREVIEW_SECONDS=$((SECONDS - start))" >> "$GITHUB_ENV"
 
+      - name: TEMPORARY strip diagnostic
+        continue-on-error: true
+        run: |
+          ls -la freeRDPCore/src/main/jniLibs/arm64-v8a/ | head -40
+          S="$ANDROID_HOME/ndk/29.0.13113456/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
+          "$S" --strip-unneeded -o "$RUNNER_TEMP/x.so" freeRDPCore/src/main/jniLibs/arm64-v8a/libfreerdp3.so; echo "manual llvm-strip exit $?"; ls -la "$RUNNER_TEMP/x.so" || true
+          ./gradlew :freeRDPCore:stripReleaseDebugSymbols --rerun :aFreeRDP:stripReleaseDebugSymbols --rerun --info --no-daemon 2>&1 | grep -iE -B3 -A12 'strip|ndk' | grep -v '^C/C++' | head -300
+
       - name: Check the APKs
         run: |
           set -euo pipefail
