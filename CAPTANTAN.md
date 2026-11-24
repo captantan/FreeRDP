@@ -47,7 +47,9 @@ file has no comment syntax):
 
 - `.github/workflows/captantan-android.yml` (new): the compile check.
 - `client/Android/Studio/release.properties` (new): the fork's build settings (arm64-v8a only, no split APKs,
-  FFmpeg off) and the version (`VERSION_NAME`, `VERSION_CODE`).
+  FFmpeg off), the NDK (`NDK_VERSION`: the stable r29, `29.0.14206865`; upstream's default in `build.gradle`,
+  `29.0.13113456`, is r29 beta 1) and the version (`VERSION_NAME`, `VERSION_CODE`). When upstream moves to a
+  newer NDK, follow it here, with a stable release.
 - `client/Android/Studio/aFreeRDP/captantan.gradle` (new): the `preview` build type, and `ndkVersion` and ABI
   filter for the app module. Applied from `aFreeRDP/build.gradle` by one added line.
 - `client/Android/Studio/aFreeRDP/preview-key/` (new): a public throwaway key for the test build only.
