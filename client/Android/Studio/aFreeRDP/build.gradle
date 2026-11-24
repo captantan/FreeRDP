@@ -41,7 +41,8 @@ android {
     buildTypes {
         release {
             minifyEnabled false
-            signingConfig signingConfigs.release
+            // captantan fork: release is always built unsigned; the builder signs it.
+            // signingConfig signingConfigs.release
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.txt'
         }
         debug {
@@ -60,3 +61,5 @@ android {
 dependencies {
     implementation project(':freeRDPCore')
 }
+
+apply from: 'captantan.gradle' // captantan fork: preview build type

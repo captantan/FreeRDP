@@ -1,0 +1,29 @@
+// SPDX-License-Identifier: Apache-2.0
+// captantan fork: build types that exist only in the fork. Applied at the end of build.gradle.
+
+android {
+    signingConfigs {
+        // A throwaway key committed to the repo; see preview-key/README.md. It protects nothing.
+        preview {
+            storeFile file('preview-key/preview.p12')
+            storePassword 'android'
+            keyAlias 'preview'
+            keyPassword 'android'
+            storeType 'pkcs12'
+        }
+    }
+
+    buildTypes {
+        // The installable test build (roadmap decision D5): the same Java and the same optimised
+        // native code as release, installable beside the real app, signed with a fixed key so a
+        // newer test build installs over an older one.
+        preview {
+            initWith android.buildTypes.getByName('release')
+            applicationIdSuffix '.debug'
+            signingConfig signingConfigs.preview
+            // :freeRDPCore has no preview type: use its release variant, so the native libraries
+            // are the very ones release packages (and are built only once).
+            matchingFallbacks = ['release']
+        }
+    }
+}

@@ -1,0 +1,191 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# captantan fork: compile check for the Android client.
+#
+# It runs the task the builder runs (./gradlew :aFreeRDP:assembleRelease from client/Android/Studio,
+# with the builder's Gradle memory settings), asserts on the unsigned release APK, and also builds
+# the installable "preview" test build (roadmap decision D5) and keeps it as an artifact for 7 days.
+# The preview build type reuses :freeRDPCore's release variant, so the native code is built once.
+
+name: captantan-android
+
+on:
+  pull_request:
+    branches: [captantan]
+  push:
+    branches: [captantan]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Android arm64 (release + preview)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    defaults:
+      run:
+        shell: bash
+        working-directory: client/Android/Studio
+    env:
+      BUILD_TOOLS: "37.0.0"
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history and tags, so the git-version plugin sees an upstream tag as it does on the
+          # builder (which clones a tag).
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Record the runner
+        run: |
+          echo "nproc: $(nproc)"
+          free -m
+          df -h / "$RUNNER_TEMP"
+          java -version
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          for d in ndk cmake build-tools platforms; do
+            echo "preinstalled $d: $(ls "$ANDROID_HOME/$d" 2>/dev/null | tr '\n' ' ')"
+          done
+
+      - name: Prepare as the builder does
+        run: |
+          # Same as the builder recipe (roadmap 2.3): SDK location and its Gradle memory settings.
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          sed -i '/^org.gradle.jvmargs=/d' gradle.properties
+          printf '\norg.gradle.jvmargs=-Xmx3072m -XX:MaxMetaspaceSize=1024m\norg.gradle.workers.max=3\norg.gradle.daemon=false\n' >> gradle.properties
+          cat gradle.properties
+          # Memory sampler for the rest of the job: used RAM and used swap in MiB every 5 seconds.
+          nohup bash -c 'while :; do free -m | awk "/^Mem:/{m=\$3} /^Swap:/{s=\$3} END{print m, s}" >> "$RUNNER_TEMP/mem.log"; sleep 5; done' > /dev/null 2>&1 &
+
+      - name: Build release (the builder's task)
+        run: |
+          start=$SECONDS
+          ./gradlew :aFreeRDP:assembleRelease --no-daemon --stacktrace 2>&1 | tee "$RUNNER_TEMP/release.log"
+          echo "RELEASE_SECONDS=$((SECONDS - start))" >> "$GITHUB_ENV"
+
+      - name: Check release.properties was read
+        run: |
+          log="$RUNNER_TEMP/release.log"
+          sed -n '/Project configuration/,/^-\{20,\}$/p' "$log" | tee "$RUNNER_TEMP/config.txt"
+          fail() { echo "::error::$1"; exit 1; }
+          grep -Eq '^ABI_FILTERS: +\[arm64-v8a\]$' "$RUNNER_TEMP/config.txt" || fail "ABI_FILTERS is not [arm64-v8a]: release.properties was not read"
+          grep -Eq '^SPLIT_ENABLED: +false$' "$RUNNER_TEMP/config.txt" || fail "SPLIT_ENABLED is not false"
+          grep -Eq '^BUILD_UNIVERSAL: +false$' "$RUNNER_TEMP/config.txt" || fail "BUILD_UNIVERSAL is not false"
+          grep -Eq '^CMAKE_ARGUMENTS: .*-DWITH_FFMPEG=OFF' "$RUNNER_TEMP/config.txt" || fail "CMAKE_ARGUMENTS does not turn FFmpeg off"
+
+      - name: Build preview (test build)
+        run: |
+          start=$SECONDS
+          ./gradlew :aFreeRDP:assemblePreview --no-daemon --stacktrace 2>&1 | tee "$RUNNER_TEMP/preview.log"
+          echo "PREVIEW_SECONDS=$((SECONDS - start))" >> "$GITHUB_ENV"
+
+      - name: Check the APKs
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$1"; exit 1; }
+          BT="$ANDROID_HOME/build-tools/$BUILD_TOOLS"
+          AAPT="$BT/aapt"
+          [ -x "$AAPT" ] || AAPT="$BT/aapt2"
+          APP_ID=$(sed -n 's/^ *applicationId "\(.*\)"$/\1/p' aFreeRDP/build.gradle)
+          [ -n "$APP_ID" ] || fail "no applicationId in aFreeRDP/build.gradle"
+
+          mapfile -t rel < <(find aFreeRDP/build/outputs/apk/release -name '*.apk')
+          [ "${#rel[@]}" -eq 1 ] || fail "expected one release APK, found: ${rel[*]:-none}"
+          REL="${rel[0]}"
+          mapfile -t pre < <(find aFreeRDP/build/outputs/apk/preview -name '*.apk')
+          [ "${#pre[@]}" -eq 1 ] || fail "expected one preview APK, found: ${pre[*]:-none}"
+          PRE="${pre[0]}"
+          echo "release APK: $REL ($(stat -c %s "$REL") bytes)"
+          echo "preview APK: $PRE ($(stat -c %s "$PRE") bytes)"
+
+          echo "== release badging"
+          "$AAPT" dump badging "$REL" > "$RUNNER_TEMP/release-badging.txt"
+          grep -E "^(package|sdkVersion|targetSdkVersion|application-label|native-code|alt-native-code)" "$RUNNER_TEMP/release-badging.txt" | tee "$RUNNER_TEMP/release-badging-short.txt"
+          grep -q "^package: name='$APP_ID' " "$RUNNER_TEMP/release-badging.txt" || fail "release package is not $APP_ID"
+          [ "$(grep -E '^(alt-)?native-code' "$RUNNER_TEMP/release-badging.txt")" = "native-code: 'arm64-v8a'" ] || fail "release native code is not arm64-v8a only"
+          case "$REL" in *-unsigned.apk) ;; *) fail "release APK is not named *-unsigned.apk" ;; esac
+          if "$BT/apksigner" verify "$REL" > /dev/null 2>&1; then fail "release APK is signed"; fi
+          unzip -l "$REL" | awk '{print $4}' | grep '^lib/' | sort > "$RUNNER_TEMP/release-libs.txt"
+          cat "$RUNNER_TEMP/release-libs.txt"
+          if grep -Eq 'lib(avcodec|avformat|avutil|swscale|swresample)' "$RUNNER_TEMP/release-libs.txt"; then fail "FFmpeg libraries are packaged"; fi
+          echo "MediaCodec strings in libfreerdp3.so (not required until package 1.3): $(unzip -p "$REL" lib/arm64-v8a/libfreerdp3.so | strings | grep -c 'MediaCodec using' || true)"
+
+          echo "== preview badging"
+          "$AAPT" dump badging "$PRE" > "$RUNNER_TEMP/preview-badging.txt"
+          grep -E "^(package|sdkVersion|targetSdkVersion|application-label|native-code|alt-native-code)" "$RUNNER_TEMP/preview-badging.txt" | tee "$RUNNER_TEMP/preview-badging-short.txt"
+          grep -q "^package: name='$APP_ID.debug' " "$RUNNER_TEMP/preview-badging.txt" || fail "preview package is not $APP_ID.debug"
+          grep -q "^application-label:'RDP debug'$" "$RUNNER_TEMP/preview-badging.txt" || fail "preview label is not 'RDP debug'"
+          [ "$(grep -E '^(alt-)?native-code' "$RUNNER_TEMP/preview-badging.txt")" = "native-code: 'arm64-v8a'" ] || fail "preview native code is not arm64-v8a only"
+          "$BT/apksigner" verify --print-certs -v "$PRE" | tee "$RUNNER_TEMP/preview-signature.txt"
+          want=$(openssl pkcs12 -in aFreeRDP/preview-key/preview.p12 -passin pass:android -nokeys \
+                 | openssl x509 -noout -fingerprint -sha256 | sed 's/.*=//; s/://g' | tr 'A-F' 'a-f')
+          grep -q "certificate SHA-256 digest: $want$" "$RUNNER_TEMP/preview-signature.txt" || fail "preview is not signed with preview-key/preview.p12"
+
+          echo "== native libraries, release vs preview"
+          unzip -l "$PRE" | awk '{print $4}' | grep '^lib/' | sort > "$RUNNER_TEMP/preview-libs.txt"
+          diff "$RUNNER_TEMP/release-libs.txt" "$RUNNER_TEMP/preview-libs.txt" || fail "release and preview package different native libraries"
+          while read -r lib; do
+            a=$(unzip -p "$REL" "$lib" | sha256sum | cut -d' ' -f1)
+            b=$(unzip -p "$PRE" "$lib" | sha256sum | cut -d' ' -f1)
+            [ "$a" = "$b" ] || fail "$lib differs between release and preview"
+            echo "$a  $lib"
+          done < "$RUNNER_TEMP/release-libs.txt"
+
+      - name: Upload the preview APK
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rdp-preview-apk
+          path: client/Android/Studio/aFreeRDP/build/outputs/apk/preview/*.apk
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## captantan-android"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| assembleRelease | ${RELEASE_SECONDS:-n/a} s |"
+            echo "| assemblePreview (after release) | ${PREVIEW_SECONDS:-n/a} s |"
+            if [ -s "$RUNNER_TEMP/mem.log" ]; then
+              echo "| peak RAM used | $(awk '$1>m{m=$1} END{print m}' "$RUNNER_TEMP/mem.log") MiB of $(free -m | awk '/^Mem:/{print $2}') MiB |"
+              echo "| peak swap used | $(awk '$2>m{m=$2} END{print m+0}' "$RUNNER_TEMP/mem.log") MiB |"
+            fi
+            echo "| nproc | $(nproc) |"
+            echo "| JDK | $(java -version 2>&1 | head -n 1) |"
+            echo "| NDK installed | $(ls "$ANDROID_HOME/ndk" 2>/dev/null | tr '\n' ' ') |"
+            echo "| CMake installed | $(ls "$ANDROID_HOME/cmake" 2>/dev/null | tr '\n' ' ') |"
+            echo
+            echo "### Toolchain the native build used"
+            echo '```'
+            find freeRDPCore/.cxx -name CMakeCache.txt -path '*arm64-v8a*' -exec grep -hE '^(CMAKE_COMMAND|CMAKE_ANDROID_NDK|ANDROID_NDK|CMAKE_BUILD_TYPE|CMAKE_C_COMPILER):' {} + 2>/dev/null | sort -u || true
+            for c in "$ANDROID_HOME"/cmake/*/bin/cmake; do [ -x "$c" ] && "$c" --version | head -n 1; done
+            for n in "$ANDROID_HOME"/ndk/*/source.properties; do [ -f "$n" ] && grep Pkg.Revision "$n"; done
+            grep -rh "captantan fork: make job count" freeRDPCore/.cxx 2>/dev/null | sort -u || true
+            echo '```'
+            echo
+            echo "### Project configuration"
+            echo '```'
+            cat "$RUNNER_TEMP/config.txt" 2>/dev/null || true
+            echo '```'
+            echo
+            echo "### APKs"
+            echo '```'
+            cat "$RUNNER_TEMP/release-badging-short.txt" "$RUNNER_TEMP/preview-badging-short.txt" 2>/dev/null || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

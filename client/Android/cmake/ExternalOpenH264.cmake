@@ -1,5 +1,6 @@
 include(ExternalProject)
 include(DepVersions)
+include(CaptantanMakeJobs) # captantan fork: CAPTANTAN_MAKE_JOBS caps the make jobs below
 
 # Map Android ABI to OpenH264 architecture names
 if(ANDROID_ABI STREQUAL "arm64-v8a")
@@ -30,10 +31,10 @@ ExternalProject_Add(
   BUILD_COMMAND
     ${CMAKE_COMMAND} -E env "PATH=${NDK_ROOT}:$ENV{PATH}" make ENABLEPIC=Yes LDFLAGS=-static-libstdc++ OS=android
     NDKROOT=${NDK_ROOT} NDK_TOOLCHAIN_VERSION=clang TARGET=android-${NDK_API_LEVEL} NDKLEVEL=${NDK_API_LEVEL}
-    ARCH=${H264_ARCH} -j libraries
+    ARCH=${H264_ARCH} -j${CAPTANTAN_MAKE_JOBS} libraries
   INSTALL_COMMAND
     ${CMAKE_COMMAND} -E env "PATH=${NDK_ROOT}:$ENV{PATH}" make OS=android NDKROOT=${NDK_ROOT}
     NDK_TOOLCHAIN_VERSION=clang TARGET=android-${NDK_API_LEVEL} NDKLEVEL=${NDK_API_LEVEL} ARCH=${H264_ARCH}
     PREFIX=${DEPS_INSTALL_DIR} LIBDIR_NAME=${CMAKE_INSTALL_LIBDIR}
-    SHAREDLIB_DIR=${DEPS_INSTALL_DIR}/${CMAKE_INSTALL_LIBDIR} -j install
+    SHAREDLIB_DIR=${DEPS_INSTALL_DIR}/${CMAKE_INSTALL_LIBDIR} -j${CAPTANTAN_MAKE_JOBS} install
 )
