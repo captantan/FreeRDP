@@ -1,5 +1,6 @@
 include(ExternalProject)
 include(DepVersions)
+include(CaptantanMakeJobs) # captantan fork: CAPTANTAN_MAKE_JOBS caps the make jobs below
 
 # Map Android ABI to FFmpeg cross-compile names
 set(FFMPEG_EXTRA_ARGS "")
@@ -76,6 +77,6 @@ ExternalProject_Add(
     --extra-ldflags="${FFMPEG_LDFLAGS}" ${FFMPEG_EXTRA_ARGS} --target-os=android --enable-cross-compile --enable-pic
     --enable-lto --enable-jni --enable-mediacodec --enable-shared --disable-static --disable-programs --disable-doc
     --prefix=${DEPS_INSTALL_DIR} --libdir=${DEPS_INSTALL_DIR}/${CMAKE_INSTALL_LIBDIR}
-  BUILD_COMMAND ${CMAKE_COMMAND} -E env "PATH=${NDK_TOOLCHAIN_BIN}:$ENV{PATH}" make -j
-  INSTALL_COMMAND ${CMAKE_COMMAND} -E env "PATH=${NDK_TOOLCHAIN_BIN}:$ENV{PATH}" make -j install
+  BUILD_COMMAND ${CMAKE_COMMAND} -E env "PATH=${NDK_TOOLCHAIN_BIN}:$ENV{PATH}" make -j${CAPTANTAN_MAKE_JOBS}
+  INSTALL_COMMAND ${CMAKE_COMMAND} -E env "PATH=${NDK_TOOLCHAIN_BIN}:$ENV{PATH}" make -j${CAPTANTAN_MAKE_JOBS} install
 )

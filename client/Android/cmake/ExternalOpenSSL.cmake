@@ -1,5 +1,6 @@
 include(ExternalProject)
 include(DepVersions)
+include(CaptantanMakeJobs) # captantan fork: CAPTANTAN_MAKE_JOBS caps the make jobs below
 
 # Map ANDROID_ABI to OpenSSL architecture names
 if(ANDROID_ABI STREQUAL "arm64-v8a")
@@ -31,9 +32,9 @@ ExternalProject_Add(
     ANDROID_NDK_HOME=${NDK_ROOT} CC=clang perl <SOURCE_DIR>/Configure ${OSSL_ARCH} shared no-tests no-apps no-docs
     -U__ANDROID_API__ -D__ANDROID_API__=${NDK_API_LEVEL} --prefix=${DEPS_INSTALL_DIR} --libdir=${CMAKE_INSTALL_LIBDIR}
   BUILD_COMMAND ${CMAKE_COMMAND} -E env PATH=${NDK_TOOLCHAIN_BIN}:$ENV{PATH} ANDROID_NDK=${NDK_ROOT}
-                ANDROID_NDK_ROOT=${NDK_ROOT} ANDROID_NDK_HOME=${NDK_ROOT} make -j SHLIB_EXT=.so build_libs
+                ANDROID_NDK_ROOT=${NDK_ROOT} ANDROID_NDK_HOME=${NDK_ROOT} make -j${CAPTANTAN_MAKE_JOBS} SHLIB_EXT=.so build_libs
   INSTALL_COMMAND
     ${CMAKE_COMMAND} -E env PATH=${NDK_TOOLCHAIN_BIN}:$ENV{PATH} ANDROID_NDK=${NDK_ROOT} ANDROID_NDK_ROOT=${NDK_ROOT}
-    ANDROID_NDK_HOME=${NDK_ROOT} make -j SHLIB_EXT=.so install_sw && ${CMAKE_COMMAND} -E copy_directory
+    ANDROID_NDK_HOME=${NDK_ROOT} make -j${CAPTANTAN_MAKE_JOBS} SHLIB_EXT=.so install_sw && ${CMAKE_COMMAND} -E copy_directory
     ${DEPS_INSTALL_DIR}/${CMAKE_INSTALL_LIBDIR}/ossl-modules ${DEPS_INSTALL_DIR}/${CMAKE_INSTALL_LIBDIR}
 )

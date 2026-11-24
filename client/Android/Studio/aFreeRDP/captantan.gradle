@@ -1,0 +1,44 @@
+// SPDX-License-Identifier: Apache-2.0
+// captantan fork: build types that exist only in the fork. Applied at the end of build.gradle.
+
+android {
+    // The app module strips the native libraries it packages, with the NDK it is configured for.
+    // Upstream sets ndkVersion only on :freeRDPCore, so here AGP looks for its own default NDK,
+    // finds no strip tool when that one is not installed, and packages every library unstripped
+    // (with full debug info: about 56 MB of native code instead of about 15).
+    ndkVersion rootProject.ext.ndkVersion
+
+    defaultConfig {
+        // ABI_FILTERS from release.properties reaches only :freeRDPCore's own native build.
+        // Prebuilt libraries in dependencies (SQLCipher ships armeabi-v7a, arm64-v8a, x86 and
+        // x86_64) are packaged for every ABI unless the app module filters too.
+        ndk {
+            abiFilters rootProject.ext.abiFilters
+        }
+    }
+
+    signingConfigs {
+        // A throwaway key committed to the repo; see preview-key/README.md. It protects nothing.
+        preview {
+            storeFile file('preview-key/preview.p12')
+            storePassword 'android'
+            keyAlias 'preview'
+            keyPassword 'android'
+            storeType 'pkcs12'
+        }
+    }
+
+    buildTypes {
+        // The installable test build (roadmap decision D5): the same Java and the same optimised
+        // native code as release, installable beside the real app, signed with a fixed key so a
+        // newer test build installs over an older one.
+        preview {
+            initWith android.buildTypes.getByName('release')
+            applicationIdSuffix '.debug'
+            signingConfig signingConfigs.preview
+            // :freeRDPCore has no preview type: use its release variant, so the native libraries
+            // are the very ones release packages (and are built only once).
+            matchingFallbacks = ['release']
+        }
+    }
+}

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- captantan fork: label of the preview build type. -->
+<resources>
+    <string name="app_title" translatable="false">RDP debug</string>
+</resources>
