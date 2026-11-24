@@ -501,6 +501,6 @@ The repository's `LICENSE` is Apache-2.0. Most of the Android client's own files
 at 3.33.1, including `SessionActivity`, `LibFreeRDP`, `GlobalApp` and `KeyboardMapper`) are MPL-2.0, the
 JNI glue's CMake files and `android_disp.*` are Apache-2.0. Keep each file's header. The About page names the
 source repository; the third-party notices page lists what else is in the APK (OpenSSL, OpenH264, Opus,
-libwebp, libpng, libjpeg-turbo, uriparser, cJSON, SQLCipher, Material Components, AndroidX, Kotlin). FFmpeg is not packaged, which removes
-the only LGPL component; if it is turned back on (`-DWITH_FFMPEG=ON` in `release.properties`), its notice
-and LGPL obligations come back with it.
+libwebp, libpng, libjpeg-turbo, uriparser, cJSON, SQLCipher, Material Components, AndroidX, Kotlin).
+FFmpeg is not packaged, which removes the only LGPL component; if it is turned back on (`-DWITH_FFMPEG=ON`
+in `release.properties`), its notice and LGPL obligations come back with it.
