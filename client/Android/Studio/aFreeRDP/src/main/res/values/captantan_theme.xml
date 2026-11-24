@@ -7,7 +7,7 @@
        Base.Theme.Captantan  the colours: dynamic colour from the wallpaper on Android 12 and later
                              (values-v31), else the fallback scheme in captantan_colors.xml, made by
                              aFreeRDP/captantan-palette.py from one seed colour.
-       Theme.Captantan       everything else (system bars).
+       Theme.Captantan       everything else (system bars, action bar, AppCompat dialogs).
        Theme.Main            upstream's theme name, used by every activity in the manifests. Defined
                              here and in values-night so that it overrides freeRDPCore's
                              values/theme.xml and values-night/theme.xml, which are left as they are.
@@ -69,6 +69,24 @@
         <!-- Dark bar icons on the light theme, light ones on the dark theme. -->
         <item name="android:windowLightStatusBar">@bool/captantan_light_system_bars</item>
         <item name="android:windowLightNavigationBar">@bool/captantan_light_system_bars</item>
+        <!-- The action bar as a Material 3 top app bar at rest. Material's own action bar style
+             uses the "scrolled" container colour and keeps AppCompat's shadow, so it showed as a
+             darker band under the status bar. -->
+        <item name="actionBarStyle">@style/Widget.Captantan.ActionBar</item>
+        <!-- AppCompat alert dialogs (upstream's, and those of the preference screens) with the
+             shape and colour of Material 3 dialogs, like the fork's MaterialAlertDialogBuilder ones. -->
+        <item name="alertDialogTheme">@style/ThemeOverlay.Captantan.Dialog.Alert</item>
+    </style>
+
+    <style name="Widget.Captantan.ActionBar" parent="Widget.Material3.Light.ActionBar.Solid">
+        <item name="background">?attr/colorSurface</item>
+        <item name="backgroundStacked">?attr/colorSurface</item>
+        <item name="backgroundSplit">?attr/colorSurface</item>
+        <item name="elevation">0dp</item>
+    </style>
+
+    <style name="ThemeOverlay.Captantan.Dialog.Alert" parent="ThemeOverlay.Material3Expressive.Dialog.Alert">
+        <item name="android:windowBackground">@drawable/captantan_dialog_background</item>
     </style>
 
     <style name="Theme.Main" parent="Theme.Captantan" />

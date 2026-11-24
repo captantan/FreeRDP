@@ -1,9 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- captantan fork: Theme.Main again, for the dark theme, so that it overrides freeRDPCore's
-     values-night/theme.xml too. Theme.Captantan picks light or dark itself (values/captantan_theme.xml). -->
+     values-night/theme.xml too. Theme.Captantan picks light or dark itself (values/captantan_theme.xml);
+     only the action bar style needs a dark parent. -->
 <resources>
 
     <style name="Theme.Main" parent="Theme.Captantan" />
+
+    <!-- As in values/, on Material's dark action bar style. -->
+    <style name="Widget.Captantan.ActionBar" parent="Widget.Material3.ActionBar.Solid">
+        <item name="background">?attr/colorSurface</item>
+        <item name="backgroundStacked">?attr/colorSurface</item>
+        <item name="backgroundSplit">?attr/colorSurface</item>
+        <item name="elevation">0dp</item>
+    </style>
 
 </resources>

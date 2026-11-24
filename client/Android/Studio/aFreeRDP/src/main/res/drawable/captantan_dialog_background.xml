@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- captantan fork: the window background of AppCompat alert dialogs (upstream's dialogs and the
+     preference screens' dialogs), as Material 3 draws its own dialogs: extra-large corners on
+     colorSurfaceContainerHigh. The inset is AppCompat's (16dp), so the dialogs keep their size. -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:insetLeft="16dp"
+    android:insetTop="16dp"
+    android:insetRight="16dp"
+    android:insetBottom="16dp">
+    <shape android:shape="rectangle">
+        <corners android:radius="28dp" />
+        <solid android:color="?attr/colorSurfaceContainerHigh" />
+    </shape>
+</inset>

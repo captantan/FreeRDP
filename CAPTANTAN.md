@@ -332,6 +332,12 @@ upstream theme or layout file is edited.
   "temporary workaround" for the light theme, is gone: `captantan_bools.xml` (new, `values` and
   `values-night`) gives dark bar icons on the light theme and light ones on the dark theme, and on Android
   15 and later the window background, the same tone as the action bar, shows behind the status bar.
+- The same files restyle two things every upstream screen shows, by theme attribute only:
+  `Widget.Captantan.ActionBar` (the action bar on `colorSurface` without a shadow, a Material 3 top app
+  bar at rest; Material's own action bar style uses the "scrolled" colour and AppCompat's shadow) and
+  `ThemeOverlay.Captantan.Dialog.Alert` with `drawable/captantan_dialog_background.xml` (new): AppCompat
+  alert dialogs, which upstream and the preference screens use, get Material 3's extra-large corners on
+  `colorSurfaceContainerHigh`, like the `MaterialAlertDialogBuilder` ones.
 - `aFreeRDP/src/main/res/values{,-night}/captantan_colors.xml` (new): the fallback scheme for Android 10
   and 11, generated from the seed `#3A6EA5` (steel blue) by `aFreeRDP/captantan-palette.py` (new), which
   implements Material's tonal palettes (`--check` compares its output for Material's baseline seed with
