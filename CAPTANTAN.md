@@ -406,7 +406,11 @@ is shown in at most one window.
   (`ActivityManager.AppTask.moveToFront`); otherwise the setting decides between the session window
   (`SessionWindow.LAUNCH_FLAGS`, re-points the session window used last) and a new window
   (`NEW_WINDOW_FLAGS`: `NEW_TASK | NEW_DOCUMENT | MULTIPLE_TASK | LAUNCH_ADJACENT`, a new document task with
-  its own Recents entry, put beside the current one where the system honours "adjacent"). The launch
+  its own Recents entry, put beside the current one where the system honours "adjacent"). Launched from a
+  session window it also carries `FLAG_ACTIVITY_PREVIOUS_IS_TOP`: the session activity is singleTop, and
+  Android otherwise delivers the launch to the session window on top, even with `MULTIPLE_TASK`
+  (`ActivityStarter.deliverToCurrentTopIfNeeded`; seen on a device, where "open in new window" only
+  re-pointed the window). The launch
   carries the session's token (`SessionWindow.EXTRA_SESSION`) and its connection reference or link
   (`intentFor`).
 - **The setting** "Open new connections" (Settings, User interface; key `captantan_new_connection_window`):
@@ -424,8 +428,10 @@ is shown in at most one window.
   the process died) shows the session it showed last: it attaches if the session lives, and connects the
   same connection again if the process had died. A new window is a document task, removed from Recents
   when it closes (`autoRemoveFromRecents`); a plain launch reaches the most recently used session window.
-  On a phone without desktop windowing, "Open in new window" opens a second full-screen task: the user sees
-  the session in front and a second entry for the app in Recents; Back in it asks the 2.1 question as usual.
+  On a phone without desktop windowing, "Open in new window" opens a second task. On the Android 17
+  foldable it was measured on (folded), the system honoured `LAUNCH_ADJACENT` and put the new window in
+  split screen beside the one it was opened from; dragging the divider to an edge makes either full
+  screen, and each is its own entry in Recents. Back in either asks the 2.1 question as usual.
 - `freeRDPCore/.../captantan/HomeSessions.java` (new): the connection list. A row whose connection has a
   live session is marked: its icon in the primary colour (error colour while it waits for an answer) and its
   second line "Connected · host" (or Connecting, Ending, waiting). While any session is live an extended
@@ -469,6 +475,21 @@ is shown in at most one window.
 - New resources: `res/layout/captantan_session_switcher{,_item}.xml`, `res/drawable/captantan_ic_{sessions,
   open_in_new_window,disconnect}.xml` (the last two are Material icons, Apache-2.0),
   `res/values/captantan_{dimens,ids}.xml`, strings in `captantan_strings.xml` (English only).
+- **Measured on a device** (Android 17 foldable, folded, test build of pull request 12, 2026-11-24, three
+  bookmarks): two sessions live, switched ten times in one window (`switch:` lines, each a
+  detach and an attach of a connected session, no `session start`, no reconnect); one session task (and
+  the list's) with two sessions, two after "Open in new window" from the session window and from the
+  list; "bring to front" from the list (tap on a row whose session a window shows) and from the switcher
+  of the other window, with focus following; in split screen focus followed the half that was tapped;
+  disconnect from the switcher (in the other window and in the list) ended only that session and closed
+  only its window; "New connection" brought the list to the front and a third connection was made with
+  the other session live; launches from the list with the default setting went to the session window,
+  and the session it showed went on. No crash. Not exercised: a physical keyboard (held keys through a
+  switch), a prompt following a switch, a session waiting for an answer while shown nowhere, quick
+  connect and link sessions in the switcher, a window recreated or restored after process death, the
+  settings "In a new window" and "In the session window", desktop windowing and DeX (the tablet).
+  Seen and left for 2.3: with the app hidden for about ten seconds or more, every session's connection
+  dropped and reconnected when the app came back; two or three seconds hidden did not.
 - Not in this package: the notification (2.3), the fork's session bar (4.1), resizing a session to the
   window it attaches to (milestone 3), key combinations (5.3), window titles and bounds (6.1), restyling the
   list rows beyond the marking (7.2b).
