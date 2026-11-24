@@ -60,6 +60,16 @@ jobs:
             echo "preinstalled $d: $(ls "$ANDROID_HOME/$d" 2>/dev/null | tr '\n' ' ')"
           done
 
+      - name: Install the NDK
+        run: |
+          # The runner image does not carry NDK 29.0.13113456 and has not accepted its licence, so
+          # Gradle refuses to download it. Install exactly the version build.gradle names.
+          ndk=$(sed -n "s/.*NDK_VERSION', '\(.*\)')$/\1/p" build.gradle)
+          [ -n "$ndk" ] || { echo "::error::no NDK_VERSION default in build.gradle"; exit 1; }
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$ndk" | grep -v '^\[=' || true
+          test -f "$ANDROID_HOME/ndk/$ndk/source.properties"
+          grep Pkg.Revision "$ANDROID_HOME/ndk/$ndk/source.properties"
+
       - name: Prepare as the builder does
         run: |
           # Same as the builder recipe (roadmap 2.3): SDK location and its Gradle memory settings.
