@@ -209,6 +209,16 @@ jobs:
           "$AAPT" dump resources "$REL" > "$RUNNER_TEMP/resources.txt"
           grep -qF 'xml/captantan_connection_options' "$RUNNER_TEMP/resources.txt" || fail "the APK lacks res/xml/captantan_connection_options"
           echo "per-connection settings: classes, graphics arguments and options screen present"
+          # Physical keyboard (roadmap 5.1): the natives of captantan/PhysicalKeyboard are found by
+          # name at run time, so a missing or misnamed one compiles and then fails at the first key.
+          grep -qaF 'Lcom/freerdp/freerdpcore/captantan/PhysicalKeyboard;' "$RUNNER_TEMP/classes.dex.all" || fail "the APK lacks the class captantan/PhysicalKeyboard"
+          unzip -p "$REL" lib/arm64-v8a/libfreerdp-android.so > "$RUNNER_TEMP/libfreerdp-android.so"
+          "$READELF" --dyn-syms -W "$RUNNER_TEMP/libfreerdp-android.so" > "$RUNNER_TEMP/android-dynsyms.txt"
+          for n in nativeScanCode nativeSendKey nativeSendPause nativeSendLocks; do
+            grep -qaF "$n" "$RUNNER_TEMP/classes.dex.all" || fail "captantan/PhysicalKeyboard lacks the native method $n"
+            grep -Eq " FUNC +GLOBAL +DEFAULT +[0-9]+ Java_com_freerdp_freerdpcore_captantan_PhysicalKeyboard_$n\$" "$RUNNER_TEMP/android-dynsyms.txt" || fail "libfreerdp-android.so does not export the native $n of captantan/PhysicalKeyboard"
+          done
+          echo "physical keyboard: class and its four natives present"
 
           echo "== preview badging"
           "$AAPT" dump badging "$PRE" > "$RUNNER_TEMP/preview-badging.txt"

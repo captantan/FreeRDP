@@ -24,6 +24,7 @@ import android.view.ScaleGestureDetector;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
 
+import com.freerdp.freerdpcore.captantan.PhysicalKeyboard; // captantan fork
 import com.freerdp.freerdpcore.services.LibFreeRDP;
 import com.freerdp.freerdpcore.utils.KeyboardMapper;
 import com.freerdp.freerdpcore.utils.Mouse;
@@ -44,6 +45,7 @@ public class SessionInputManager
 
 	private final Context context;
 	private final KeyboardMapper keyboardMapper;
+	private final PhysicalKeyboard physicalKeyboard; // captantan fork
 	private final ScrollView2D scrollView;
 	private final SessionView sessionView;
 	private final TouchPointerView touchPointerView;
@@ -75,6 +77,8 @@ public class SessionInputManager
 
 		this.keyboardMapper = new KeyboardMapper();
 		this.keyboardMapper.init(context);
+		// captantan fork: real key down and key up for physical keyboards
+		this.physicalKeyboard = new PhysicalKeyboard(context, sessionView, keyboardMapper);
 
 		keyboard.setListener(this);
 	}
@@ -201,6 +205,7 @@ public class SessionInputManager
 	public void cancelPendingEvents()
 	{
 		handler.removeMessages(MSG_SEND_MOVE_EVENT);
+		physicalKeyboard.forget(); // captantan fork: the session is gone, nothing is held on it
 	}
 
 	// Forwards a physical-mouse scroll event (e.g. external mouse wheel) into the session.
@@ -225,6 +230,11 @@ public class SessionInputManager
 	{
 		if (instance == 0)
 			return false;
+		// captantan fork: a key of a physical keyboard goes to the session as a real key down
+		// and key up; everything else, and everything when the setting below is on, as upstream
+		final int physical = physicalKeyboard.onKeyEvent(instance, event);
+		if (physical != PhysicalKeyboard.NOT_OURS)
+			return physical == PhysicalKeyboard.HANDLED;
 		// Read on every key, so a change in the settings applies without reconnecting.
 		keyboardMapper.setPhysicalKeyboardDeviceLayout(
 		    ApplicationSettingsActivity.getPhysicalKeyboardDeviceLayout(context));
