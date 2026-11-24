@@ -1293,7 +1293,8 @@ static BOOL mediacodec_init(H264_CONTEXT* h264)
 			goto EXCEPTION;
 		}
 
-		WLog_Print(h264->log, WLOG_DEBUG, "MediaCodec using %s codec [%s]", CODEC_NAME, codec_name);
+		/* captantan fork: INFO (was DEBUG), so logcat shows the codec name */
+		WLog_Print(h264->log, WLOG_INFO, "MediaCodec using %s codec [%s]", CODEC_NAME, codec_name);
 		AMediaCodec_releaseName(sys->decoder, codec_name);
 	}
 	else
