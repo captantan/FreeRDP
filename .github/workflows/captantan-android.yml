@@ -133,7 +133,7 @@ jobs:
 
           echo "== release badging"
           "$AAPT" dump badging "$REL" > "$RUNNER_TEMP/release-badging.txt"
-          grep -E "^(package|sdkVersion|targetSdkVersion|application-label|native-code|alt-native-code)" "$RUNNER_TEMP/release-badging.txt" | tee "$RUNNER_TEMP/release-badging-short.txt"
+          grep -E "^(package|sdkVersion|targetSdkVersion|application-label:|native-code|alt-native-code)" "$RUNNER_TEMP/release-badging.txt" | tee "$RUNNER_TEMP/release-badging-short.txt"
           grep -q "^package: name='$APP_ID' " "$RUNNER_TEMP/release-badging.txt" || fail "release package is not $APP_ID"
           unzip -l "$REL" | awk '{print $4}' | grep '^lib/' | sort > "$RUNNER_TEMP/release-libs.txt"
           cat "$RUNNER_TEMP/release-libs.txt"
@@ -154,7 +154,7 @@ jobs:
 
           echo "== preview badging"
           "$AAPT" dump badging "$PRE" > "$RUNNER_TEMP/preview-badging.txt"
-          grep -E "^(package|sdkVersion|targetSdkVersion|application-label|native-code|alt-native-code)" "$RUNNER_TEMP/preview-badging.txt" | tee "$RUNNER_TEMP/preview-badging-short.txt"
+          grep -E "^(package|sdkVersion|targetSdkVersion|application-label:|native-code|alt-native-code)" "$RUNNER_TEMP/preview-badging.txt" | tee "$RUNNER_TEMP/preview-badging-short.txt"
           grep -q "^package: name='$APP_ID.debug' " "$RUNNER_TEMP/preview-badging.txt" || fail "preview package is not $APP_ID.debug"
           grep -q "^application-label:'RDP debug'$" "$RUNNER_TEMP/preview-badging.txt" || fail "preview label is not 'RDP debug'"
           [ "$(grep -E '^(alt-)?native-code' "$RUNNER_TEMP/preview-badging.txt")" = "native-code: 'arm64-v8a'" ] || fail "preview native code is not arm64-v8a only"
