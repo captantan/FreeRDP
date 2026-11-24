@@ -349,7 +349,7 @@ upstream theme or layout file is edited.
 - `assets/captantan_notices.html`: Material Components, the AndroidX libraries it brings and Error Prone
   annotations; also the Kotlin standard library, kotlinx.coroutines and JetBrains annotations, which AndroidX
   had already brought into the APK unlisted.
-- APK size: the release APK went from 26,379,782 to 30,757,695 bytes (+4.4 MB: Material's code and
+- APK size: the release APK went from 26,379,782 to 30,758,687 bytes (+4.4 MB: Material's code and
   resources and the AndroidX libraries it needs, unshrunk because upstream's release build has
   `minifyEnabled false`). Native libraries are unchanged.
 
