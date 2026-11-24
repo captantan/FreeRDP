@@ -9,8 +9,6 @@ package com.freerdp.freerdpcore.captantan;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.graphics.Typeface;
-import android.os.Handler;
-import android.os.Looper;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.style.StyleSpan;
@@ -23,7 +21,6 @@ import com.freerdp.freerdpcore.services.LibFreeRDP;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
-import java.util.concurrent.CountDownLatch;
 
 /**
  * Asks the user whether to trust a server certificate that FreeRDP could not verify.
@@ -40,9 +37,10 @@ import java.util.concurrent.CountDownLatch;
  * silent; {@link #ACCEPT_ONCE} accepts it for this session only; {@link #REJECT} fails the TLS
  * handshake and so ends the connection.
  *
- * <p>The calls come on the session's native thread, which waits here until the user answers.
- * {@link #close()} answers every waiting call with {@link #REJECT}; the activity calls it when it is
- * destroyed, so the thread is never left waiting for a dialog that no longer exists.
+ * <p>The calls come on the session's native thread, which waits here until the user answers
+ * ({@link BlockingPrompts}). When the window is destroyed, {@link BlockingPrompts#close()} answers a
+ * waiting call with {@link #REJECT}, so the thread is never left waiting for a dialog that no longer
+ * exists.
  */
 public final class CertificatePrompt
 {
@@ -55,17 +53,12 @@ public final class CertificatePrompt
 
 	private static final String TAG = "CertificatePrompt";
 
+	private final BlockingPrompts prompts;
 	private final Activity activity;
 	private final Runnable onReject;
-	private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
-	private final Object lock = new Object();
-	/** Guarded by lock. Set by close(); no prompt is shown after it. */
-	private boolean closed = false;
-	/** Guarded by lock. The prompt being shown, if any. */
-	private Pending pending = null;
 	/**
-	 * Guarded by lock. What the user answered earlier in this session for a certificate at a host and
+	 * Guarded by itself. What the user answered earlier in this session for a certificate at a host and
 	 * port (key: host, port and fingerprint), so that one session never asks twice about the same
 	 * certificate at the same place: after "only this time" FreeRDP keeps no record, and a reconnect
 	 * through a connection broker starts again from the original settings and would ask again. The
@@ -75,13 +68,14 @@ public final class CertificatePrompt
 	private final Map<String, Integer> answered = new HashMap<>();
 
 	/**
-	 * @param activity the activity that shows the dialogs
-	 * @param onReject run on the asking thread when the user rejects a certificate (the connection
+	 * @param prompts  shows the dialogs; the activity closes it when it is destroyed
+	 * @param onReject run on the asking thread when a certificate is rejected (the connection
 	 *                 failure that follows is then the user's choice, not an error to report)
 	 */
-	public CertificatePrompt(Activity activity, Runnable onReject)
+	public CertificatePrompt(BlockingPrompts prompts, Runnable onReject)
 	{
-		this.activity = activity;
+		this.prompts = prompts;
+		this.activity = prompts.getActivity();
 		this.onReject = onReject;
 	}
 
@@ -122,26 +116,6 @@ public final class CertificatePrompt
 		           activity.getString(R.string.captantan_cert_trust_new));
 	}
 
-	/**
-	 * Answers a waiting prompt with {@link #REJECT}, dismisses its dialog, and refuses every later
-	 * prompt. Call on the UI thread when the activity is destroyed, before the session is freed.
-	 */
-	public void close()
-	{
-		Pending p;
-		synchronized (lock)
-		{
-			closed = true;
-			p = pending;
-		}
-		if (p != null)
-		{
-			p.answer(REJECT);
-			if (p.dialog != null)
-				p.dialog.dismiss();
-		}
-	}
-
 	private static String answerKey(String host, long port, String fingerprint)
 	{
 		if (fingerprint == null || fingerprint.isEmpty())
@@ -152,82 +126,49 @@ public final class CertificatePrompt
 	/** @param key from answerKey(), or null to never reuse an earlier answer */
 	private int ask(String key, String title, CharSequence message, String trustLabel)
 	{
-		if (Looper.myLooper() == Looper.getMainLooper())
+		if (key != null)
 		{
-			// The dialog needs the UI thread to answer; waiting on it here would never end.
-			Log.e(TAG, "certificate prompt called on the UI thread, rejecting");
-			return REJECT;
-		}
-
-		final Pending p = new Pending();
-		synchronized (lock)
-		{
-			if (closed)
-				return REJECT;
-			Integer earlier = (key != null) ? answered.get(key) : null;
+			Integer earlier;
+			synchronized (answered)
+			{
+				earlier = answered.get(key);
+			}
 			if (earlier != null)
 			{
 				Log.i(TAG, "certificate already answered in this session: " + earlier);
 				return earlier;
 			}
-			pending = p;
 		}
 
-		mainHandler.post(() -> show(p, title, message, trustLabel));
+		final int result = prompts.ask(REJECT, (a, answer) -> {
+			AlertDialog dialog =
+			    new AlertDialog.Builder(a)
+			        .setTitle(title)
+			        .setMessage(message)
+			        .setPositiveButton(trustLabel, (d, w) -> answer.give(ACCEPT_AND_STORE))
+			        .setNeutralButton(R.string.captantan_cert_once,
+			                          (d, w) -> answer.give(ACCEPT_ONCE))
+			        .setNegativeButton(android.R.string.cancel, (d, w) -> answer.give(REJECT))
+			        // Back cancels (and so rejects); a stray touch outside the dialog does not.
+			        .setCancelable(true)
+			        .create();
+			dialog.setCanceledOnTouchOutside(false);
+			return dialog;
+		});
 
-		int result;
-		try
+		if (result == REJECT)
 		{
-			p.done.await();
-			result = p.result;
+			if (onReject != null)
+				onReject.run();
 		}
-		catch (InterruptedException e)
+		else if (key != null)
 		{
-			Thread.currentThread().interrupt();
-			result = REJECT;
-		}
-
-		synchronized (lock)
-		{
-			if (pending == p)
-				pending = null;
-			if (key != null && result != REJECT)
-				answered.put(key, result);
-		}
-
-		if (result == REJECT && onReject != null)
-			onReject.run();
-		return result;
-	}
-
-	/** Runs on the UI thread. */
-	private void show(Pending p, String title, CharSequence message, String trustLabel)
-	{
-		synchronized (lock)
-		{
-			if (closed || activity.isFinishing() || activity.isDestroyed())
+			synchronized (answered)
 			{
-				p.answer(REJECT);
-				return;
+				answered.put(key, result);
 			}
 		}
-
-		AlertDialog dialog =
-		    new AlertDialog.Builder(activity)
-		        .setTitle(title)
-		        .setMessage(message)
-		        .setPositiveButton(trustLabel, (d, w) -> p.answer(ACCEPT_AND_STORE))
-		        .setNeutralButton(R.string.captantan_cert_once, (d, w) -> p.answer(ACCEPT_ONCE))
-		        .setNegativeButton(android.R.string.cancel, (d, w) -> p.answer(REJECT))
-		        // Back cancels; a stray touch outside the dialog does not.
-		        .setCancelable(true)
-		        .setOnCancelListener(d -> p.answer(REJECT))
-		        // However the dialog goes away, the waiting thread gets an answer (the first one wins).
-		        .setOnDismissListener(d -> p.answer(REJECT))
-		        .create();
-		dialog.setCanceledOnTouchOutside(false);
-		p.dialog = dialog;
-		dialog.show();
+		return result;
 	}
 
 	private void appendNotes(SpannableStringBuilder msg, String commonName, long flags)
@@ -306,21 +247,5 @@ public final class CertificatePrompt
 			sb.append(bytes[i]);
 		}
 		return sb.toString();
-	}
-
-	private static final class Pending
-	{
-		final CountDownLatch done = new CountDownLatch(1);
-		volatile int result = REJECT;
-		/** Set and read on the UI thread only. */
-		AlertDialog dialog;
-
-		synchronized void answer(int value)
-		{
-			if (done.getCount() == 0)
-				return;
-			result = value;
-			done.countDown();
-		}
 	}
 }

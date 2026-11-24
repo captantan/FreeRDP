@@ -137,8 +137,14 @@ a note.
 
 - `freeRDPCore/.../captantan/CertificatePrompt.java` (new): the dialogs behind FreeRDP's
   `VerifyCertificateEx` and `VerifyChangedCertificateEx`. Trust returns 1 (store), "Only this time" 2 (this
-  session only), Cancel or Back 0 (reject). `close()` answers a waiting prompt with reject when the window is
-  destroyed. Answers are remembered for the session by host, port and fingerprint.
+  session only), Cancel or Back 0 (reject). Answers are remembered for the session by host, port and
+  fingerprint.
+- `freeRDPCore/.../captantan/BlockingPrompts.java` (new): shows a dialog that the session's native thread
+  waits on (inside a FreeRDP callback), and `close()`, which answers every waiting dialog with its fallback
+  (reject, cancel) when the window is destroyed. All three such dialogs use it.
+- `freeRDPCore/.../captantan/SessionPrompts.java` (new): the credentials prompt and the "experimental
+  feature" notice, moved off `SessionDialogs.promptCredentials` / `showExperimentalBlocked` (left in place,
+  unused), whose bare `wait()` nothing woke once the window was gone. Back now cancels the credentials prompt.
 - `freeRDPCore/.../captantan/NativeSessionThreads.java` (new): an instance whose native session thread still
   runs (for example waiting in the prompt) is not freed under it; the connection is aborted and the instance
   freed once the thread's last callback (`OnConnectionFailure` or `OnDisconnected`) has arrived.
@@ -147,9 +153,10 @@ a note.
 - `freeRDPCore/src/main/res/values/captantan_strings.xml` (new): the prompts' strings (English only).
 - `LibFreeRDP.java` (edited): `/cert:ignore` is no longer passed; `NativeSessionThreads` hooks in `connect`,
   `freeInstance`, `OnConnectionFailure` and `OnDisconnected`.
-- `SessionActivity.java` (edited): the two verify callbacks call `CertificatePrompt`; `onDestroy` calls
-  `close()` before the session is freed (freeing a connected session waits for its thread, which would
-  otherwise wait for the prompt forever).
+- `SessionActivity.java` (edited): the two verify callbacks call `CertificatePrompt`; `OnAuthenticate`,
+  `OnGatewayAuthenticate` and `OnExperimentalFeature` call `SessionPrompts`; `onDestroy` calls
+  `BlockingPrompts.close()` before the session is freed (freeing a connected session waits for its thread,
+  which would otherwise wait for the dialog forever).
 - `ApplicationSettingsActivity.java` (edited): "Clear certificate cache" calls `CertificateStore.clear`.
   Upstream deleted `files/.freerdp`, FreeRDP 2's directory, which FreeRDP 3 no longer uses.
 - `freeRDPCore/src/main/res/xml/settings_app_security.xml` (edited): "Accept all certificates" removed. It
