@@ -62,6 +62,9 @@ set(${MODULE_PREFIX}_SRCS
     android_jni_callback.h
     android_rail.c
     android_rail.h
+    # captantan fork: key events of a physical keyboard
+    captantan_keyboard.c
+    captantan_keyboard.h
 )
 
 add_library(${MODULE_NAME} SHARED ${${MODULE_PREFIX}_SRCS})
