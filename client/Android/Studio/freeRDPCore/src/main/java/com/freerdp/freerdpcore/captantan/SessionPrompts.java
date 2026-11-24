@@ -7,6 +7,7 @@
 package com.freerdp.freerdpcore.captantan;
 
 import android.content.Intent;
+import android.util.TypedValue;
 import android.view.View;
 import android.widget.EditText;
 
@@ -70,6 +71,15 @@ public final class SessionPrompts
 
 		Credentials entered = prompts.ask(null, (activity, answer) -> {
 			View view = activity.getLayoutInflater().inflate(R.layout.credentials, null);
+			// Upstream's layout has no side padding; give it the dialog's own.
+			TypedValue pad = new TypedValue();
+			if (activity.getTheme().resolveAttribute(
+			        androidx.appcompat.R.attr.dialogPreferredPadding, pad, true))
+			{
+				int px = TypedValue.complexToDimensionPixelSize(
+				    pad.data, activity.getResources().getDisplayMetrics());
+				view.setPaddingRelative(px, view.getPaddingTop(), px, view.getPaddingBottom());
+			}
 			final EditText u = view.findViewById(R.id.editTextUsername);
 			final EditText d = view.findViewById(R.id.editTextDomain);
 			final EditText p = view.findViewById(R.id.editTextPassword);
