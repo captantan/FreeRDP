@@ -102,14 +102,6 @@ jobs:
           ./gradlew :aFreeRDP:assemblePreview --no-daemon --stacktrace 2>&1 | tee "$RUNNER_TEMP/preview.log"
           echo "PREVIEW_SECONDS=$((SECONDS - start))" >> "$GITHUB_ENV"
 
-      - name: TEMPORARY strip diagnostic
-        continue-on-error: true
-        run: |
-          ls -la freeRDPCore/src/main/jniLibs/arm64-v8a/ | head -40
-          S="$ANDROID_HOME/ndk/29.0.13113456/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
-          "$S" --strip-unneeded -o "$RUNNER_TEMP/x.so" freeRDPCore/src/main/jniLibs/arm64-v8a/libfreerdp3.so; echo "manual llvm-strip exit $?"; ls -la "$RUNNER_TEMP/x.so" || true
-          ./gradlew :freeRDPCore:stripReleaseDebugSymbols --rerun :aFreeRDP:stripReleaseDebugSymbols --rerun --info --no-daemon 2>&1 | grep -iE -B3 -A12 'strip|ndk' | grep -v '^C/C++' | head -300
-
       - name: Check the APKs
         run: |
           set -euo pipefail
@@ -139,6 +131,15 @@ jobs:
           case "$REL" in *-unsigned.apk) ;; *) fail "release APK is not named *-unsigned.apk" ;; esac
           if "$BT/apksigner" verify "$REL" > /dev/null 2>&1; then fail "release APK is signed"; fi
           if grep -Eq 'lib(avcodec|avformat|avutil|swscale|swresample)' "$RUNNER_TEMP/release-libs.txt"; then fail "FFmpeg libraries are packaged"; fi
+          READELF="$ANDROID_HOME/ndk/$(sed -n "s/.*NDK_VERSION', '\(.*\)')$/\1/p" build.gradle)/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          while read -r lib; do
+            unzip -p "$REL" "$lib" > "$RUNNER_TEMP/lib.so"
+            "$READELF" -S "$RUNNER_TEMP/lib.so" > "$RUNNER_TEMP/sections.txt"
+            if grep -q '\.debug_info' "$RUNNER_TEMP/sections.txt"; then
+              fail "$lib is packaged with debug info (not stripped)"
+            fi
+          done < "$RUNNER_TEMP/release-libs.txt"
+          echo "native libraries in the release APK: $(unzip -l "$REL" 'lib/*' | tail -n 1 | awk '{print $1}') bytes, none with .debug_info"
           echo "MediaCodec strings in libfreerdp3.so (not required until package 1.3): $(unzip -p "$REL" lib/arm64-v8a/libfreerdp3.so | strings | grep -c 'MediaCodec using' || true)"
 
           echo "== preview badging"
@@ -206,4 +207,5 @@ jobs:
             echo '```'
             cat "$RUNNER_TEMP/release-badging-short.txt" "$RUNNER_TEMP/preview-badging-short.txt" 2>/dev/null || true
             echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          } > "$RUNNER_TEMP/summary.md"
+          cat "$RUNNER_TEMP/summary.md" | tee -a "$GITHUB_STEP_SUMMARY"

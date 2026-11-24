@@ -2,6 +2,12 @@
 // captantan fork: build types that exist only in the fork. Applied at the end of build.gradle.
 
 android {
+    // The app module strips the native libraries it packages, with the NDK it is configured for.
+    // Upstream sets ndkVersion only on :freeRDPCore, so here AGP looks for its own default NDK,
+    // finds no strip tool when that one is not installed, and packages every library unstripped
+    // (with full debug info: about 56 MB of native code instead of about 15).
+    ndkVersion rootProject.ext.ndkVersion
+
     defaultConfig {
         // ABI_FILTERS from release.properties reaches only :freeRDPCore's own native build.
         // Prebuilt libraries in dependencies (SQLCipher ships armeabi-v7a, arm64-v8a, x86 and
