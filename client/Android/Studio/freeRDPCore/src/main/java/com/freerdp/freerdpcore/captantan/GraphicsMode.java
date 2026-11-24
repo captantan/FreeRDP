@@ -58,7 +58,9 @@ public enum GraphicsMode implements ConnectionPrefs.Stored
 
 	/**
 	 * The /gfx argument for a bookmark whose GFX and H.264 options are on, from its graphics mode
-	 * (the default for a session without a saved bookmark). Logged at INFO under captantan.codec.
+	 * (the default for a session without a saved bookmark). Logged at INFO under captantan.codec,
+	 * followed by the device's H.264 decoder table (AvcDecoderLog), so one logcat taken after
+	 * connecting shows the mode, the table and the decoder name the session uses.
 	 */
 	public static String gfxArgument(Context context, BookmarkBase bookmark)
 	{
@@ -66,6 +68,7 @@ public enum GraphicsMode implements ConnectionPrefs.Stored
 		GraphicsMode mode = ConnectionPrefs.load(context, id).getGraphicsMode();
 		Log.i(AvcDecoderLog.TAG,
 		      "graphics mode " + mode.storedName + " (bookmark " + id + "): " + mode.gfxArgument);
+		AvcDecoderLog.logNow();
 		return mode.gfxArgument;
 	}
 }

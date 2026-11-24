@@ -41,6 +41,18 @@ public final class AvcDecoderLog
 		thread.start();
 	}
 
+	/**
+	 * Logs the table again now, on a background thread, with no once-guard (package 1.4: called at
+	 * every connect, next to the graphics mode line, because logcat's main buffer may have rotated
+	 * the start-up table away before a session connects).
+	 */
+	public static void logNow()
+	{
+		final Thread thread = new Thread(AvcDecoderLog::run, "captantan-avc-log");
+		thread.setDaemon(true);
+		thread.start();
+	}
+
 	private static void run()
 	{
 		Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);

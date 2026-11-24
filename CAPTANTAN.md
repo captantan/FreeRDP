@@ -97,7 +97,10 @@ file has no comment syntax):
 - `captantan/AvcDecoderLog.java` (new), started by one line in `GlobalApp.onCreate`: once per process, on a
   background thread, logs every `video/avc` decoder from `MediaCodecList` with `isHardwareAccelerated()`,
   `isSoftwareOnly()`, `isVendor()`, the codec it is an alias of, the largest size and low-latency support,
-  under the logcat tag `captantan.codec`.
+  under the logcat tag `captantan.codec`. Since package 1.4 the table is also logged again at every
+  connect that uses H.264 (`AvcDecoderLog.logNow()`, called from `GraphicsMode.gfxArgument` right after
+  the graphics mode line), because logcat's main buffer can rotate the start-up table away before a session
+  connects.
 - No new library is packaged (`libmediandk.so` is part of Android), so `captantan_notices.html` is unchanged.
 
 **How to confirm hardware decoding.** Native log lines reach logcat under the WLog logger name
@@ -107,6 +110,10 @@ level is INFO before any session too. Start the app, connect with H.264 on (the 
 ```bash
 adb logcat -s com.freerdp.codec captantan.codec
 ```
+
+Take the logcat after connecting: at connect `captantan.codec` logs the graphics mode line
+(`graphics mode <mode> (bookmark <id>): /gfx:...`, package 1.4) and the decoder table again, so the mode,
+the table and the decoder name in use are in the same capture.
 
 - Good: `H.264 decoder subsystem: MediaCodec` and `MediaCodec using video/avc codec [c2.<vendor>.avc.decoder]`
   (or `OMX.<vendor>...`), and the `captantan.codec` table lists that name with `hardware=true`. The pair
@@ -180,7 +187,8 @@ bookmark editor has a new entry, "RDP options", at the end of its "Settings" cat
   changed default reaches every bookmark that never changed that setting; a missing, mistyped or unknown
   stored value reads as the default. Nothing goes into upstream's bookmark database.
 - `freeRDPCore/.../captantan/GraphicsMode.java` (new): the modes and their `/gfx` arguments, and the
-  `captantan.codec` INFO line `graphics mode <mode> (bookmark <id>): <argument>` at connect.
+  `captantan.codec` INFO line `graphics mode <mode> (bookmark <id>): <argument>` at connect, followed by
+  the H.264 decoder table again (`AvcDecoderLog.logNow()`, new; `logOnce()` at app start is unchanged).
 
   | Mode | Argument | What the GFX channel advertises |
   |---|---|---|
