@@ -53,6 +53,7 @@ import android.widget.Toast;
 import com.freerdp.freerdpcore.R;
 import com.freerdp.freerdpcore.application.GlobalApp;
 import com.freerdp.freerdpcore.application.SessionState;
+import com.freerdp.freerdpcore.captantan.CertificatePrompt; // captantan fork
 import com.freerdp.freerdpcore.domain.BookmarkBase;
 import com.freerdp.freerdpcore.domain.ConnectionReference;
 import com.freerdp.freerdpcore.services.LibFreeRDP;
@@ -140,6 +141,7 @@ public class SessionActivity extends AppCompatActivity
 	private ClipboardManagerProxy mClipboardManager;
 	private SessionInputManager inputManager;
 	private SessionDialogs dialogs;
+	private CertificatePrompt certificatePrompt; // captantan fork
 
 	private FloatingToolbar floatingToolbar;
 
@@ -294,6 +296,8 @@ public class SessionActivity extends AppCompatActivity
 				connectCancelledByUser = true;
 			}
 		});
+		// captantan fork: a rejected certificate is the user's choice, not an error to report
+		certificatePrompt = new CertificatePrompt(this, () -> connectCancelledByUser = true);
 
 		// Wire up the input manager (instance is attached later in bindSession()).
 		inputManager =
@@ -373,6 +377,10 @@ public class SessionActivity extends AppCompatActivity
 		}
 		super.onDestroy();
 		Log.v(TAG, "Session.onDestroy");
+
+		// captantan fork: answer a waiting certificate prompt (reject) before the session is freed;
+		// freeing a connected session waits for its thread, which would wait for the prompt forever
+		certificatePrompt.close();
 
 		// Cancel running disconnect timers.
 		GlobalApp.cancelDisconnectTimer();
@@ -833,9 +841,8 @@ public class SessionActivity extends AppCompatActivity
 	public int OnVerifiyCertificateEx(String host, long port, String commonName, String subject,
 	                                  String issuer, String fingerprint, long flags)
 	{
-		if (ApplicationSettingsActivity.getAcceptAllCertificates(this))
-			return 0;
-		return dialogs.verifyCertificate(host, port, subject, issuer, fingerprint, flags);
+		// captantan fork: trust on first use; "accept all certificates" is gone (it returned 0, reject)
+		return certificatePrompt.verify(host, port, commonName, subject, issuer, fingerprint, flags);
 	}
 
 	@Override
@@ -844,9 +851,9 @@ public class SessionActivity extends AppCompatActivity
 	                                        String oldSubject, String oldIssuer,
 	                                        String oldFingerprint, long flags)
 	{
-		if (ApplicationSettingsActivity.getAcceptAllCertificates(this))
-			return 0;
-		return dialogs.verifyChangedCertificate(host, port, subject, issuer, fingerprint, flags);
+		// captantan fork: a warning with the old and new certificate
+		return certificatePrompt.verifyChanged(host, port, commonName, subject, issuer, fingerprint,
+		                                       oldSubject, oldIssuer, oldFingerprint, flags);
 	}
 
 	@Override public boolean OnExperimentalFeature(int feature)

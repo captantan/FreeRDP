@@ -19,6 +19,7 @@ import androidx.collection.LongSparseArray;
 
 import com.freerdp.freerdpcore.application.GlobalApp;
 import com.freerdp.freerdpcore.application.SessionState;
+import com.freerdp.freerdpcore.captantan.NativeSessionThreads; // captantan fork
 import com.freerdp.freerdpcore.domain.BookmarkBase;
 import com.freerdp.freerdpcore.presentation.ApplicationSettingsActivity;
 
@@ -222,6 +223,10 @@ public class LibFreeRDP
 				}
 			}
 		}
+		// captantan fork: a session still connecting has a running thread; free it after that ends
+		if (NativeSessionThreads.freeWhenEnded(inst, () -> freerdp_disconnect(inst),
+		                                       () -> freerdp_free(inst)))
+			return;
 		freerdp_free(inst);
 	}
 
@@ -234,7 +239,11 @@ public class LibFreeRDP
 				throw new RuntimeException("instance already connected");
 			}
 		}
-		return freerdp_connect(inst);
+		NativeSessionThreads.started(inst); // captantan fork
+		final boolean started = freerdp_connect(inst);
+		if (!started)
+			NativeSessionThreads.ended(inst); // captantan fork
+		return started;
 	}
 
 	public static boolean disconnect(long inst)
@@ -502,7 +511,8 @@ public class LibFreeRDP
 		}
 
 		args.add("/kbd:unicode:on");
-		args.add("/cert:ignore");
+		// captantan fork: no /cert:ignore; certificates are checked (trust on first use, the prompts
+		// are in captantan/CertificatePrompt.java)
 		args.add("/log-level:" + debug.getDebugLevel());
 		String[] arrayArgs = args.toArray(new String[0]);
 		return freerdp_parse_arguments(inst, arrayArgs);
@@ -643,6 +653,7 @@ public class LibFreeRDP
 	{
 		if (listener != null)
 			listener.OnConnectionFailure(inst);
+		NativeSessionThreads.ended(inst); // captantan fork: the session thread's last callback
 		synchronized (mInstanceState)
 		{
 			mInstanceState.remove(inst);
@@ -666,6 +677,7 @@ public class LibFreeRDP
 	{
 		if (listener != null)
 			listener.OnDisconnected(inst);
+		NativeSessionThreads.ended(inst); // captantan fork: the session thread's last callback
 		synchronized (mInstanceState)
 		{
 			mInstanceState.remove(inst);

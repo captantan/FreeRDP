@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
-    <CheckBoxPreference
-        android:key="@string/preference_key_accept_certificates"
-        android:title="@string/settings_security_accept_certificates" />
+    <!-- captantan fork: "accept all certificates" removed; certificates are trusted on first use
+         (captantan/CertificatePrompt.java). Upstream's preference returned 0 (reject) when on. -->
     <Preference
         android:key="@string/preference_key_security_clear_certificate_cache"
         android:title="@string/settings_security_clear_certificate_cache"/>
