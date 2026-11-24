@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- captantan fork: strings of the certificate prompts (captantan/CertificatePrompt.java), of the
-     Back question in a session window (captantan/SessionWindow.java) and of the "RDP options"
-     screen of the bookmark editor (captantan/ConnectionOptions*.java). -->
+     Back question in a session window (captantan/SessionWindow.java), of the "RDP options"
+     screen of the bookmark editor (captantan/ConnectionOptions*.java) and of the session
+     notifications (captantan/SessionNotifications.java, SessionKeeper.java). -->
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
     <string name="captantan_cert_title_new">Check the server certificate</string>
     <string name="captantan_cert_title_changed">Server certificate changed</string>
@@ -27,8 +28,33 @@
     <string name="captantan_back_leave">Leave running</string>
     <string name="captantan_back_disconnect">Disconnect</string>
     <string name="captantan_back_capture_note">This session redirects the microphone or the camera. That stays on while the session runs, also when no window shows it.</string>
-    <!-- A session that no window shows ended by itself (captantan/SessionHost.java) -->
+    <!-- A session that no visible window shows ended by itself (captantan/SessionKeeper.java) -->
     <string name="captantan_session_ended">%1$s: the session has ended</string>
+    <!-- Sessions in the background (roadmap 2.3, captantan/SessionNotifications.java) -->
+    <string name="captantan_channel_sessions">Running sessions</string>
+    <string name="captantan_channel_sessions_desc">Shown while a session is live, also with no window open. Lists the sessions and ends them.</string>
+    <string name="captantan_channel_events">Session alerts</string>
+    <string name="captantan_channel_events_desc">A session in the background needs an answer, or has ended.</string>
+    <plurals name="captantan_sessions_running">
+        <item quantity="one">%d session running</item>
+        <item quantity="other">%d sessions running</item>
+    </plurals>
+    <string name="captantan_state_connecting">Connecting</string>
+    <string name="captantan_state_connected">Connected</string>
+    <string name="captantan_state_waiting">Waiting for your answer</string>
+    <string name="captantan_session_line">%1$s: %2$s</string>
+    <string name="captantan_capture_this">Microphone or camera redirected to this session</string>
+    <string name="captantan_capture_list">Microphone or camera redirected: %1$s</string>
+    <string name="captantan_action_disconnect">Disconnect</string>
+    <string name="captantan_action_disconnect_one">Disconnect %1$s</string>
+    <string name="captantan_action_disconnect_all">Disconnect all</string>
+    <string name="captantan_waiting_title">%1$s needs an answer</string>
+    <string name="captantan_waiting_text">Open the session to answer.</string>
+    <string name="captantan_waiting_text_timeout">Open the session to answer. Without an answer the connection is cancelled in %1$d minutes.</string>
+    <string name="captantan_waiting_toast">%1$s needs an answer: open it from the connection list</string>
+    <string name="captantan_ended_failed">The connection failed or the server ended the session.</string>
+    <string name="captantan_ended_disconnected">The session was disconnected.</string>
+    <string name="captantan_notification_permission_why">Allow notifications to see the sessions that run in the background and end them from there.</string>
     <!-- RDP options (roadmap 1.4) -->
     <string name="captantan_options_title">RDP options</string>
     <string name="captantan_options_summary">Graphics mode and other settings of this app</string>

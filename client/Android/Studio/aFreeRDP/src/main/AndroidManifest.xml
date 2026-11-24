@@ -3,6 +3,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     android:installLocation="auto">
 
+    <!-- captantan fork: the foreground service that keeps sessions alive in the background
+         (roadmap 2.3, freeRDPCore/.../captantan/SessionKeepAliveService.java). Its types:
+         specialUse always, microphone and camera while a session redirects them. RECORD_AUDIO and
+         CAMERA themselves are declared by freeRDPCore. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+
     <!-- captantan fork: the label is @string/app_title ("RDP"), it was the literal "aFreeRDP" -->
     <application
         android:name="com.freerdp.afreerdp.application.GlobalApp"
@@ -94,6 +103,24 @@
         </activity>
 
         <meta-data android:name="com.samsung.android.keepalive.density" android:value="true"/>
+
+        <!-- captantan fork: sessions in the background (roadmap 2.3), see the permissions above -->
+        <service
+            android:name="com.freerdp.freerdpcore.captantan.SessionKeepAliveService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse|microphone|camera">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Remote desktop (RDP) sessions the user started stay connected while no window of the app is visible: the network connection, the session's sound and, if the user turned them on for that connection, the microphone and camera redirected to the remote computer. Runs exactly while a session is live; the notification lists the sessions and disconnects them." />
+        </service>
+        <!-- captantan fork: a tap on a session notification (roadmap 2.3); no UI, finishes at once -->
+        <activity
+            android:name="com.freerdp.freerdpcore.captantan.SessionOpenActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.NoDisplay" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

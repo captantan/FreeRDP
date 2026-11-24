@@ -14,7 +14,6 @@ import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
-import android.widget.Toast;
 
 import com.freerdp.freerdpcore.R;
 import com.freerdp.freerdpcore.application.GlobalApp;
@@ -74,6 +73,20 @@ public final class SessionHost implements LibFreeRDP.UIEventListener, GlobalApp.
 		CONNECTED,
 		/** Over. The registry no longer lists it and the native instance is gone or going. */
 		ENDED
+	}
+
+	/** Why a session ended (package 2.3 tells the user about the last two). */
+	public enum EndCause
+	{
+		/**
+		 * Asked for, or already explained to the user: disconnect, a rejected certificate, a
+		 * cancelled login, the experimental-feature notice, the screen-off timer.
+		 */
+		ASKED,
+		/** The connection failed or the server ended it (the two look the same from here). */
+		FAILED,
+		/** The session thread ended without a failure and nobody asked for it. */
+		DISCONNECTED
 	}
 
 	private static final String TAG = SessionRegistry.TAG;
@@ -136,6 +149,10 @@ public final class SessionHost implements LibFreeRDP.UIEventListener, GlobalApp.
 	 * notice), so it is not reported as a connection failure.
 	 */
 	private volatile boolean quiet = false;
+	/** Written on the UI thread when the session ends. */
+	private volatile EndCause endCause;
+	/** Written on the UI thread when the session ends: whether a visible window showed it then. */
+	private volatile boolean endedOnScreen = false;
 
 	/** Guards dirty and framePosted. */
 	private final Object frameLock = new Object();
@@ -221,6 +238,34 @@ public final class SessionHost implements LibFreeRDP.UIEventListener, GlobalApp.
 	public boolean needsAttention()
 	{
 		return prompts.isWaitingUnattended();
+	}
+
+	/**
+	 * True while the session waits for an answer (certificate, login), whether a window shows the
+	 * question or not. Package 2.3: a question in a window that is not on screen is as unseen as
+	 * one in no window.
+	 */
+	public boolean isWaitingForAnswer()
+	{
+		return prompts.isWaiting();
+	}
+
+	/** True while a started (visible) window shows the session. A change is a registry change. */
+	public boolean isOnScreen()
+	{
+		return painting;
+	}
+
+	/** Why the session ended; null while it is live. */
+	public EndCause getEndCause()
+	{
+		return endCause;
+	}
+
+	/** Whether a visible window showed the session when it ended (that window said so itself). */
+	public boolean wasOnScreenAtEnd()
+	{
+		return endedOnScreen;
 	}
 
 	/**
@@ -420,21 +465,16 @@ public final class SessionHost implements LibFreeRDP.UIEventListener, GlobalApp.
 		                        : "disconnected") +
 		               ", was " + was + ")");
 
+		endCause = quiet ? EndCause.ASKED : (failure ? EndCause.FAILED : EndCause.DISCONNECTED);
+		endedOnScreen = painting;
+
 		// The window first: it stops sending input to the instance before the instance is freed.
+		// A session that no visible window showed and that ended by itself (the server, the
+		// network) must not just vanish from under the user: SessionKeeper (package 2.3) tells
+		// them, with a notification, or a toast while the app is visible and cannot notify.
 		final SessionWindow w = window;
 		if (w != null)
-		{
 			w.onSessionEnded(this, failure, quiet);
-		}
-		else if (!quiet && SessionRegistry.isAppVisible())
-		{
-			// No window to say it: a session that was left running and ended by itself (the
-			// server, the network) must not just vanish from under the user. With the app not
-			// visible nothing is shown; that is the notification's job (package 2.3).
-			Toast.makeText(context, context.getString(R.string.captantan_session_ended, title),
-			               Toast.LENGTH_LONG)
-			    .show();
-		}
 		window = null;
 		shown = false;
 		painting = false;
@@ -487,7 +527,11 @@ public final class SessionHost implements LibFreeRDP.UIEventListener, GlobalApp.
 	/** Whether the window showing the session is visible (started). Nothing is painted otherwise. */
 	void setPainting(boolean on)
 	{
-		painting = on && (window != null);
+		final boolean now = on && (window != null);
+		if (painting == now)
+			return;
+		painting = now;
+		SessionRegistry.changed();
 	}
 
 	/** Sends the pointer shape the server last set to a window that has just bound the session. */

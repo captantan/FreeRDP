@@ -63,6 +63,8 @@ public final class SessionRegistry
 	private static Context appContext;
 	private static int nextId = 1;
 	private static int startedActivities = 0;
+	/** UI thread only. True while the keep-alive service of package 2.3 is in the foreground. */
+	private static boolean keptAlive = false;
 	private static boolean changePosted = false;
 
 	/** Written on the UI thread. The session window that has input focus, or null. */
@@ -144,7 +146,7 @@ public final class SessionRegistry
 	{
 		final SessionHost host = new SessionHost(appContext, nextId++, state, title, launchKey);
 		sessions.add(host);
-		host.setForeground(isAppVisible());
+		host.setForeground(reconnectsAllowed());
 		Log.i(TAG, "session start: " + host + " (" + describeSource(host) + "), " +
 		               sessions.size() + " live");
 		changed();
@@ -274,19 +276,49 @@ public final class SessionRegistry
 	}
 
 	/**
+	 * Package 2.3: the keep-alive service (SessionKeepAliveService) is in the foreground, or no
+	 * longer. While it is, sessions may reconnect with the app hidden. UI thread.
+	 */
+	public static void setKeptAlive(boolean on)
+	{
+		if (keptAlive == on)
+			return;
+		keptAlive = on;
+		if (!sessions.isEmpty())
+			Log.i(TAG, "keep-alive service " + (on ? "running" : "gone") + ": reconnects " +
+			               (reconnectsAllowed() ? "allowed" : "held") + " for " + sessions.size() +
+			               " live");
+		applyForeground();
+	}
+
+	/** While any activity of the app is visible, or the keep-alive service runs. UI thread. */
+	private static boolean reconnectsAllowed()
+	{
+		return isAppVisible() || keptAlive;
+	}
+
+	/**
 	 * Upstream holds a dropped session's automatic reconnect while its activity is stopped
 	 * (LibFreeRDP.setForeground, android_retry_dialog) and lets it go on when the activity starts
 	 * again. A session no longer has an activity of its own, so the rule is now the app's: every
-	 * session may reconnect while any activity of the app is visible, and none while none is.
-	 * Package 2.3 (foreground service) is where "none while none is" changes.
+	 * session may reconnect while any activity of the app is visible or, since package 2.3, while
+	 * the keep-alive service keeps the sessions alive in the background (which is whenever one is
+	 * live, unless Android refused to start the service).
 	 */
-	private static void applyForeground(boolean foreground)
+	private static void applyForeground()
+	{
+		final boolean allowed = reconnectsAllowed();
+		for (SessionHost host : sessions)
+			host.setForeground(allowed);
+	}
+
+	private static void appVisibilityChanged(boolean visible)
 	{
 		if (!sessions.isEmpty())
-			Log.i(TAG, "app " + (foreground ? "visible: reconnects allowed" : "hidden: reconnects held") +
-			               " for " + sessions.size() + " live");
-		for (SessionHost host : sessions)
-			host.setForeground(foreground);
+			Log.i(TAG, "app " + (visible ? "visible" : "hidden") + ": reconnects " +
+			               (reconnectsAllowed() ? "allowed" : "held") + " for " + sessions.size() +
+			               " live");
+		applyForeground();
 	}
 
 	private static final class VisibilityWatcher implements Application.ActivityLifecycleCallbacks
@@ -294,13 +326,13 @@ public final class SessionRegistry
 		@Override public void onActivityStarted(Activity activity)
 		{
 			if (++startedActivities == 1)
-				applyForeground(true);
+				appVisibilityChanged(true);
 		}
 
 		@Override public void onActivityStopped(Activity activity)
 		{
 			if (startedActivities > 0 && --startedActivities == 0)
-				applyForeground(false);
+				appVisibilityChanged(false);
 		}
 
 		@Override public void onActivityCreated(Activity activity, Bundle savedInstanceState)

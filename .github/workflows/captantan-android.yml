@@ -251,6 +251,33 @@ jobs:
           grep -F "launchMode" "$RUNNER_TEMP/manifest-rel.txt" | sed 's/^ *//'
           grep -qF "launchMode" "$RUNNER_TEMP/manifest-rel.txt" || fail "no activity has a launchMode: the session activity must be singleTop"
           echo "session host: classes present, session activity is singleTop without documentLaunchMode"
+          # Sessions in the background (roadmap 2.3): the keep-alive service in the merged manifest,
+          # not exported, with the types specialUse (0x40000000), microphone (0x80) and camera
+          # (0x40) and its specialUse subtype, the permissions those types need (Android 14 and
+          # later refuse startForeground without them), and the activity a notification tap opens.
+          for c in SessionKeeper SessionKeepAliveService SessionNotifications SessionOpenActivity; do
+            grep -qaF "Lcom/freerdp/freerdpcore/captantan/$c;" "$RUNNER_TEMP/classes.dex.all" || fail "the APK lacks the class captantan/$c"
+          done
+          awk '{
+            if (inblk) {
+              if ($0 ~ /E: / && index($0, "E:") <= ind) { inblk = 0; if (blk ~ /SessionKeepAliveService"/) printf "%s", blk }
+              else { blk = blk $0 "\n"; next }
+            }
+            if ($0 ~ /E: service /) { ind = index($0, "E:"); inblk = 1; blk = $0 "\n" }
+          }
+          END { if (inblk && blk ~ /SessionKeepAliveService"/) printf "%s", blk }' "$RUNNER_TEMP/manifest-rel.txt" > "$RUNNER_TEMP/keepalive-service.txt"
+          sed 's/^ *//' "$RUNNER_TEMP/keepalive-service.txt"
+          grep -qF 'captantan.SessionKeepAliveService"' "$RUNNER_TEMP/keepalive-service.txt" || fail "the merged manifest has no service captantan.SessionKeepAliveService"
+          grep -qE 'exported\(0x01010010\)=(\(type 0x12\)0x0|false)$' "$RUNNER_TEMP/keepalive-service.txt" || fail "the keep-alive service is exported"
+          fgs=$(sed -nE 's/.*foregroundServiceType\(0x01010599\)=(\(type 0x11\))?(0x[0-9a-fA-F]+|[0-9]+).*/\2/p' "$RUNNER_TEMP/keepalive-service.txt")
+          [ -n "$fgs" ] || fail "the keep-alive service has no foregroundServiceType"
+          [ $(( fgs & 0x400000c0 )) -eq $(( 0x400000c0 )) ] || fail "the keep-alive service's types are $fgs, not specialUse|microphone|camera"
+          grep -qF 'android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE' "$RUNNER_TEMP/keepalive-service.txt" || fail "the keep-alive service has no specialUse subtype property"
+          for p in FOREGROUND_SERVICE FOREGROUND_SERVICE_SPECIAL_USE FOREGROUND_SERVICE_MICROPHONE FOREGROUND_SERVICE_CAMERA POST_NOTIFICATIONS RECORD_AUDIO CAMERA; do
+            grep -qF "\"android.permission.$p\"" "$RUNNER_TEMP/manifest-rel.txt" || fail "the merged manifest lacks the permission $p"
+          done
+          grep -qF 'captantan.SessionOpenActivity"' "$RUNNER_TEMP/manifest-rel.txt" || fail "the merged manifest has no activity captantan.SessionOpenActivity"
+          echo "background sessions: keep-alive service with types $fgs (specialUse|microphone|camera), its permissions and the tap activity present"
 
           echo "== preview badging"
           "$AAPT" dump badging "$PRE" > "$RUNNER_TEMP/preview-badging.txt"
