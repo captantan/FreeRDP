@@ -390,9 +390,18 @@ public final class SessionWindow
 			return;
 		bound = false;
 
-		// Releases modifier keys held on the key bar while the session can still be told.
-		if (sessionGoesOn && !destroyed)
-			input.hideKeyboards();
+		if (sessionGoesOn)
+		{
+			// While the session can still be told: release what a physical keyboard holds down on
+			// it (captantan/PhysicalKeyboard; usually done already, when the window lost focus)
+			// and the modifiers toggled on the key bar. Nothing may stay down on a session that
+			// this window no longer shows.
+			input.releasePhysicalKeys("the window let go of the session");
+			if (!destroyed)
+				input.hideKeyboards();
+		}
+		// Also makes PhysicalKeyboard forget its keys: from here on it has nothing it could send
+		// to this instance, which may be freed once its session has ended.
 		input.cancelPendingEvents();
 		input.attachSession(0, null);
 

@@ -72,9 +72,13 @@ public class KeyboardAccessibilityService extends AccessibilityService
 		/* Some tablets map the physical ESC key to KEYCODE_BACK (scancode 1).*/
 		if (event.getScanCode() == 1 && event.getKeyCode() != KeyEvent.KEYCODE_ESCAPE)
 		{
+			// captantan fork: keep the device, scan code, flags and source, so the key is still
+			// one of a physical keyboard (captantan/PhysicalKeyboard)
 			event =
 			    new KeyEvent(event.getDownTime(), event.getEventTime(), event.getAction(),
-			                 KeyEvent.KEYCODE_ESCAPE, event.getRepeatCount(), event.getMetaState());
+			                 KeyEvent.KEYCODE_ESCAPE, event.getRepeatCount(), event.getMetaState(),
+			                 event.getDeviceId(), event.getScanCode(), event.getFlags(),
+			                 event.getSource());
 		}
 
 		boolean handled = session.handleKeyEvent(event);

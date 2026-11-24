@@ -300,6 +300,13 @@ session. Two rules: a session is shown in at most one window, and a window shows
   (`onWindowFocusChanged`), not the one that was resumed last. `SessionActivity.activeSession` is gone.
   While a dialog of ours has focus (credentials, certificate, the Back question) no session window has
   it, so a physical keyboard types into the dialog.
+- **Held keys** (with package 5.1). When a window lets go of a session that goes on (a switch, "Leave
+  running", the window closing), the keys a physical keyboard holds down on it are released there first:
+  `SessionInputManager.releasePhysicalKeys` (edited, one small method) calls
+  `PhysicalKeyboard.releaseAll`, then `cancelPendingEvents` makes `PhysicalKeyboard` forget them. So a
+  `PhysicalKeyboard` never holds keys for a session its window does not show, and nothing is sent to an
+  instance after its window let go of it. Usually the release has already happened, because the window
+  lost focus first.
 - **Painting.** The bitmap is kept current whether or not a window shows the session, because the native
   frame can only be read safely on the session thread (`SessionHost`'s class comment). A session with no
   window, or whose window is not visible, posts nothing to the UI thread and invalidates nothing.
@@ -436,6 +443,147 @@ upstream theme or layout file is edited.
   resources and the AndroidX libraries it needs, unshrunk because upstream's release build has
   `minifyEnabled false`). Native libraries are unchanged.
 
+**Physical keyboard: real key down and key up** (package 5.1)
+
+Upstream sends a key of a physical keyboard as an instant press and release when Android reports the key
+down, wrapped in whichever modifiers Android reports, and ignores the key up. Nothing can be held: no
+Ctrl+click, no Shift+click, no Alt+Tab cycling, no repeat on the remote side, and Ctrl, Shift and Alt alone
+send nothing. The fork sends such a key as an RDP scan code: down when it goes down, up when it goes up,
+Android's repeats as repeats, and the modifiers as the keys they are.
+
+- `freeRDPCore/.../captantan/PhysicalKeyboard.java` (new): one per `SessionInputManager`. It is handed every
+  key event of the session before `KeyboardMapper`, and answers "not ours" (upstream's path carries on),
+  "handled", or "refused" (reported unhandled, so the key goes to whichever window has focus).
+- `freeRDPCore/src/main/cpp/captantan_keyboard.c`, `.h` (new): the Linux key code to RDP scan code mapping,
+  one event type for upstream's input queue (so the session thread sends it, in order with everything else)
+  and the four natives of `PhysicalKeyboard`. The natives belong to that class, not to `LibFreeRDP`, and are
+  found by name; `LibFreeRDP.java` and `android_freerdp.c` are not edited.
+- `SessionInputManager.java` (edited): the field and its construction, the hook at the top of
+  `onAndroidKeyEvent`, and `forget()` in `cancelPendingEvents` (the session failed or ended). That method
+  is where the window's key events (`SessionActivity.onKeyDown`, `onKeyUp`) and the accessibility service's
+  (`SessionActivity.handleKeyEvent`) meet, so one hook covers both.
+- `android_event.c` (edited): an include, a case in `android_process_event` and one in
+  `android_event_free`. `cpp/CMakeLists.txt` (edited): the two new files.
+- `KeyboardAccessibilityService.java` (edited, one statement): where it turns a physical Escape that the
+  device reports as Back into an Escape event, the new event keeps the device, scan code, flags and
+  source, so it is still a physical key. Its repeat code is not edited (below).
+- `KeyboardMapper.java`, `SessionActivity.java`, `LibFreeRDP.java`: not edited.
+
+**Which key events take the new path.** `ACTION_DOWN` and `ACTION_UP` whose device is a real one (not
+the virtual keyboard, device ID -1, which the on-screen keyboard, `adb shell input` and other injected
+events use; not `InputDevice.isVirtual()`), whose source has the keyboard class and is not a game
+controller, and that are not Android's own fallback events. The kind of connection does not matter: USB,
+Bluetooth, a dock and a keyboard cover are the same, and a device need not be alphabetic (a numeric keypad
+counts). Left to Android whatever the device: the keys `KeyEvent.isSystem()` names (volume, mute, media,
+brightness, search, Home, Back, power, ...) except Menu, and app switch, all apps, assist, notification,
+sleep and wake. Back with scan code 1 is Escape (some devices report Escape as Back). A key with no RDP
+scan code stays on upstream's path.
+
+**The scan code.** `KeyEvent.getScanCode()` is the Linux (evdev) key code, which names the key's position.
+`captantan_keyboard.c` maps it as the Wayland client does: WinPR's evdev table
+(`GetVirtualKeyCodeFromKeycode(..., WINPR_KEYCODE_TYPE_EVDEV)`), then
+`GetVirtualScanCodeFromVirtualKeyCode(..., WINPR_KBD_TYPE_IBM_ENHANCED)`. The remote machine's layout then
+decides the character, as with a desktop client. Twelve keys WinPR's table lacks or maps to a virtual key
+without a scan code come from a table of ours first (`captantan_keyboard_override`): the Menu key
+(`KEY_COMPOSE`), keypad `=`, the JIS keys (Yen, Henkan, Muhenkan, Katakana/Hiragana, Katakana, Hiragana,
+Zenkaku/Hankaku, keypad comma) and the Korean ones (Hangul, Hanja). The ISO extra key, Ro (also the ABNT
+`/`) and the ABNT keypad `.` come from WinPR. An event with no scan code, or one that has no RDP scan
+code, falls back to the key its Android key code names on a US keyboard (`EVDEV_BY_KEYCODE`). For Ctrl,
+Shift, Alt, Meta and Caps Lock, Android's key code wins over the position when the two disagree, so
+Android's "modifier keys" setting is honoured. Pause is sent as its sequence
+(`freerdp_input_send_keyboard_pause_event`) when it goes down, and as Break (an ordinary key) when a Ctrl
+is held, as the X11 client does.
+
+**Modifiers and lock keys.** Ctrl, Shift, Alt (the right one is AltGr on the remote side) and Meta, left
+and right, are ordinary keys. Caps Lock, Num Lock and Scroll Lock are sent as keys too, and the lock
+states Android reports are sent with the first physical key after the session's window gains focus
+(`freerdp_input_send_focus_in_event`, what the other clients send on focus; Android has no call to read
+the states without a key event) and again whenever Android's states differ from what the server was last
+told (`freerdp_input_send_synchronize_event`). The server reads either as "all keys up", so the held
+modifiers (physical and on-screen) are pressed again after it.
+
+**What is down, and when it is released.** `PhysicalKeyboard` keeps, per session, each key it sent down
+(device and key, to the scan code sent). A key up is sent only for a key in that table. Everything in it
+is released on the server when the window loses focus (a dialog, a menu, another window, another app),
+when the view leaves its window, when the window lets go of the session (package 2.1: `SessionWindow`
+calls `SessionInputManager.releasePhysicalKeys`; a key event for another session would also do it), and
+for one device when it is removed; other keys first, then modifiers. When Alt or the Windows key is among them and no Ctrl is held, a
+Ctrl press and release is sent first, so that the forced release does not open the menu bar or the Start
+menu. The same Ctrl press goes in front of an Alt or Windows key up that Android marks as cancelled
+(`KeyEvent.isCanceled()`): that is Android taking the key away because it kept the rest of a shortcut for
+itself, not the user letting go. A held key is not pressed again when focus returns. Nothing is sent to a session that has been freed
+(`GlobalApp.getSession(instance)` is null).
+
+**The setting.** Upstream already has it: "Use Android keyboard layout" under Settings, User interface
+(`ui.physical_keyboard_device_layout`, off by default). Off, physical keys take the new path. On, they
+take upstream's path with Android choosing the characters, exactly as upstream with the setting on. No
+setting was added. What is gone is upstream's behaviour with the setting off (the instant press and
+release by key position).
+
+**On-screen keyboards.** The system keyboard, the extended keyboards and their modifier buttons are
+untouched: their events come from the virtual keyboard device or do not pass `onAndroidKeyEvent` at all.
+A tapped on-screen modifier is down on the server already, so a physical key pressed next is combined
+with it; it is released when that physical key comes up (not when it goes down, so repeats keep the
+modifier), as it is after an on-screen key. A locked one stays.
+
+**The accessibility service.** Its keys take the same path, since `handleKeyEvent` ends in the same
+method. It repeats a held key itself, because a key it consumes never reaches the dispatcher that would;
+its repeats are `ACTION_DOWN` with a repeat count, device and scan code kept, so they are sent as RDP
+repeats, and a key is repeated either by Android or by the service, never both. One change in behaviour:
+upstream's service handed over keys whichever window had focus, and upstream sent them to the session
+even while a dialog of the app or another app's window had it. Since package 2.1 the service hands keys
+only to the session window that has input focus (`SessionRegistry.getFocusedActivity()`), and a
+physical key on the new path is refused anyway while the session's window does not have focus, so it
+goes where the focus is.
+
+**Logging.** Tag `captantan.keys`. Always, at INFO: each keyboard device when it first sends a key (name,
+IDs, sources), lock states sent, and each release of held keys with its reason. One line per key
+transition (`key down|repeat|up scan=<evdev> keycode=<android> rdp=0x<code> extended=<0|1> device=<id>
+flags=0x<KeyEvent flags>`), and one for each key of a real device that was refused or not taken, with the
+reason, is written at INFO only while the tag is switched to DEBUG, because it is everything that is typed:
+
+```bash
+adb shell setprop log.tag.captantan.keys DEBUG
+```
+
+```bash
+adb logcat -s captantan.keys
+```
+
+Set it back to `INFO` afterwards (it also resets when the device restarts). Beside
+`adb shell getevent -l`, one `EV_KEY ... DOWN` and one `UP` of the kernel should give one `key down` and
+one `key up` line. `getevent -lt` stamps its lines with the monotonic clock, not the time of day: line the
+two captures up on one key that is in both.
+
+**Measured on a device on 2026-11-24** (an Android 17 phone, two keyboards, a Windows host; `getevent`
+beside the key lines, two runs):
+
+- Every key that reached the app gave one `key down` and one `key up` line, about 20 ms after the kernel's
+  event, and a held key repeated on the remote side at Android's rate (once, also with the accessibility
+  service on). No key was left down. In the second run all 30 key presses the kernel saw are accounted for:
+  22 sent, 6 refused, 2 that are not keys (below).
+- **Accessibility service off:** Android keeps some keys, and they never reach the app (package 5.2): Tab
+  while Alt is held, and the Meta key. With Alt+Tab the app does get Alt down and its repeats, then an Alt
+  up at the moment Tab goes down (Android's, not the user's), so the remote side sees Alt pressed and
+  released alone. The cancelled-key rule above is for that case; whether Android flags that key up as
+  cancelled is not confirmed (the `flags=` field of the key line shows it; it was added after that run).
+- **Accessibility service on:** Alt held with Tab pressed three times, and the Meta key alone, arrive as
+  ordinary keys and work on the remote side (the switcher cycles, the Start menu opens). A key that is
+  not taken is then seen twice, once from the service and once from the window; both are left alone.
+- Ctrl+click and Shift+click work: the modifier is down on the server when the click arrives.
+- A key pressed while the notification shade has focus is refused (`key down refused`) and does not reach
+  the remote side, with the service on.
+- Unplugging a keyboard with a key held: the kernel itself sends the key up when the device goes, Android
+  passes it on, and it is sent like any other. The device listener is a second line of defence. After
+  plugging it in again (a new device ID) keys are taken as before.
+- A keyboard that also has a pointer reports sources beyond the keyboard class (mouse, joystick) for the
+  device, and one keyboard was reported as not alphabetic by `InputDevice.getKeyboardType()` on its first
+  key and as alphabetic later. Its key events carry the plain keyboard source. That is why the test looks
+  at the event's source and does not ask for an alphabetic device. One keyboard's pointer button also
+  sends a key event with scan code 240 and key code 0: it has no RDP scan code and is not taken.
+- Not measured: a GNOME Remote Desktop host, function keys, Menu, Print Screen, Pause, Escape, the JIS,
+  Korean and ABNT keys, Num Lock and Scroll Lock, and the setting "Use Android keyboard layout" on.
+
 ## Package and version scheme
 
 - `versionName = <upstream release>-captantan.<R>`, for example `3.33.1-captantan.1`.
@@ -544,11 +692,37 @@ compile check runs on the merge.
      in `DisconnectTask`. Upstream's `registerSessionListener` / `dispatch` (connection events posted to
      the UI thread, one listener per instance) is what `SessionHost` listens with: if upstream changes
      it, fix `SessionHost.connect`.
-   - `SessionInputManager.java`, `SessionView.java`, `SessionDialogs.java`, `TouchPointerView.java`: not
-     edited, but `SessionWindow` uses their public methods (`attachSession(0, null)` to cut the input
-     off, `setBitmap`, `cancelPendingEvents`, `hideKeyboards`, `onSurfaceChange`, `addInvalidRegion`,
+   - `SessionInputManager.java` (package 2.1): keep `releasePhysicalKeys`, which `SessionWindow` calls
+     before it cuts a session's input off. `SessionWindow` also relies on `cancelPendingEvents` making
+     `PhysicalKeyboard` forget its keys (5.1's `forget()` there): together they are why no key event can
+     reach an instance after its window let go of it. See the keyboard files below.
+   - `SessionInputManager.java`, `SessionView.java`, `SessionDialogs.java`, `TouchPointerView.java`:
+     `SessionWindow` uses their public methods (`attachSession(0, null)` to cut the input off,
+     `setBitmap`, `cancelPendingEvents`, `hideKeyboards`, `onSurfaceChange`, `addInvalidRegion`,
      `invalidateRegion`, `setDefaultCursor`, `setRemoteCursor`, `showProgress`, `dismissProgress`). The
      compile check catches a changed signature; a changed meaning needs a look.
+   - The keyboard files (package 5.1; upstream changed them twice in early November 2026):
+     - `SessionInputManager.java`: keep the `physicalKeyboard` field, its construction after
+       `keyboardMapper.init`, the hook at the top of `onAndroidKeyEvent` (after the `instance == 0` check,
+       before the mapper) and `physicalKeyboard.forget()` in `cancelPendingEvents`. If upstream adds another
+       way for a key event to reach the mapper, the hook has to be in front of that too.
+     - `KeyboardMapper.java` is not edited, but `PhysicalKeyboard` leans on it: `getModifierState`,
+       `processCustomKeyEvent`, `KEYSTATE_ON`, `KEYSTATE_LOCKED`, the four `R.integer.keycode_toggle_*`,
+       and `ApplicationSettingsActivity.getPhysicalKeyboardDeviceLayout`. If upstream changes the sticky
+       modifiers or the setting, fix `PhysicalKeyboard`. If upstream sends real key down and key up for
+       physical keyboards itself (`processAndroidKeyEvent` acting on `ACTION_UP` for more than Meta is
+       the sign), prefer upstream's, drop `PhysicalKeyboard` and its hooks, and update this file.
+     - `KeyboardAccessibilityService.java`: keep the ten-argument `KeyEvent` in the Escape rewrite. Its
+       repeat code must keep handing over `ACTION_DOWN` events with a repeat count and the original
+       device and scan code (`KeyEvent.changeTimeRepeat`); if upstream changes that, check that a held
+       key still repeats once.
+     - `android_event.c`: keep the include of `captantan_keyboard.h`, the case in
+       `android_process_event` and the case in `android_event_free`. `captantan_keyboard.c` relies on
+       `android_push_event`, on `type` being the first field of an event, and on the queue being
+       emptied on the session thread. `cpp/CMakeLists.txt`: keep the two source lines.
+     - `winpr/libwinpr/input/keycode.c` (`KEYCODE_TO_VKCODE_EVDEV`) is where the positions come from. If
+       upstream fills one of the twelve gaps, the entry in `captantan_keyboard_override` only repeats it.
+       `GetVirtualKeyCodeFromKeycode` asserts that an entry is not 0: the table has none at 3.33.1.
    - `LibFreeRDP.java`: besides the removed `/cert:ignore`, keep the `NativeSessionThreads` calls in
      `connect`, `freeInstance`, `OnConnectionFailure` and `OnDisconnected` together; one missing makes
      `freeInstance` free a running session or never free one. If upstream starts waiting for connecting
@@ -601,9 +775,11 @@ The workflow `.github/workflows/captantan-android.yml` runs on pull requests int
   has the package 1.4 classes (`ConnectionPrefs`, `GraphicsMode`, `ConnectionOptions`, its `Draft`,
   `ConnectionOptionsFragment`) and the three `/gfx` arguments, and the resources have
   `xml/captantan_connection_options`; every configuration of `Theme.Main` has the parent
-  `Theme.Captantan`, and the dex has Material's `MaterialAlertDialogBuilder`; the dex has the package 2.1
-  classes (`SessionHost`, `SessionRegistry`, `SessionWindow`), and no activity in the manifest has
-  `documentLaunchMode`;
+  `Theme.Captantan`, and the dex has Material's `MaterialAlertDialogBuilder`; the dex has
+  `captantan/PhysicalKeyboard` with its four native methods and `libfreerdp-android.so` exports a function
+  for each (package 5.1: they are found by name at run time, so a misnamed one would compile and fail at
+  the first key); the dex has the package 2.1 classes (`SessionHost`, `SessionRegistry`,
+  `SessionWindow`), and no activity in the manifest has `documentLaunchMode`;
 - test build: package `dev.captantan.freerdp.debug`, label `RDP debug`, the same version, signed with the
   committed public key, and byte-identical native libraries to the release APK.
 
