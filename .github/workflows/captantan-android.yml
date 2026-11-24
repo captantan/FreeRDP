@@ -121,6 +121,23 @@ jobs:
           [ -x "$AAPT" ] || AAPT="$BT/aapt2"
           APP_ID=$(sed -n 's/^ *applicationId "\(.*\)"$/\1/p' aFreeRDP/build.gradle)
           [ -n "$APP_ID" ] || fail "no applicationId in aFreeRDP/build.gradle"
+          # Identity (roadmap 1.2): the fork's package name never changes, the label is "RDP", and
+          # the version is the one in release.properties (the scheme is in CAPTANTAN.md).
+          [ "$APP_ID" = "dev.captantan.freerdp" ] || fail "applicationId is $APP_ID, not dev.captantan.freerdp"
+          VN=$(sed -n 's/^VERSION_NAME=//p' release.properties)
+          VC=$(sed -n 's/^VERSION_CODE=//p' release.properties)
+          [ -n "$VN" ] && [ -n "$VC" ] || fail "VERSION_NAME or VERSION_CODE is missing from release.properties"
+          echo "expected: package $APP_ID, versionName $VN, versionCode $VC, label RDP"
+          # Every package-name-dependent identifier in the merged manifest must follow the package.
+          check_manifest() {
+            apk="$1"; pkg="$2"
+            if [ "$(basename "$AAPT")" = aapt ]; then "$AAPT" dump xmltree "$apk" AndroidManifest.xml > "$RUNNER_TEMP/manifest.txt"
+            else "$AAPT" dump xmltree --file AndroidManifest.xml "$apk" > "$RUNNER_TEMP/manifest.txt"; fi
+            grep -F "authorities" "$RUNNER_TEMP/manifest.txt" | sed 's/^ *//'
+            grep -qF "\"$pkg.clipboard\"" "$RUNNER_TEMP/manifest.txt" || fail "no clipboard provider authority $pkg.clipboard in $apk"
+            grep -qF "\"$pkg.fileprovider\"" "$RUNNER_TEMP/manifest.txt" || fail "no file provider authority $pkg.fileprovider in $apk"
+            if grep -F "authorities" "$RUNNER_TEMP/manifest.txt" | grep -qE '"com\.freerdp\.[a-z.]*"'; then fail "a provider authority is still under com.freerdp in $apk"; fi
+          }
 
           mapfile -t rel < <(find aFreeRDP/build/outputs/apk/release -name '*.apk')
           [ "${#rel[@]}" -eq 1 ] || fail "expected one release APK, found: ${rel[*]:-none}"
@@ -135,6 +152,9 @@ jobs:
           "$AAPT" dump badging "$REL" > "$RUNNER_TEMP/release-badging.txt"
           grep -E "^(package|sdkVersion|targetSdkVersion|application-label:|native-code|alt-native-code)" "$RUNNER_TEMP/release-badging.txt" | tee "$RUNNER_TEMP/release-badging-short.txt"
           grep -q "^package: name='$APP_ID' " "$RUNNER_TEMP/release-badging.txt" || fail "release package is not $APP_ID"
+          grep -qF "package: name='$APP_ID' versionCode='$VC' versionName='$VN'" "$RUNNER_TEMP/release-badging.txt" || fail "release version is not $VN / $VC"
+          grep -q "^application-label:'RDP'$" "$RUNNER_TEMP/release-badging.txt" || fail "release label is not 'RDP'"
+          check_manifest "$REL" "$APP_ID"
           unzip -l "$REL" | awk '{print $4}' | grep '^lib/' | sort > "$RUNNER_TEMP/release-libs.txt"
           cat "$RUNNER_TEMP/release-libs.txt"
           [ "$(grep -E '^(alt-)?native-code' "$RUNNER_TEMP/release-badging.txt")" = "native-code: 'arm64-v8a'" ] || fail "release native code is not arm64-v8a only"
@@ -156,7 +176,9 @@ jobs:
           "$AAPT" dump badging "$PRE" > "$RUNNER_TEMP/preview-badging.txt"
           grep -E "^(package|sdkVersion|targetSdkVersion|application-label:|native-code|alt-native-code)" "$RUNNER_TEMP/preview-badging.txt" | tee "$RUNNER_TEMP/preview-badging-short.txt"
           grep -q "^package: name='$APP_ID.debug' " "$RUNNER_TEMP/preview-badging.txt" || fail "preview package is not $APP_ID.debug"
+          grep -qF "package: name='$APP_ID.debug' versionCode='$VC' versionName='$VN'" "$RUNNER_TEMP/preview-badging.txt" || fail "preview version is not $VN / $VC"
           grep -q "^application-label:'RDP debug'$" "$RUNNER_TEMP/preview-badging.txt" || fail "preview label is not 'RDP debug'"
+          check_manifest "$PRE" "$APP_ID.debug"
           [ "$(grep -E '^(alt-)?native-code' "$RUNNER_TEMP/preview-badging.txt")" = "native-code: 'arm64-v8a'" ] || fail "preview native code is not arm64-v8a only"
           "$BT/apksigner" verify --print-certs -v "$PRE" | tee "$RUNNER_TEMP/preview-signature.txt"
           want=$(openssl pkcs12 -in aFreeRDP/preview-key/preview.p12 -passin pass:android -nokeys \

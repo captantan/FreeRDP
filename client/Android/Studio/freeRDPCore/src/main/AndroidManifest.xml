@@ -108,9 +108,11 @@
             android:theme="@android:style/Theme.Translucent.NoTitleBar"
             android:excludeFromRecents="true" />
 
+        <!-- captantan fork: the authority follows the application ID (was the constant
+             com.freerdp.freerdpcore.clipboard); ClipboardImageProvider.getAuthority() must agree -->
         <provider
             android:name=".utils.ClipboardImageProvider"
-            android:authorities="com.freerdp.freerdpcore.clipboard"
+            android:authorities="${applicationId}.clipboard"
             android:exported="false"
             android:grantUriPermissions="true" />
 
