@@ -430,8 +430,8 @@ compile check runs on the merge.
      carry what is still needed into `aFreeRDP/src/main/res/values/captantan_theme.xml`, and an item added
      to `Theme.Main.Session` applies on top of ours. If upstream defines `Theme.Main` in a new
      configuration (say `values-v35/theme.xml`), add `Theme.Main` with parent `Theme.Captantan` to the app
-     module in that configuration too; the compile check fails until then (it expects exactly the default
-     and night configurations).
+     module in that configuration too; the compile check fails until then (it wants `Theme.Captantan` as
+     the parent of `Theme.Main` in every configuration).
    - `release.properties` and everything else that is ours only: never conflicts.
 5. **Repeat the identifier search**; look at anything new that must follow the application ID:
    `git grep -n -E 'authorities|sharedUserId|accountType|<permission|targetPackage|taskAffinity|"com\.freerdp\.[a-z.]*"' -- client/Android`
@@ -456,8 +456,8 @@ The workflow `.github/workflows/captantan-android.yml` runs on pull requests int
   `libmediandk.so` and `libopenh264.so` and contains the two H.264 log lines of package 1.3, and the dex
   has the package 1.4 classes (`ConnectionPrefs`, `GraphicsMode`, `ConnectionOptions`, its `Draft`,
   `ConnectionOptionsFragment`) and the three `/gfx` arguments, and the resources have
-  `xml/captantan_connection_options`; `Theme.Main` has exactly two configurations (default and night),
-  each with the parent `Theme.Captantan`, and the dex has Material's `MaterialAlertDialogBuilder`;
+  `xml/captantan_connection_options`; every configuration of `Theme.Main` has the parent
+  `Theme.Captantan`, and the dex has Material's `MaterialAlertDialogBuilder`;
 - test build: package `dev.captantan.freerdp.debug`, label `RDP debug`, the same version, signed with the
   committed public key, and byte-identical native libraries to the release APK.
 
