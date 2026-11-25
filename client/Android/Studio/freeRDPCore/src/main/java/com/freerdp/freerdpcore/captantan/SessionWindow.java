@@ -606,6 +606,7 @@ public final class SessionWindow
 	public void onStart()
 	{
 		started = true;
+		resizer.onStart();
 		if (host != null)
 		{
 			host.setPainting(true);
@@ -618,6 +619,7 @@ public final class SessionWindow
 	public void onStop()
 	{
 		started = false;
+		resizer.onStop();
 		if (host != null)
 			host.setPainting(false);
 	}

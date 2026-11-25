@@ -113,6 +113,8 @@ public final class SessionResizeController implements DisplayControl.Listener
 	private int viewportWidth;
 	private int viewportHeight;
 	private boolean settlePending = false;
+	/** Between the activity's onStart and onStop. */
+	private boolean started = false;
 
 	private Configuration lastConfig;
 	private int lastDisplayId = Display.INVALID_DISPLAY;
@@ -226,9 +228,36 @@ public final class SessionResizeController implements DisplayControl.Listener
 		               viewportHeight + ", " + cause + ")");
 		viewportWidth = w;
 		viewportHeight = h;
+		// The picture is centred again in the new space (upstream's ScrollView2D keeps the old
+		// top while the picture's height stays, which is right for the keyboard only). Posted:
+		// this runs inside the root's layout pass.
+		if (scrollView != null)
+			scrollView.post(scrollView::recenter);
+		restartWait();
+	}
+
+	private void restartWait()
+	{
 		handler.removeCallbacks(settle);
 		settlePending = true;
 		handler.postDelayed(settle, SETTLE_MS);
+	}
+
+	/**
+	 * The window became visible. A window that nobody sees asks for nothing (a fold stops the
+	 * window and changes its insets well before the new configuration arrives), so the wait starts
+	 * again here: the viewport of the new configuration usually follows within a frame.
+	 */
+	void onStart()
+	{
+		started = true;
+		if (host != null)
+			restartWait();
+	}
+
+	void onStop()
+	{
+		started = false;
 	}
 
 	/**
@@ -352,6 +381,12 @@ public final class SessionResizeController implements DisplayControl.Listener
 		final SessionHost h = host;
 		if (h == null || h.getPhase() != SessionHost.Phase.CONNECTED)
 			return;
+		if (!started)
+		{
+			Log.i(TAG, "no request from " + windowName + " while it is not visible (" + why +
+			               "); asked again when it is");
+			return;
+		}
 		if (!follows(h))
 		{
 			if (!fixedLogged)
