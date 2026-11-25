@@ -62,12 +62,13 @@
         <item>32</item>
     </string-array>
     <string name="settings_resolution">Resolution</string>
-    <string name="resolution_automatic">Automatic</string>
-    <string name="resolution_fit">Fit screen</string>
+    <!-- captantan fork: both follow the window live (roadmap 3.2); a fixed size does not -->
+    <string name="resolution_automatic">Automatic (follows the window)</string>
+    <string name="resolution_fit">Fit screen (follows the window)</string>
     <string name="resolution_custom">Custom</string>
     <string-array name="resolutions_array">
-        <item>Automatic</item>
-        <item>Fit Screen</item>
+        <item>@string/resolution_automatic</item> <!-- captantan fork: was Automatic -->
+        <item>@string/resolution_fit</item> <!-- captantan fork: was Fit Screen -->
         <item>Custom</item>
         <item>640x480</item>
         <item>720x480</item>

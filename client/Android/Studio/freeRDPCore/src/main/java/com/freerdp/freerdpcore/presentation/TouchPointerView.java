@@ -249,6 +249,19 @@ public class TouchPointerView extends FrameLayout
 		});
 	}
 
+	// captantan fork: the session window is no longer recreated when light and dark change, so the
+	// cluster is inflated again to take the new colours, where it was (the window replays the cursor)
+	public void rebuild()
+	{
+		cancelHeldGestures();
+		final float tx = (cluster != null) ? cluster.getTranslationX() : 0;
+		final float ty = (cluster != null) ? cluster.getTranslationY() : 0;
+		removeAllViews();
+		initTouchPointer(getContext());
+		cluster.setTranslationX(tx);
+		cluster.setTranslationY(ty);
+	}
+
 	public void setTouchPointerListener(TouchPointerListener listener)
 	{
 		this.listener = listener;

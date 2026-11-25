@@ -649,8 +649,19 @@ public final class SessionHost implements LibFreeRDP.UIEventListener, GlobalApp.
 
 	private void newSurface(int width, int height, int bpp)
 	{
-		final Bitmap b = Bitmap.createBitmap(
-		    width, height, (bpp > 16) ? Bitmap.Config.ARGB_8888 : Bitmap.Config.RGB_565);
+		final Bitmap.Config config = (bpp > 16) ? Bitmap.Config.ARGB_8888 : Bitmap.Config.RGB_565;
+		final Bitmap old = bitmap;
+		if (old != null && old.getWidth() == width && old.getHeight() == height &&
+		    old.getConfig() == config)
+		{
+			// The server confirmed the size the bitmap already has (each connect reports it
+			// three times, and a reconnect or a skipped layout again): keep it. The next
+			// updates repaint it. Package 3.2; 3.1 measured about 18 MB per allocation.
+			Log.i(TAG, "session size: " + this + " " + width + "x" + height + " " + bpp +
+			               " bpp (unchanged, bitmap kept)");
+			return;
+		}
+		final Bitmap b = Bitmap.createBitmap(width, height, config);
 		state.setSurface(new BitmapDrawable(context.getResources(), b));
 		bitmap = b;
 		Log.i(TAG, "session size: " + this + " " + width + "x" + height + " " + bpp + " bpp");

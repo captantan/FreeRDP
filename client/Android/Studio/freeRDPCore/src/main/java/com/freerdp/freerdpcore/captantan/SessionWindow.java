@@ -7,6 +7,7 @@
 package com.freerdp.freerdpcore.captantan;
 
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.graphics.drawable.BitmapDrawable;
@@ -26,6 +27,7 @@ import com.freerdp.freerdpcore.R;
 import com.freerdp.freerdpcore.application.SessionState;
 import com.freerdp.freerdpcore.domain.BookmarkBase;
 import com.freerdp.freerdpcore.domain.ConnectionReference;
+import com.freerdp.freerdpcore.presentation.ExtendedKeyboardView;
 import com.freerdp.freerdpcore.presentation.ScrollView2D;
 import com.freerdp.freerdpcore.presentation.SessionActivity;
 import com.freerdp.freerdpcore.presentation.SessionDialogs;
@@ -124,6 +126,10 @@ public final class SessionWindow
 	private final SessionView sessionView;
 	private final ScrollView2D scrollView;
 	private final TouchPointerView touchPointerView;
+	/** Keeps the remote desktop the size of this window's viewport (package 3.2). */
+	private final SessionResizeController resizer;
+	/** The configuration's night bits the views were built with. */
+	private int night;
 
 	/** The session this window shows, or null. */
 	private SessionHost host;
@@ -151,6 +157,9 @@ public final class SessionWindow
 		this.sessionView = activity.findViewById(R.id.sessionView);
 		this.scrollView = activity.findViewById(R.id.sessionScrollView);
 		this.touchPointerView = activity.findViewById(R.id.touchPointerView);
+		this.resizer = new SessionResizeController(activity, name);
+		this.night = activity.getResources().getConfiguration().uiMode &
+		             Configuration.UI_MODE_NIGHT_MASK;
 
 		final Intent shown = (savedInstanceState != null)
 		                         ? savedInstanceState.getParcelable(STATE_SHOWN)
@@ -179,6 +188,12 @@ public final class SessionWindow
 	public SessionActivity getActivity()
 	{
 		return activity;
+	}
+
+	/** The window's resize controller: its viewport, and the hooks the activity calls into. */
+	public SessionResizeController getResizer()
+	{
+		return resizer;
 	}
 
 	/** The session this window shows, or null. */
@@ -460,6 +475,8 @@ public final class SessionWindow
 		ports.connected();
 		host.replayPointer(activity);
 		sessionView.invalidate();
+		// The session is resized to this window's viewport if it differs (package 3.2).
+		resizer.onBound(host);
 	}
 
 	/**
@@ -480,6 +497,7 @@ public final class SessionWindow
 		if (!bound)
 			return;
 		bound = false;
+		resizer.onUnbound();
 
 		if (sessionGoesOn)
 		{
@@ -539,6 +557,7 @@ public final class SessionWindow
 			return;
 		input.setBitmap(from.getBitmap());
 		sessionView.onSurfaceChange(from.getState());
+		resizer.onSurfaceChanged(from);
 		scrollView.requestLayout();
 		sessionView.invalidate();
 	}
@@ -587,6 +606,7 @@ public final class SessionWindow
 	public void onStart()
 	{
 		started = true;
+		resizer.onStart();
 		if (host != null)
 		{
 			host.setPainting(true);
@@ -599,6 +619,7 @@ public final class SessionWindow
 	public void onStop()
 	{
 		started = false;
+		resizer.onStop();
 		if (host != null)
 			host.setPainting(false);
 	}
@@ -611,6 +632,44 @@ public final class SessionWindow
 	{
 		if (host != null && host.isLive())
 			outState.putParcelable(STATE_SHOWN, SessionLauncher.intentFor(activity, host));
+	}
+
+	/**
+	 * Hook in onConfigurationChanged(), in place of upstream's resize for "Fit screen" (package
+	 * 3.2). The activity handles every change that comes with a new window size, display, density,
+	 * font scale or night mode itself (configChanges in the manifest), so it is not recreated
+	 * during a session. A change of window size resizes the session through the layout pass that
+	 * follows ({@link SessionResizeController}); here it is logged. A change between light and dark
+	 * makes the views that took their colours when they were built take them again.
+	 */
+	public void onConfigurationChanged(Configuration newConfig)
+	{
+		resizer.onConfigurationChanged(newConfig);
+		final int nightNow = newConfig.uiMode & Configuration.UI_MODE_NIGHT_MASK;
+		if (nightNow != night && !destroyed)
+		{
+			night = nightNow;
+			onUiModeChanged();
+		}
+	}
+
+	/**
+	 * Light or dark changed without a recreation. Dialogs and sheets made from now on take the
+	 * theme as it is; the views that exist are made to take it too: the theme is applied again
+	 * with the new configuration, and the key bar and the touch pointer, which read their colours
+	 * once when built, are built again (upstream classes, one marked method each).
+	 */
+	private void onUiModeChanged()
+	{
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+			activity.getTheme().rebase();
+		final View keyboard = activity.findViewById(R.id.extended_keyboard);
+		if (keyboard instanceof ExtendedKeyboardView)
+			((ExtendedKeyboardView)keyboard).rebuild(); // captantan fork method
+		touchPointerView.rebuild();                    // captantan fork method
+		if (host != null && bound)
+			host.replayPointer(activity);
+		Log.i(TAG, "ui mode changed in " + name + ": key bar and touch pointer rebuilt");
 	}
 
 	/** Hook in onWindowFocusChanged(). */
@@ -668,6 +727,7 @@ public final class SessionWindow
 		destroyed = true;
 		SessionSwitcher.closeFor(activity);
 		release("window closed");
+		resizer.onDestroy();
 		dropUnstarted();
 		SessionRegistry.setFocus(this, false);
 		Log.i(TAG, "window closed: " + name);

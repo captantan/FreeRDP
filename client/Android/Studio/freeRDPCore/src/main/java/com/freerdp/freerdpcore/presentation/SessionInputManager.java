@@ -629,6 +629,7 @@ public class SessionInputManager
 
 		@Override public boolean onScaleBegin(ScaleGestureDetector detector)
 		{
+			scaleFactor = sessionView.getZoom(); // captantan fork: the zoom may be reset elsewhere
 			scrollView.setScrollEnabled(false);
 			return true;
 		}

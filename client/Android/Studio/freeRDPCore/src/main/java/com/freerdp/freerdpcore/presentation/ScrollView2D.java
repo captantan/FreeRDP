@@ -1114,6 +1114,14 @@ public class ScrollView2D extends FrameLayout
 	private int lastCenterContentH = -1;
 	private int lastCenterTop = 0;
 
+	// captantan fork: the space the session is shown in changed (a new window size, not the
+	// keyboard): centre the content again on the next layout instead of keeping its old top
+	public void recenter()
+	{
+		lastCenterContentH = -1;
+		requestLayout();
+	}
+
 	@Override protected void onLayout(boolean changed, int l, int t, int r, int b)
 	{
 		super.onLayout(changed, l, t, r, b);
@@ -1143,6 +1151,9 @@ public class ScrollView2D extends FrameLayout
 			{
 				// viewport-only change (e.g. keyboard): keep position, don't re-center
 				top = lastCenterTop;
+				// captantan fork: but not below what is visible: the scroll range starts at the
+				// child's top, so a picture kept lower than that could not be scrolled into view
+				top = Math.min(top, getPaddingTop() + Math.max(0, usableH - contentH));
 			}
 			else
 			{

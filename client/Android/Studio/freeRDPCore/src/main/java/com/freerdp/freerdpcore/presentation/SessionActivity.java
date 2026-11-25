@@ -395,17 +395,9 @@ public class SessionActivity extends AppCompatActivity
 
 		hideSystemBars();
 
-		// screen_width/screen_height will be updated by the next onGlobalLayout callback;
-		if (session != null && session.getBookmark() != null &&
-		    session.getBookmark().getActiveScreenSettings().isFitScreen())
-		{
-			scrollView.post(() -> {
-				// captantan fork: session != null; the window may have let go of it by now
-				if (session != null && screen_width > 0 && screen_height > 0)
-					LibFreeRDP.sendMonitorLayout(session.getInstance(), screen_width,
-					                             screen_height);
-			});
-		}
+		// captantan fork: was a monitor layout for "Fit screen" bookmarks, posted here. The
+		// session's size now follows the laid-out viewport (captantan/SessionResizeController).
+		window.onConfigurationChanged(newConfig);
 	}
 
 	private WindowInsetsCompat onWindowInsetsChanged(View rootView, WindowInsetsCompat windowInsets)
@@ -418,6 +410,13 @@ public class SessionActivity extends AppCompatActivity
 		                    .getInsets(WindowInsetsCompat.Type.statusBars() |
 		                               WindowInsetsCompat.Type.displayCutout())
 		                    .top;
+		// captantan fork: a desktop window's caption bar lies over the top of the window
+		final int captionTop = windowInsets.getInsets(WindowInsetsCompat.Type.captionBar()).top;
+		if (captionTop > 0)
+		{
+			hideStatusBar = false;
+			insetsTop = Math.max(insetsTop, captionTop);
+		}
 		rootView.setPadding(0, hideStatusBar ? 0 : insetsTop, 0, 0);
 		Insets navInsets = hideNavBar
 		                       ? Insets.NONE
@@ -476,6 +475,11 @@ public class SessionActivity extends AppCompatActivity
 		int scrollBottom = kbdVisible ? 0 : Math.max(safeBottom, navInsets.bottom);
 		scrollView.setPadding(Math.max(safeLeft, navInsets.left), safeTop,
 		                      Math.max(safeRight, navInsets.right), scrollBottom);
+		// captantan fork: the viewport's insets, the same without the keyboards (not the IME)
+		if (window != null)
+			window.getResizer().setSystemInsets(
+			    Math.max(safeLeft, navInsets.left), rootView.getPaddingTop() + safeTop,
+			    Math.max(safeRight, navInsets.right), Math.max(safeBottom, navInsets.bottom));
 
 		// insets are consumed here, so lift the extended keyboard above the IME
 		if (extKeyboard != null)
@@ -588,6 +592,8 @@ public class SessionActivity extends AppCompatActivity
 			screenSettings.setHeight(screen_height);
 			screenSettings.setWidth(screen_width);
 		}
+		// captantan fork: connect at the size the session would be resized to (the viewport)
+		window.getResizer().prepareConnect(screenSettings);
 
 		// RECORD_AUDIO / CAMERA: only if the matching redirect is enabled.
 
