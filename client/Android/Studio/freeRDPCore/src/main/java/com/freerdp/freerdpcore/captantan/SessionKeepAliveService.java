@@ -122,9 +122,26 @@ public final class SessionKeepAliveService extends Service
 		Log.i(TAG, "notification: " + content.signature + " [types " + describeTypes(types) + "]");
 	}
 
-	/** Posts the notification again even if nothing in it changed (notifications allowed again). */
-	void repost()
+	/**
+	 * Posts the notification again if it is not in the shade although it could be: notifications
+	 * were refused or switched off and are allowed again, or the user swiped it away. Android
+	 * does not bring a foreground service's notification back by itself.
+	 */
+	void ensureShown()
 	{
+		if (!foreground ||
+		    !SessionNotifications.canNotify(this, SessionNotifications.CHANNEL_SESSIONS))
+			return;
+		final android.app.NotificationManager nm =
+		    getSystemService(android.app.NotificationManager.class);
+		if (nm == null)
+			return;
+		for (android.service.notification.StatusBarNotification sbn : nm.getActiveNotifications())
+		{
+			if (sbn.getId() == NOTIFICATION_ID && sbn.getTag() == null)
+				return;
+		}
+		Log.i(TAG, "notification: not in the shade although allowed; posting it again");
 		shown = null;
 		refresh();
 	}

@@ -554,10 +554,11 @@ started while the app was visible is running.
   session); the test phone showed no such entry. Nothing is in the notification shade, so the alerts are not seen; while the app is
   visible a toast stands in for them (2.1's "<title>: the session has ended", and "<title> needs an
   answer"). Upstream already asks for the permission when the connection list opens (`HomeActivity`,
-  unedited); the fork's own ask comes once, at the first connect, if it is still missing. When
-  notifications are allowed again while the service runs (the permission, or the "Running sessions"
-  channel switched back on), the notification is posted again at the next start of an app window,
-  which is when the user comes back from the system settings, or at the next change of a session.
+  unedited); the fork's own ask comes once, at the first connect, if it is still missing. Android does
+  not bring a foreground service's notification back by itself once it is gone from the shade
+  (notifications refused or switched off and allowed again, or the notification swiped away): whenever
+  an activity of the app starts, the service posts it again if it is missing, and it is posted again
+  at every change it shows anyway.
 - **Look.** The notifications are the system's Material ones, with the system's colours: the app sets no
   accent (the theme's `colorPrimary`, resolved in the service, came out black on the test phone).
 - **Reconnects.** Upstream held a dropped session's automatic reconnect while the app was not visible
@@ -677,7 +678,7 @@ API 37 on Android 14 to 17):
   ([user stopping](https://developer.android.com/develop/background-work/services/fgs/handle-user-stopping)).
 - From Android 14 an ongoing notification can be swiped away except on the lock screen
   ([Android 14 changes](https://developer.android.com/about/versions/14/behavior-changes-all)); the service
-  goes on, and the notification is posted again at the next change.
+  goes on, and the notification is posted again at the next change or when the app is next opened.
 
 **Per-connection settings and graphics mode** (package 1.4)
 

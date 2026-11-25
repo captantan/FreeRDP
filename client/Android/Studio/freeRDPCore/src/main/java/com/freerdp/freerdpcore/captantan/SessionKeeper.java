@@ -92,8 +92,9 @@ public final class SessionKeeper implements SessionRegistry.Listener
 		instance = new SessionKeeper(app);
 		SessionNotifications.ensureChannels(app);
 		SessionRegistry.addListener(instance);
-		// Notifications allowed again in the system settings change nothing in the registry; the
-		// user comes back to the app afterwards, so look again whenever an activity starts.
+		// Notifications allowed again in the system settings, or the notification swiped away,
+		// change nothing in the registry. Whenever an activity starts (the user is back in the
+		// app), the service posts its notification again if it is missing.
 		app.registerActivityLifecycleCallbacks(new NotificationSettingsWatcher());
 		instance.logLastExit();
 	}
@@ -104,6 +105,9 @@ public final class SessionKeeper implements SessionRegistry.Listener
 		@Override public void onActivityStarted(Activity activity)
 		{
 			instance.logNotificationPermission();
+			final SessionKeepAliveService service = SessionKeepAliveService.running;
+			if (service != null)
+				service.ensureShown();
 		}
 
 		@Override public void onActivityCreated(Activity activity, android.os.Bundle state)
@@ -373,12 +377,7 @@ public final class SessionKeeper implements SessionRegistry.Listener
 		    SessionNotifications.canNotify(app, SessionNotifications.CHANNEL_SESSIONS);
 		if (notificationsAllowed != null && notificationsAllowed == allowed)
 			return;
-		final boolean nowAllowed = allowed && notificationsAllowed != null;
 		notificationsAllowed = allowed;
-		// Allowed again while the service runs: post its notification now, not at the next change.
-		final SessionKeepAliveService service = SessionKeepAliveService.running;
-		if (nowAllowed && service != null)
-			service.repost();
 		Log.i(TAG, "notifications " +
 		               (allowed ? "allowed"
 		                        : "not allowed (permission or the sessions channel): the service " +
