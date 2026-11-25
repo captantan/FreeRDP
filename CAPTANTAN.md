@@ -554,8 +554,10 @@ started while the app was visible is running.
   session); the test phone showed no such entry. Nothing is in the notification shade, so the alerts are not seen; while the app is
   visible a toast stands in for them (2.1's "<title>: the session has ended", and "<title> needs an
   answer"). Upstream already asks for the permission when the connection list opens (`HomeActivity`,
-  unedited); the fork's own ask comes once, at the first connect, if it is still missing. When it is
-  granted again while the service runs, the notification is posted at once.
+  unedited); the fork's own ask comes once, at the first connect, if it is still missing. When
+  notifications are allowed again while the service runs (the permission, or the "Running sessions"
+  channel switched back on), the notification is posted again at the next start of an app window,
+  which is when the user comes back from the system settings, or at the next change of a session.
 - **Look.** The notifications are the system's Material ones, with the system's colours: the app sets no
   accent (the theme's `colorPrimary`, resolved in the service, came out black on the test phone).
 - **Reconnects.** Upstream held a dropped session's automatic reconnect while the app was not visible

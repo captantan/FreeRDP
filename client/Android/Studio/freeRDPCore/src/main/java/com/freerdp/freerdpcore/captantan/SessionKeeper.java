@@ -92,7 +92,43 @@ public final class SessionKeeper implements SessionRegistry.Listener
 		instance = new SessionKeeper(app);
 		SessionNotifications.ensureChannels(app);
 		SessionRegistry.addListener(instance);
+		// Notifications allowed again in the system settings change nothing in the registry; the
+		// user comes back to the app afterwards, so look again whenever an activity starts.
+		app.registerActivityLifecycleCallbacks(new NotificationSettingsWatcher());
 		instance.logLastExit();
+	}
+
+	private static final class NotificationSettingsWatcher
+	    implements Application.ActivityLifecycleCallbacks
+	{
+		@Override public void onActivityStarted(Activity activity)
+		{
+			instance.logNotificationPermission();
+		}
+
+		@Override public void onActivityCreated(Activity activity, android.os.Bundle state)
+		{
+		}
+
+		@Override public void onActivityResumed(Activity activity)
+		{
+		}
+
+		@Override public void onActivityPaused(Activity activity)
+		{
+		}
+
+		@Override public void onActivityStopped(Activity activity)
+		{
+		}
+
+		@Override public void onActivitySaveInstanceState(Activity activity, android.os.Bundle state)
+		{
+		}
+
+		@Override public void onActivityDestroyed(Activity activity)
+		{
+		}
 	}
 
 	// ****************************************************************************
@@ -345,9 +381,9 @@ public final class SessionKeeper implements SessionRegistry.Listener
 			service.repost();
 		Log.i(TAG, "notifications " +
 		               (allowed ? "allowed"
-		                        : "not allowed: the service still keeps sessions alive, Android " +
-		                              "lists the app as active in the quick settings, and nothing " +
-		                              "is in the notification shade"));
+		                        : "not allowed (permission or the sessions channel): the service " +
+		                              "still keeps sessions alive, nothing is in the notification " +
+		                              "shade"));
 	}
 
 	/** Why the previous run of the process ended, so a measurement can tell a kill from a crash. */
