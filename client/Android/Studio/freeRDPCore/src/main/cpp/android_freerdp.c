@@ -51,6 +51,7 @@
 #include "android_jni_utils.h"
 #include "android_cliprdr.h"
 #include "android_disp.h"
+#include "captantan_disp.h" /* captantan fork */
 #include "android_rail.h"
 #include "android_freerdp_jni.h"
 
@@ -761,6 +762,10 @@ static BOOL android_client_new(freerdp* instance, rdpContext* context)
 	instance->VerifyCertificateEx = android_verify_certificate_ex;
 	instance->VerifyChangedCertificateEx = android_verify_changed_certificate_ex;
 	instance->LogonErrorInfo = nullptr;
+
+	/* captantan fork: display control state; wraps RetryDialog and Redirect, so it comes last */
+	if (!captantan_disp_new(instance))
+		return FALSE;
 	return TRUE;
 }
 
@@ -773,6 +778,7 @@ static void android_client_free(freerdp* instance, rdpContext* context)
 	if (afc->foregroundEvent && !CloseHandle(afc->foregroundEvent))
 		WLog_WARN(TAG, "CloseHandle failed");
 
+	captantan_disp_free(instance); /* captantan fork */
 	android_event_queue_uninit(instance);
 }
 

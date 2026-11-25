@@ -65,6 +65,9 @@ set(${MODULE_PREFIX}_SRCS
     # captantan fork: key events of a physical keyboard
     captantan_keyboard.c
     captantan_keyboard.h
+    # captantan fork: display control, queued and checked against the server's caps
+    captantan_disp.c
+    captantan_disp.h
 )
 
 add_library(${MODULE_NAME} SHARED ${${MODULE_PREFIX}_SRCS})

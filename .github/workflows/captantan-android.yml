@@ -219,6 +219,17 @@ jobs:
             grep -Eq " FUNC +GLOBAL +DEFAULT +[0-9]+ Java_com_freerdp_freerdpcore_captantan_PhysicalKeyboard_$n\$" "$RUNNER_TEMP/android-dynsyms.txt" || fail "libfreerdp-android.so does not export the native $n of captantan/PhysicalKeyboard"
           done
           echo "physical keyboard: class and its four natives present"
+          # Display control (roadmap 3.1): the natives of captantan/DisplayControl are found by name
+          # too, and so is the method the native side reports to: a missing or misnamed one compiles
+          # and then fails, or stays silent, at the first resize.
+          grep -qaF 'Lcom/freerdp/freerdpcore/captantan/DisplayControl;' "$RUNNER_TEMP/classes.dex.all" || fail "the APK lacks the class captantan/DisplayControl"
+          for n in nativeInit nativeRequest; do
+            grep -qaF "$n" "$RUNNER_TEMP/classes.dex.all" || fail "captantan/DisplayControl lacks the native method $n"
+            grep -Eq " FUNC +GLOBAL +DEFAULT +[0-9]+ Java_com_freerdp_freerdpcore_captantan_DisplayControl_$n\$" "$RUNNER_TEMP/android-dynsyms.txt" || fail "libfreerdp-android.so does not export the native $n of captantan/DisplayControl"
+          done
+          grep -qaF 'onNativeEvent' "$RUNNER_TEMP/classes.dex.all" || fail "captantan/DisplayControl lacks onNativeEvent, which the native side calls by name"
+          unzip -p "$REL" lib/arm64-v8a/libfreerdp-android.so | grep -qaF '(JIIIIIIII)V' || fail "libfreerdp-android.so does not look up DisplayControl.onNativeEvent with the expected signature"
+          echo "display control: class, its two natives and the event callback present"
           # Material 3 theme (roadmap 7.2a): every activity uses upstream's Theme.Main, which the
           # app module redefines (aFreeRDP/src/main/res/values*/captantan_theme.xml) over
           # freeRDPCore's theme.xml. In the APK every configuration of Theme.Main must have the fork's

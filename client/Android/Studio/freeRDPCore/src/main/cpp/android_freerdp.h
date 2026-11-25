@@ -46,6 +46,8 @@ typedef struct
 	BOOL railExecSent;
 
 	HANDLE foregroundEvent;
+
+	void* captantanDisp; /* captantan fork: display control state (captantan_disp.c) */
 } androidContext;
 
 #endif /* FREERDP_CLIENT_ANDROID_FREERDP_H */
