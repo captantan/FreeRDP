@@ -209,6 +209,11 @@ jobs:
           "$AAPT" dump resources "$REL" > "$RUNNER_TEMP/resources.txt"
           grep -qF 'xml/captantan_connection_options' "$RUNNER_TEMP/resources.txt" || fail "the APK lacks res/xml/captantan_connection_options"
           echo "per-connection settings: classes, graphics arguments and options screen present"
+          # Launcher icon (roadmap 1.7): the app module's adaptive icon overrides the library's by
+          # name. Only ours has a drawable (not a colour) called ic_launcher_background.
+          grep -qF 'drawable/ic_launcher_background' "$RUNNER_TEMP/resources.txt" || fail "the APK lacks the app's launcher icon (drawable/ic_launcher_background)"
+          grep -qF 'mipmap/ic_launcher' "$RUNNER_TEMP/resources.txt" || fail "the APK lacks mipmap/ic_launcher"
+          echo "launcher icon: the app module's adaptive icon is present"
           # Physical keyboard (roadmap 5.1): the natives of captantan/PhysicalKeyboard are found by
           # name at run time, so a missing or misnamed one compiles and then fails at the first key.
           grep -qaF 'Lcom/freerdp/freerdpcore/captantan/PhysicalKeyboard;' "$RUNNER_TEMP/classes.dex.all" || fail "the APK lacks the class captantan/PhysicalKeyboard"

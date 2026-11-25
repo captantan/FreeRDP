@@ -135,7 +135,18 @@ file has no comment syntax):
 - The About page (`aFreeRDP/src/main/assets/{about_page,de_about_page}/about*.html`) says this is a personal
   fork and links to this repository, and links to `assets/captantan_notices.html` (new), the third-party
   notices for what the APK contains. Edit that list when a library is added to or dropped from the build.
-- The launcher icon is still upstream's.
+- **Launcher icon** (package 1.7): a white ring with two offset chevrons running clockwise on flat cobalt
+  `#0047AB`; original artwork, chosen by the maintainer. Four new files in the app module, which override
+  the library's resources of the same name, so `freeRDPCore`'s upstream icon files are not edited:
+  `aFreeRDP/src/main/res/mipmap-anydpi-v26/ic_launcher.xml` (the adaptive icon; its background is our
+  `@drawable/ic_launcher_background`, not the library's white `@color/ic_launcher_background`) and
+  `res/drawable/ic_launcher_{background,foreground,monochrome}.xml` (the monochrome one is the themed
+  icon). The source artwork is `aFreeRDP/captantan-launcher-icon.svg` (not built): edit it first, then
+  mirror the change in the drawables. No PNG icons: adaptive icons exist on every Android version this
+  app runs on. There is no `android:roundIcon`: the launcher masks the adaptive icon itself. The pinned
+  shortcuts of `ShortcutsActivity` use the same `@mipmap/ic_launcher`. The test build has the same icon
+  and differs by its label. Not yet looked at on a device when this was written (launcher, Recents,
+  themed icon).
 
 **H.264 through MediaCodec, decoder logging** (package 1.3)
 
@@ -1383,8 +1394,9 @@ hidden and overwritten at connect.
     outer screen (3.2's rule; seen again).
   - A request made while a session reconnects reaches the native side only when the session thread runs
     again; only the newest is kept.
-  - Every connect on the tablet stopped at a "host key has changed" certificate prompt for both GNOME
-    hosts; a connect that waited there 29 s and was resized meanwhile still came up at the final size.
+  - A connect that waited 29 s at a certificate prompt on the tablet and was resized meanwhile still came
+    up at the final size. (The prompt came at every connect there only because the maintainer chose
+    "only this time" each time; after "Trust", a reconnect showed no prompt.)
 - **For later packages.** Read the scale with `RemoteScale.desktopPercent(context, bookmark, densityDpi)`
   (0 for a link) and `RemoteScale.deviceFor(desktop)`; the setting with
   `ConnectionPrefs.load(context, id).getRemoteScale()`. To add a value: a new enum constant with a new,
@@ -1677,6 +1689,10 @@ compile check runs on the merge.
      configuration (say `values-v35/theme.xml`), add `Theme.Main` with parent `Theme.Captantan` to the app
      module in that configuration too; the compile check fails until then (it wants `Theme.Captantan` as
      the parent of `Theme.Main` in every configuration).
+   - The launcher icon (package 1.7) never conflicts (the app module's files are ours). If upstream
+     renames its icon resources or the manifest's `android:icon`, or adds an icon for a new
+     configuration (say PNG mipmaps or `android:roundIcon`), give the app module a file of the same name
+     and configuration, or upstream's icon comes back there.
    - `release.properties` and everything else that is ours only: never conflicts.
 5. **Repeat the identifier search**; look at anything new that must follow the application ID:
    `git grep -n -E 'authorities|sharedUserId|accountType|<permission|targetPackage|taskAffinity|"com\.freerdp\.[a-z.]*"' -- client/Android`
@@ -1701,7 +1717,8 @@ The workflow `.github/workflows/captantan-android.yml` runs on pull requests int
   `libmediandk.so` and `libopenh264.so` and contains the two H.264 log lines of package 1.3, and the dex
   has the package 1.4 classes (`ConnectionPrefs`, `GraphicsMode`, `ConnectionOptions`, its `Draft`,
   `ConnectionOptionsFragment`) and the 3.3 class `RemoteScale` and the three `/gfx` arguments, and the resources have
-  `xml/captantan_connection_options`; every configuration of `Theme.Main` has the parent
+  `xml/captantan_connection_options` and the launcher icon's `drawable/ic_launcher_background` (1.7: only
+  the app module has it as a drawable); every configuration of `Theme.Main` has the parent
   `Theme.Captantan`, and the dex has Material's `MaterialAlertDialogBuilder`; the dex has
   `captantan/PhysicalKeyboard` with its four native methods and `libfreerdp-android.so` exports a function
   for each (package 5.1: they are found by name at run time, so a misnamed one would compile and fail at
