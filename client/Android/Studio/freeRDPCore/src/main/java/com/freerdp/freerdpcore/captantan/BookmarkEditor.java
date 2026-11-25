@@ -6,8 +6,9 @@
 // - Passwords are masked. res/xml/credentials_settings.xml and gateway_settings.xml set
 //   android:inputType="textPassword" on an AndroidX EditTextPreference, which AndroidX ignores (the
 //   dialog's EditText takes no attributes from the preference), so the password was typed and shown
-//   in plain text. Every password preference gets a password EditText and a summary that only says
-//   whether a password is set.
+//   in plain text. Every password preference gets a password EditText in a Material text field
+//   (res/layout/captantan_password_dialog.xml) whose eye icon shows the password while the dialog
+//   is open, and a summary that only says whether a password is set. Each opening starts hidden.
 // - A text dialog is not cancelled by a tap outside it. With an editor dialog open, the toolbar's
 //   Save button is still visible above the scrim; tapping it cancelled the dialog, dropping what was
 //   typed, and did not save. The next tap on Save saved the bookmark without the edit. Now a tap
@@ -70,6 +71,7 @@ public final class BookmarkEditor
 			EditTextPreference pref = fragment.findPreference(key);
 			if (pref == null)
 				continue;
+			pref.setDialogLayoutResource(R.layout.captantan_password_dialog);
 			pref.setOnBindEditTextListener(editText -> {
 				editText.setInputType(InputType.TYPE_CLASS_TEXT |
 				                      InputType.TYPE_TEXT_VARIATION_PASSWORD);
