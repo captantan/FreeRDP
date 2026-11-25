@@ -46,6 +46,12 @@ import java.util.function.Consumer;
  * <li>{@link #onDisplayControlEvent} (package 3.1) also runs on the session's native thread: what
  * the native side did about the Display Control channel and about resize requests. It is logged
  * there and {@link DisplayControl} posts it to its listeners on the UI thread.
+ * <li>Measured in package 3.1: with the graphics pipeline (GFX), which both kinds of host use,
+ * OnGraphicsResize and OnGraphicsUpdate do not come on android_thread_func's thread but on the
+ * library's dynamic channel thread, where the graphics channel is decoded (gdi_ResetGraphics
+ * calls the resize from there). Only OnSettingsChanged, at each connect, is on the session
+ * thread. Resize and paint still share one thread, which is what "The frame" below relies on;
+ * that thread is not the one the display-control events arrive on.
  * <li>Everything else runs on the UI thread: the connection events (onConnectionSuccess,
  * onConnectionFailure, onDisconnected arrive through GlobalApp, which posts them), attach and
  * detach, {@link #disconnect}, and every call into the window. The phase and the window are
@@ -630,9 +636,9 @@ public final class SessionHost implements LibFreeRDP.UIEventListener, GlobalApp.
 
 	/**
 	 * What the native side did about the Display Control channel or a resize request
-	 * (captantan_disp.c, through {@link DisplayControl}). Session thread, like the callbacks of
-	 * LibFreeRDP.UIEventListener around it, and in order with them: a layout that was sent is
-	 * reported here before the OnGraphicsResize that answers it.
+	 * (captantan_disp.c, through {@link DisplayControl}). Session thread. The OnGraphicsResize
+	 * that answers a layout comes on another thread (see the class comment), after the layout
+	 * was sent but possibly before its "sent" has been reported here.
 	 */
 	void onDisplayControlEvent(int kind, int serial, int a, int b, int c, int d, int e, int ageMs)
 	{

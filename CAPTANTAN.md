@@ -956,6 +956,10 @@ native half; the Java side that decides when to ask is package 3.2.
   pointer in `androidContext`. `android_event.c` (edited): an include, a case in `android_process_event`
   and one in `android_event_free`. `cpp/CMakeLists.txt` (edited): the two new files.
 
+- `domain/BookmarkBase.java` (edited, one line): a new bookmark's resolution is "Fit screen", not
+  "Automatic" (the maintainer's choice, 2026-11-24). The two connect alike, at the window's size; until
+  package 3.2 only "Fit screen" follows the window afterwards. Bookmarks that exist keep what they store.
+
 **The rules** (all on the native side, so they hold for every caller):
 
 - **Queued, newest wins.** A request stores the wanted size and wakes the session thread
@@ -1236,6 +1240,9 @@ compile check runs on the merge.
        `rdp_client_reconnect_via_broker` and `rdp_client_redirect`: where the settings are reset and
        where `Redirect` is called), `client/common/client.c` (`client_auto_reconnect_ex` calling
        `RetryDialog` before each attempt), and the desktop clients' `RESIZE_MIN_DELAY` if they change it.
+   - `domain/BookmarkBase.java`: keep `resolution = FITSCREEN` as the field's default in
+     `ScreenSettings`. Package 3.2 decides what "Automatic" means; if it makes both resize live, this
+     edit can go.
    - `LibFreeRDP.java`: besides the removed `/cert:ignore`, keep the `NativeSessionThreads` calls in
      `connect`, `freeInstance`, `OnConnectionFailure` and `OnDisconnected` together; one missing makes
      `freeInstance` free a running session or never free one. If upstream starts waiting for connecting
