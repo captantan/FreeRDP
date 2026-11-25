@@ -31,5 +31,18 @@ public class ConnectionOptionsFragment extends PreferenceFragmentCompat
 			graphics.setSummaryProvider(null);
 			graphics.setSummary(R.string.captantan_graphics_mode_unavailable);
 		}
+
+		// Remote scale (roadmap 3.3): Automatic says what it gives on this screen.
+		ListPreference scale = findPreference(ConnectionPrefs.REMOTE_SCALE.key);
+		if (scale != null)
+			scale.setSummaryProvider(p -> {
+				final ListPreference list = (ListPreference)p;
+				final CharSequence entry = list.getEntry();
+				if (!RemoteScale.AUTO.storedName().equals(list.getValue()))
+					return entry;
+				final int dpi = getResources().getConfiguration().densityDpi;
+				return getString(R.string.captantan_remote_scale_auto_now, entry,
+				                 RemoteScale.automatic(dpi), dpi);
+			});
 	}
 }

@@ -200,7 +200,7 @@ jobs:
           # screen by class name and inflates its layout by resource, so both must be in the APK,
           # and so must the /gfx argument of each graphics mode.
           unzip -p "$REL" 'classes*.dex' > "$RUNNER_TEMP/classes.dex.all"
-          for c in ConnectionPrefs GraphicsMode ConnectionOptions 'ConnectionOptions$Draft' ConnectionOptionsFragment; do
+          for c in ConnectionPrefs GraphicsMode RemoteScale ConnectionOptions 'ConnectionOptions$Draft' ConnectionOptionsFragment; do
             grep -qaF "Lcom/freerdp/freerdpcore/captantan/$c;" "$RUNNER_TEMP/classes.dex.all" || fail "the APK lacks the class captantan/$c"
           done
           for s in '/gfx:AVC444,AVC420,RFX,progressive' '/gfx:AVC420,RFX,progressive' '/gfx:RFX,progressive'; do
