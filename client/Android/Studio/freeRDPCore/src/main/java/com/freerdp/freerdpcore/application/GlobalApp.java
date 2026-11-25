@@ -148,6 +148,8 @@ public class GlobalApp extends Application implements LibFreeRDP.EventListener
 		LibFreeRDP.setEventListener(this);
 		// captantan fork: the process-level owner of the sessions (roadmap 2.1)
 		com.freerdp.freerdpcore.captantan.SessionRegistry.init(this);
+		// captantan fork: the keep-alive service and the session notifications (roadmap 2.3)
+		com.freerdp.freerdpcore.captantan.SessionKeeper.init(this);
 
 		printJobMonitor = new PrintJobMonitor(file -> PrintNotificationHelper.notify(this, file));
 		printJobMonitor.startWatching();

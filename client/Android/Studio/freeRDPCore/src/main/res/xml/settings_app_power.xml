@@ -2,13 +2,16 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:freerdp="http://schemas.android.com/apk/res-auto">
+    <!-- captantan fork: bounds_default 0 (was 5). Nothing stores a default for this setting and
+         getDisconnectTimeout reads 0 (off) when it is unset, but the screen showed 5. Sessions
+         are meant to outlive the screen now (roadmap 2.3), so the screen shows what is done. -->
     <com.freerdp.freerdpcore.utils.IntEditTextPreference
         android:inputType="number"
         android:singleLine="true"
         android:key="@string/preference_key_power_disconnect_timeout"
         android:numeric="integer"
         android:title="@string/settings_power_disconnect_timeout"
-        freerdp:bounds_default="5"
+        freerdp:bounds_default="0"
         freerdp:bounds_max="30"
         freerdp:bounds_min="0" />
     <CheckBoxPreference

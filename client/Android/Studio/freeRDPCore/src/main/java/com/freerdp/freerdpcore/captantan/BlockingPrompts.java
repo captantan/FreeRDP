@@ -50,7 +50,8 @@ public final class BlockingPrompts
 	/**
 	 * How long a question may wait while its session is shown in no window. Long enough to come
 	 * back to the session, short enough that a session nobody looks at does not keep a thread and a
-	 * half-open connection for ever. Package 2.3 (notification) may raise or replace it.
+	 * half-open connection for ever. Package 2.3 kept it: the notification that asks for the
+	 * answer goes away when it runs out.
 	 */
 	public static final long UNATTENDED_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -115,6 +116,8 @@ public final class BlockingPrompts
 	private final Set<Answer<?>> pending = new LinkedHashSet<>();
 	/** Guarded by lock. True while a question is open and no window shows it. */
 	private boolean unattended = false;
+	/** Guarded by lock. True while a question is open, shown in a window or not (package 2.3). */
+	private boolean waiting = false;
 
 	/** UI thread only. The window that shows the session, or null. */
 	private Activity window;
@@ -200,6 +203,18 @@ public final class BlockingPrompts
 		synchronized (lock)
 		{
 			return unattended;
+		}
+	}
+
+	/**
+	 * True while a question is open, whether a window shows it or not. Any thread. Package 2.3
+	 * tells the user about a question whose window is not on screen.
+	 */
+	public boolean isWaiting()
+	{
+		synchronized (lock)
+		{
+			return waiting;
 		}
 	}
 
@@ -329,20 +344,25 @@ public final class BlockingPrompts
 		}
 	}
 
-	/** UI thread. Recomputes {@link #isWaitingUnattended} and reports a change. */
+	/** UI thread. Recomputes {@link #isWaitingUnattended} and {@link #isWaiting}, reports a change. */
 	private void updateUnattended()
 	{
 		boolean now = false;
+		boolean open = false;
 		for (Answer<?> answer : snapshot())
 		{
-			if (!answer.isAnswered() && answer.dialog == null)
+			if (answer.isAnswered())
+				continue;
+			open = true;
+			if (answer.dialog == null)
 				now = true;
 		}
 		final boolean changed;
 		synchronized (lock)
 		{
-			changed = (unattended != now);
+			changed = (unattended != now) || (waiting != open);
 			unattended = now;
+			waiting = open;
 		}
 		if (changed && onWaitingChanged != null)
 			onWaitingChanged.run();
