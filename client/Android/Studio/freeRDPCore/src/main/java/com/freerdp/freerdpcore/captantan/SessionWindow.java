@@ -11,7 +11,10 @@ import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.graphics.drawable.BitmapDrawable;
 import android.net.Uri;
+import android.os.Build;
+import android.os.Bundle;
 import android.util.Log;
+import android.view.View;
 import android.view.WindowManager;
 import android.widget.Toast;
 
@@ -52,7 +55,16 @@ import java.util.function.Consumer;
  *
  * <p><b>The two rules.</b> A window shows one session: {@link #show} lets go of the current one
  * first. A session is shown in at most one window: {@link SessionHost#attach} makes the window
- * that showed it before let go and close ({@link #lose}).
+ * that showed it before let go and close ({@link #lose}). Since package 2.2 a launch that reaches
+ * a window for a session that another window shows brings that window to the front instead
+ * ({@link #leaveFor}), and so does a switch to it ({@link #switchTo}); only "open in new window"
+ * moves a session from one window to another.
+ *
+ * <p><b>What the window shows, and its intent.</b> The activity's intent always names the session
+ * the window shows ({@link SessionLauncher#intentFor}), whatever the window was launched with, and
+ * it is kept in the activity's saved state. A recreated window (a configuration change the
+ * activity does not handle, a restore after the process died) therefore shows, or connects again,
+ * the session it showed last.
  *
  * <p><b>What the activity still does.</b> Its views, input, toolbar, insets and dialogs are
  * upstream's. The window-side reactions to a session (bind the surface, keep the screen on, the
@@ -100,6 +112,8 @@ public final class SessionWindow
 	}
 
 	private static final String TAG = SessionRegistry.TAG;
+	/** Saved state: the intent of the session the window showed (SessionLauncher.intentFor). */
+	private static final String STATE_SHOWN = "com.freerdp.freerdpcore.captantan.window.shown";
 	private static int nextNumber = 1;
 
 	private final String name = "w" + (nextNumber++);
@@ -121,9 +135,14 @@ public final class SessionWindow
 	private AlertDialog backDialog;
 	private SessionState blank;
 
-	/** Call at the end of the activity's onCreate, when its views and input manager exist. */
+	/**
+	 * Call in the activity's onCreate, when its views, toolbar and input manager exist.
+	 *
+	 * @param savedInstanceState the activity's; if it names the session the window showed before
+	 *                           it was recreated, the window's intent becomes that session's
+	 */
 	public SessionWindow(SessionActivity activity, Ports ports, SessionInputManager input,
-	                     SessionDialogs dialogs)
+	                     SessionDialogs dialogs, Bundle savedInstanceState)
 	{
 		this.activity = activity;
 		this.ports = ports;
@@ -132,7 +151,23 @@ public final class SessionWindow
 		this.sessionView = activity.findViewById(R.id.sessionView);
 		this.scrollView = activity.findViewById(R.id.sessionScrollView);
 		this.touchPointerView = activity.findViewById(R.id.touchPointerView);
-		Log.i(TAG, "window open: " + name);
+
+		final Intent shown = (savedInstanceState != null)
+		                         ? savedInstanceState.getParcelable(STATE_SHOWN)
+		                         : null;
+		if (shown != null)
+			activity.setIntent(shown);
+		Log.i(TAG, "window open: " + name + (shown != null ? " (recreated)" : ""));
+
+		// The switcher's button on upstream's floating toolbar (floating_toolbar.xml). The toolbar
+		// already makes it draggable like its other buttons; a tap opens the switcher.
+		final View sessions = activity.findViewById(R.id.captantan_floating_toolbar_sessions);
+		if (sessions != null)
+		{
+			sessions.setOnClickListener(v -> SessionSwitcher.open(this));
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+				sessions.setTooltipText(sessions.getContentDescription());
+		}
 	}
 
 	/** How the log names the window. */
@@ -205,6 +240,9 @@ public final class SessionWindow
 		final SessionHost live = lookup(intent);
 		if (live == null)
 			return false;
+		Log.i(TAG, "launch: " + live + " is live, shown in " + name +
+		               (live.getWindow() != null ? " (was in " + live.getWindow().getName() + ")"
+		                                         : ""));
 		show(live);
 		return true;
 	}
@@ -220,7 +258,18 @@ public final class SessionWindow
 		if (host != null && target == host)
 		{
 			Log.i(TAG, "launch: " + host + " is already shown in " + name);
+			activity.setIntent(SessionLauncher.intentFor(activity, host));
 			return false;
+		}
+		final SessionWindow other = (target != null) ? target.getWindow() : null;
+		if (host != null && other != null && other != this)
+		{
+			// A session is shown in at most one window, and a launch that only names a session
+			// (the list, a shortcut, a notification) does not take it from the window that shows
+			// it: that window comes to the front, and this one keeps what it shows.
+			activity.setIntent(SessionLauncher.intentFor(activity, host));
+			if (SessionLauncher.bringToFront(other, "a launch that reached " + name))
+				return false;
 		}
 		release("window shows another session");
 		dropUnstarted();
@@ -297,6 +346,26 @@ public final class SessionWindow
 	// Attach and detach
 
 	/**
+	 * Switch (package 2.2, the session switcher): this window shows {@code target} from now on,
+	 * without a reconnect; the session it showed goes on in no window. If another window shows the
+	 * target, that window comes to the front instead and this one is left as it is.
+	 */
+	public void switchTo(SessionHost target, String askedFrom)
+	{
+		if (destroyed || target == null || !target.isLive() || target == host)
+			return;
+		final SessionWindow other = target.getWindow();
+		if (other != null && other != this)
+		{
+			if (SessionLauncher.bringToFront(other, name + " (" + askedFrom + ")"))
+				return;
+		}
+		Log.i(TAG, "switch: " + name + " " + (host != null ? host.toString() : "(no session)") +
+		               " -> " + target + " (" + askedFrom + ", no reconnect)");
+		show(target);
+	}
+
+	/**
 	 * Shows a live session in this window (attach). The window lets go of the session it showed;
 	 * the window that showed the target lets go of it and closes. This is also "switch" for the
 	 * session switcher (package 2.2).
@@ -315,6 +384,8 @@ public final class SessionWindow
 
 		host = target;
 		ports.setSession(target.getState());
+		// The window's intent names what it shows (see the class comment).
+		activity.setIntent(SessionLauncher.intentFor(activity, target));
 
 		// Before attach(): attaching shows the session's open questions (certificate, login) in
 		// this window at once, and a dialog shown later lies on top of one shown earlier. The
@@ -532,6 +603,16 @@ public final class SessionWindow
 			host.setPainting(false);
 	}
 
+	/**
+	 * Hook in onSaveInstanceState(): remembers the session the window shows, so that a recreated
+	 * window shows it again (or connects it again, if the process has died in between).
+	 */
+	public void onSaveInstanceState(Bundle outState)
+	{
+		if (host != null && host.isLive())
+			outState.putParcelable(STATE_SHOWN, SessionLauncher.intentFor(activity, host));
+	}
+
 	/** Hook in onWindowFocusChanged(). */
 	public void onFocusChanged(boolean hasFocus)
 	{
@@ -585,6 +666,7 @@ public final class SessionWindow
 		if (destroyed)
 			return;
 		destroyed = true;
+		SessionSwitcher.closeFor(activity);
 		release("window closed");
 		dropUnstarted();
 		SessionRegistry.setFocus(this, false);

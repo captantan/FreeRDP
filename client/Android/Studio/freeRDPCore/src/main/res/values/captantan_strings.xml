@@ -2,8 +2,8 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- captantan fork: strings of the certificate prompts (captantan/CertificatePrompt.java), of the
      Back question in a session window (captantan/SessionWindow.java), of the "RDP options"
-     screen of the bookmark editor (captantan/ConnectionOptions*.java) and of the session
-     notifications (captantan/SessionNotifications.java, SessionKeeper.java). -->
+     screen of the bookmark editor (captantan/ConnectionOptions*.java), of the session switcher and of
+     the session notifications (captantan/SessionNotifications.java, SessionKeeper.java). -->
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
     <string name="captantan_cert_title_new">Check the server certificate</string>
     <string name="captantan_cert_title_changed">Server certificate changed</string>
@@ -39,8 +39,7 @@
         <item quantity="one">%d session running</item>
         <item quantity="other">%d sessions running</item>
     </plurals>
-    <string name="captantan_state_connecting">Connecting</string>
-    <string name="captantan_state_connected">Connected</string>
+    <!-- also captantan_state_connecting, _connected and _ending of the switcher (below) -->
     <string name="captantan_state_waiting">Waiting for your answer</string>
     <string name="captantan_session_line">%1$s: %2$s</string>
     <string name="captantan_capture_this">Microphone or camera redirected to this session</string>
@@ -73,4 +72,48 @@
         <item>avc420</item>
         <item>no_h264</item>
     </string-array>
+    <!-- The session switcher, the connection list's marking and the "Open new connections"
+         setting (roadmap 2.2, captantan/SessionSwitcher.java, HomeSessions.java,
+         SessionLauncher.java) -->
+    <string name="captantan_toolbar_sessions">Sessions</string>
+    <string name="captantan_switcher_title">Sessions</string>
+    <string name="captantan_switcher_empty">No session is running.</string>
+    <string name="captantan_switcher_connection_list">Connection list</string>
+    <string name="captantan_switcher_new_connection">New connection</string>
+    <string name="captantan_switcher_open_new_window">Open in new window</string>
+    <string name="captantan_switcher_disconnect">Disconnect</string>
+    <string name="captantan_switcher_disconnect_title">Disconnect %1$s?</string>
+    <string name="captantan_state_connecting">Connecting</string>
+    <string name="captantan_state_connected">Connected</string>
+    <string name="captantan_state_ending">Ending</string>
+    <string name="captantan_state_attention">Waiting for your answer: open it</string>
+    <string name="captantan_where_this">in this window</string>
+    <string name="captantan_where_other">in another window</string>
+    <string name="captantan_where_none">in no window</string>
+    <!-- state, then where it is shown: "Connected, in another window" -->
+    <string name="captantan_state_where">%1$s, %2$s</string>
+    <!-- the connection list: "Connected · host" -->
+    <string name="captantan_mark_with_host">%1$s · %2$s</string>
+    <plurals name="captantan_sessions_running">
+        <item quantity="one">%d session</item>
+        <item quantity="other">%d sessions</item>
+    </plurals>
+    <string name="captantan_sessions_attention">A session needs your answer</string>
+    <string name="captantan_pref_new_connection_title">Open new connections</string>
+    <string name="captantan_new_connection_this_window">In the session window</string>
+    <string name="captantan_new_connection_new_window">In a new window</string>
+    <string name="captantan_new_connection_desktop">In a new window in desktop windowing, else in the session window</string>
+    <string-array name="captantan_new_connection_entries">
+        <item>@string/captantan_new_connection_desktop</item>
+        <item>@string/captantan_new_connection_this_window</item>
+        <item>@string/captantan_new_connection_new_window</item>
+    </string-array>
+    <!-- Stored names of SessionLauncher.Placement, in the same order. Never change them. -->
+    <string-array name="captantan_new_connection_values" translatable="false">
+        <item>desktop</item>
+        <item>this_window</item>
+        <item>new_window</item>
+    </string-array>
+    <!-- Must equal SessionLauncher.PREF_KEY. -->
+    <string name="captantan_pref_key_new_connection_window" translatable="false">captantan_new_connection_window</string>
 </resources>

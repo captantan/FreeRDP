@@ -251,6 +251,15 @@ jobs:
           grep -F "launchMode" "$RUNNER_TEMP/manifest-rel.txt" | sed 's/^ *//'
           grep -qF "launchMode" "$RUNNER_TEMP/manifest-rel.txt" || fail "no activity has a launchMode: the session activity must be singleTop"
           echo "session host: classes present, session activity is singleTop without documentLaunchMode"
+          # Session switcher (roadmap 2.2): the switcher, the launcher that keeps the window rules,
+          # the list's marking, the toolbar button they hang from and the sheet's layouts.
+          for c in SessionSwitcher SessionLauncher HomeSessions; do
+            grep -qaF "Lcom/freerdp/freerdpcore/captantan/$c;" "$RUNNER_TEMP/classes.dex.all" || fail "the APK lacks the class captantan/$c"
+          done
+          for r in id/captantan_floating_toolbar_sessions layout/captantan_session_switcher layout/captantan_session_switcher_item; do
+            grep -qF "$r" "$RUNNER_TEMP/resources.txt" || fail "the APK lacks the resource $r"
+          done
+          echo "session switcher: classes, toolbar button and layouts present"
           # Sessions in the background (roadmap 2.3): the keep-alive service in the merged manifest,
           # not exported, with the types specialUse (0x40000000), microphone (0x80) and camera
           # (0x40) and its specialUse subtype, the permissions those types need (Android 14 and

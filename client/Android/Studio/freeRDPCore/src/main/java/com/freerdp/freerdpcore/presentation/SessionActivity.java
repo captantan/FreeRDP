@@ -300,7 +300,8 @@ public class SessionActivity extends AppCompatActivity
 		// Wire up the input manager (instance is attached later in bindSession()).
 		inputManager =
 		    new SessionInputManager(this, scrollView, sessionView, touchPointerView, keyboard);
-		window = new SessionWindow(this, windowPorts, inputManager, dialogs); // captantan fork
+		window = new SessionWindow(this, windowPorts, inputManager, dialogs, // captantan fork
+		                           savedInstanceState);
 		sessionView.setSessionViewListener(inputManager);
 		touchPointerView.setTouchPointerListener(inputManager);
 		sessionView.setScaleGestureDetector(
@@ -496,6 +497,13 @@ public class SessionActivity extends AppCompatActivity
 	{
 		RoundedCorner corner = insets.getRoundedCorner(position);
 		return (corner != null) ? corner.getRadius() : 0;
+	}
+
+	// captantan fork: the window remembers which session it shows, for when it is recreated
+	@Override protected void onSaveInstanceState(Bundle outState)
+	{
+		super.onSaveInstanceState(outState);
+		window.onSaveInstanceState(outState);
 	}
 
 	// captantan fork: the one session window is reused (launchMode singleTop): a later launch lets
