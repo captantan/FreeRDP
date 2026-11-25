@@ -1067,16 +1067,18 @@ written when it gets to them, in order, with `(<n> ms ago)`.
 **Measured on a device on 2026-11-24** (the Android 17 foldable phone; test builds of this package; a
 Windows 11 host and a GNOME Remote Desktop 51 host in remote-login mode; the trigger was upstream's "Fit
 screen" path: rotate, unfold, fold, drop a split-screen divider, and once a quick run of display-size
-overrides with `adb shell wm size`). 35 layouts were sent in all.
+overrides with `adb shell wm size`, once on each host and once more on GNOME). 41 layouts were captured
+in all.
 
 - **Caps before any layout, on each of the twelve channels seen** (six Windows sessions with one channel
   each, two GNOME sessions with five and one). Both hosts send the same caps: 16 monitors, area factors
   8192 x 8192. The channel opens 1 to 2 seconds after the session connects and its caps follow within 4
   to 163 ms.
-- **Windows 11:** 13 layouts, each answered with a desktop of the new size 53 to 96 ms later (one took
-  2.1 s while the network was coming back), no reconnect, no drop. The new size arrived as a graphics
+- **Windows 11:** 16 layouts, each answered with a desktop of the new size 53 to 96 ms later (one took
+  2.1 s while the network was coming back, and the second of two layouts 501 ms apart took 260 ms), no
+  reconnect, no drop. The new size arrived as a graphics
   reset on the graphics channel, as on GNOME; no second resize from a reactivation was seen.
-- **GNOME Remote Desktop:** 19 layouts to a reachable session, each answered 54 to 104 ms later, no
+- **GNOME Remote Desktop:** 22 layouts to a reachable session, each answered 54 to 104 ms later, no
   reconnect, no drop. A session went through up to five channels: the system daemon redirects at once, and
   when the user's session is not there yet a second redirection follows the login. After each one the
   state was reset: a waiting request was reported as deferred for "no disp channel", then for "caps not
@@ -1094,9 +1096,10 @@ overrides with `adb shell wm size`). 35 layouts were sent in all.
   session with an error code and no automatic reconnect; that was never seen.
 - **Newest wins:** two requests made while the session thread was reconnecting never showed; the third
   was the one acted on.
-- **The interval and its timer:** with size changes 144 and 140 ms apart, the first was sent, the second
-  was clamped and deferred ("356 ms to go"), the third replaced it ("217 ms to go") and was sent by the
-  timer 501 ms after the first. The server answered with that size.
+- **The interval and its timer** (three times, the same on both hosts): with size changes about 140 ms
+  apart, the first was sent, the second was clamped and deferred ("356 ms to go"), the third replaced
+  it ("217 ms to go") and was sent by the timer 501 ms after the first. Both servers answered with that
+  size, GNOME in 54 ms, Windows in 260 ms.
 - **Clamp:** odd widths were made even (1379 to 1378, 673 to 672, 1857 to 1856) and both hosts answered
   with the even width.
 - **Scale:** the bookmark's 140 % went out as 140 / 140 with every layout.
