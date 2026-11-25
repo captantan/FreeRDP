@@ -407,6 +407,23 @@ public class ExtendedKeyboardView extends LinearLayout
 		return expanded;
 	}
 
+	// captantan fork: the session window is no longer recreated when light and dark change, so the
+	// keys are built again to take the new colours, in the state they were in
+	public void rebuild()
+	{
+		final boolean wasExpanded = expanded;
+		final int page = currentPage;
+		repeatHandler.removeCallbacksAndMessages(null);
+		removeAllViews();
+		modifierKeys.clear();
+		expanded = false;
+		build();
+		selectPage(page);
+		setExpanded(wasExpanded, false);
+		applyInsets();
+		refreshModifiers();
+	}
+
 	// Re-reads every modifier's state from the listener and repaints key and lamp.
 	public void refreshModifiers()
 	{

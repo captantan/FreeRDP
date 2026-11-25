@@ -116,4 +116,6 @@
     </string-array>
     <!-- Must equal SessionLauncher.PREF_KEY. -->
     <string name="captantan_pref_key_new_connection_window" translatable="false">captantan_new_connection_window</string>
+    <!-- Live resizing (package 3.2): said once per session when the server cannot take the window's size. -->
+    <string name="captantan_resize_limited">The remote desktop cannot take this window\'s size; it is shown at %1$d × %2$d</string>
 </resources>
