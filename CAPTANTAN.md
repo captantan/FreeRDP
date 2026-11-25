@@ -1284,6 +1284,116 @@ shown in another window all take the same path. No reconnect, and the window is 
 - **Not in this package:** a per-connection scale and following the density (3.3), the session bar (4.1,
   4.2), window titles and remembered bounds (6.1).
 
+**Remote scale, and resizing checked on the phone and the tablet** (package 3.3)
+
+Since 3.2 a session comes up at the window's real pixel size, so on a dense screen a remote desktop at
+100 % has tiny text. "Remote scale" (RDP options, new category "Display") tells the server how large to draw
+it. It is the connection's only scale setting: upstream's Screen -> Scale (100 %, 140 %, 180 %, custom) is
+hidden and overwritten at connect.
+
+- `freeRDPCore/.../captantan/RemoteScale.java` (new): the values, Automatic, the wire rule, the connect hook.
+  Its class comment is the reference.
+- **On the wire.** Two fields, in the client core data at connect ([MS-RDPBCGR] 2.2.1.3.2) and in every
+  monitor of a Display Control layout ([MS-RDPEDISP] 2.2.2.2.1): `DesktopScaleFactor`, 100 to 500, and
+  `DeviceScaleFactor`, 100, 140 or 180. A server must ignore both unless the desktop factor is in range and
+  the device factor is one of the three. Windows uses the desktop factor as the session's display scale
+  (the device factor only scaled Windows 8.1's full-screen apps, but must be valid). GNOME Remote Desktop
+  passes the desktop factor to mutter as the monitor's preferred scale and ignores the device factor.
+  So the device factor sent is the largest of 100, 140, 180 not above the desktop factor
+  (`RemoteScale.deviceFor`), as FreeRDP's own `/scale:140` and `/scale:180` send.
+- **The values** (`ConnectionPrefs.REMOTE_SCALE`, an `EnumField` of `RemoteScale`; stored names never change):
+  - `auto`, **Automatic, the default** (the maintainer's choice after the device runs: "feels good on the
+    tablet and phone"): the window's density times 0.75 x 100 / 160, rounded to the nearest of the steps
+    below (ties keep the lower). 280 dpi gives 125 %, 320 dpi 150 %, 390 dpi 175 %, 440 dpi 200 %,
+    480 dpi 225 %. It follows the window's density: the window asks again when the density changes
+    (a change of the phone's display size, a move to another display). The screen shows what Automatic
+    gives on this screen ("Automatic: 175 % on this screen (390 dpi)"). No documentation was found of what
+    Microsoft's clients send for a density; this was not measured against them.
+  - the steps Windows offers in its display settings: 100, 125, 150, 175, 200, 225, 250, 300, 350, 400,
+    450, 500 (`100` ... `500`);
+  - `custom`: any value from 100 to 500 in steps of 5, `ConnectionPrefs.REMOTE_SCALE_CUSTOM` (an `IntField`,
+    default 150), a slider shown only while Custom is chosen.
+  - A bookmark that never chose gets the default; a `freerdp://` link gets nothing (its own arguments).
+- **Where it is used.**
+  - At connect: `SessionResizeController.prepareConnect(bookmark)` (the hook in `SessionActivity.connect`,
+    now taking the bookmark) writes the window's size as in 3.2 and then the scale, as upstream's custom
+    scale (`ScreenSettings.setScale("custom", desktop, device)`), which `LibFreeRDP.setConnectionInfo`
+    already passes as `/scale-desktop` and `/scale-device`. So `LibFreeRDP` needs no edit.
+  - In every layout request: the controller computes the scale for the window's density and passes it to
+    `DisplayControl.request`; the native side (3.1) sends a request whose scale differs from the
+    session's even if the size is the same, and keeps it for reconnects. A fixed-size session (not
+    following the window) asks with its own size and the scale, so only the scale can change.
+  - A change of the setting while connected takes effect the next time the window asks: when the
+    session is shown again after the editor (leave the session, edit the bookmark, come back) or at the
+    next size change. **Windows** applied a new scale from a layout without a reconnect (the taskbar
+    grew when a display-size change took Automatic from 175 % to 200 %; the maintainer compared 100,
+    150, 200, 250 and Automatic changed while connected before choosing). **GNOME Remote Desktop**
+    showed 150, 200 and Automatic (175) larger in turn, each set at connect; mutter takes the nearest
+    scale it supports.
+  - The remote desktop's pixels do not depend on the scale: the picture stays 1:1, so the pointer, the
+    touch pointer, pinch zoom and the switcher's thumbnails work in pixels as before (checked at 200 % on
+    Windows: taps land, zoom and thumbnails right).
+  - Log (`captantan.resize`): `remote scale <setting> (bookmark <id>): connect at <desktop>/<device>
+    (<dpi> dpi)`, and each `request #n` line ends `scale <desktop>/<device> (<setting>)`.
+- **Desktop windowing in the log** (`SessionLauncher.describeWindowing`): the launch line says
+  `desktop windowing yes|no (windowing mode <mode>, display's <mode>, DeX flag <n>, multi-window <b>)`.
+  On the tablet desktop windowing shows as `windowing mode freeform`; Samsung's DeX flag exists and reads -1
+  (off) there, so the freeform mode is what detects it.
+- **Upstream files edited** (each marked):
+  - `SessionActivity.java`, `connect`: the 3.2 hook line now passes the bookmark
+    (`prepareConnect(session.getBookmark())`), so that the scale is set there too.
+  - `res/xml/screen_settings.xml`: the "Scale" category gets `app:isPreferenceVisible="false"`. Its
+    stored values stay in the database and are overwritten at each connect of a bookmark.
+- Also changed (ours): `ConnectionPrefs` (two fields), `ConnectionOptionsFragment` (Automatic's summary, the
+  slider shown only for Custom), `captantan_connection_options.xml`, `captantan_strings.xml`,
+  `SessionResizeController` (the scale in each request; a density change starts the wait again),
+  `SessionLauncher` (the windowing line), and the compile check (the class `RemoteScale`).
+- **Validated on 2026-11-25** with the maintainer, test build `447d30d8a` (this package plus the bookmark
+  editor fix), on the Android 17 foldable phone (390 dpi) and an Android 17 tablet with desktop windowing
+  (280 dpi), against a Windows 11 host and two GNOME Remote Desktop hosts in remote-login mode. Tags
+  `captantan.resize`, `captantan.disp`, `captantan.session`, `ActivityTaskManager`. In every step: one
+  layout per settled size, the remote desktop at the new size 53 to 240 ms after the request, no
+  reconnect, the session window never recreated. The table is in the pull request; in short:
+  - phone: unfold, fold, rotate folded and unfolded (both hosts); a rotation 1.4 s after connecting; an
+    in-window switch to a session of another size (resized on attach, 89 ms); split screen with a session
+    in each half and divider drags; a video playing while rotating; a reconnect after a resize on both
+    hosts, with rotations during the outage (back at the current size: the newest request waits, and is
+    skipped or sent once the channel is up); a fixed-size bookmark (never resized); font size and bold text
+    (nothing sent); a display-size change (Automatic 175 % -> 200 % live, and back);
+  - tablet: rotation, split screen and divider drags (GNOME); desktop windowing: a new connection opens in
+    its own window, drag-resizes, maximise and restore, two windows side by side resized independently,
+    a taskbar animation (about 50 viewport changes in 450 ms, no layout), the caption bar not covering
+    the desktop, the keyboard (no resize);
+  - the scale: Automatic, the fixed steps and Custom at connect and while connected (Windows), 150, 200
+    and Automatic (GNOME); Automatic at 125 % on the tablet and 175 % on the phone.
+  - **Not run:** Windows on the tablet (no Windows bookmark there); moving a window to an external display
+    (none available), so following the density across displays was seen only as a display-size change;
+    a server without Display Control and `CLAMPED`/`REFUSED` (these servers accept 16 monitors of 8192 x
+    8192); a very small window.
+- **Platform behaviour found (not changed):**
+  - Opening split screen settles in two steps on the phone: the new half first gets one size and, about
+    500 ms later, its final size and insets, so a session opened into split screen gets two layouts
+    (1080x1182, then 1080x1011). Lengthening the 400 ms wait for every change to cover it is not worth it.
+  - A desktop window gets its caption-bar inset 11 to 37 ms after its first layout, after the connect size
+    was taken, so a new connection in a desktop window is made 70 pixels too tall. GNOME's remote login
+    hides it (its redirection reconnects at the corrected size: `next connection ... will ask for`). A
+    server without that redirection (Windows) would get one layout right after the channel is up; not
+    seen, since Windows was not run on the tablet. Waiting for the insets before connecting is for 6.1.
+  - Folding turns the inner screen off first; the window is stopped and asks again when it starts on the
+    outer screen (3.2's rule; seen again).
+  - A request made while a session reconnects reaches the native side only when the session thread runs
+    again; only the newest is kept.
+  - Every connect on the tablet stopped at a "host key has changed" certificate prompt for both GNOME
+    hosts; a connect that waited there 29 s and was resized meanwhile still came up at the final size.
+- **For later packages.** Read the scale with `RemoteScale.desktopPercent(context, bookmark, densityDpi)`
+  (0 for a link) and `RemoteScale.deviceFor(desktop)`; the setting with
+  `ConnectionPrefs.load(context, id).getRemoteScale()`. To add a value: a new enum constant with a new,
+  permanent stored name, and the same in `captantan_remote_scale_entries` / `_values`. A quick scale
+  switch in the session bar (4.1/4.2) changes `REMOTE_SCALE` and then needs the window to ask again:
+  `SessionResizeController` asks on its own only at a size or density change, attach or start, so 4.x
+  adds a public "ask again" (its `restartWait`). Per-window scale or a different scale per display (6.x)
+  would go into `desktopPercent`, which already takes the density.
+
 **Bookmark editor: masked passwords, Save keeps changes** (found while testing 3.3, 2026-11-25)
 
 `captantan/BookmarkEditor.java` (new), hooked into `presentation/BookmarkActivity.java` (edited: one line in
@@ -1503,8 +1613,15 @@ compile check runs on the merge.
        the scroll view is padded by when the key bar is hidden: if upstream changes how the session is
        padded (a new inset type, rounded corners, a new overlay that reserves space), change the call to
        match, and say in "the viewport" above what it is now. Never pass the IME inset.
-     - `SessionActivity.java`, `connect`: keep `prepareConnect(screenSettings)` after upstream's last
-       write of the size into `screenSettings`. If upstream moves the size code, the hook moves with it.
+     - `SessionActivity.java`, `connect`: keep `prepareConnect(session.getBookmark())` after upstream's
+       last write of the size into `screenSettings`. If upstream moves the size code, the hook moves with
+       it. It also sets the remote scale (3.3), so it must stay after any upstream code that sets the
+       scale of the screen settings.
+   - The remote scale (package 3.3):
+     - `res/xml/screen_settings.xml`: keep `app:isPreferenceVisible="false"` on the "Scale" category. If
+       upstream changes its scale choices, `/scale` arguments or `ScreenSettings.setScale`, check that
+       `RemoteScale.prepareConnect` still reaches `/scale-desktop` and `/scale-device` (search
+       `setConnectionInfo` for `scale`).
      - The session root must stay the view whose size is the window's (id `session_root_view`,
        `match_parent`, no `fitsSystemWindows` resizing): the controller measures it.
      - `freeRDPCore/src/main/AndroidManifest.xml`: keep the six added `configChanges` values. A new value
@@ -1581,7 +1698,7 @@ The workflow `.github/workflows/captantan-android.yml` runs on pull requests int
   provider authorities under the package name, the APK is unsigned, `libfreerdp3.so` links
   `libmediandk.so` and `libopenh264.so` and contains the two H.264 log lines of package 1.3, and the dex
   has the package 1.4 classes (`ConnectionPrefs`, `GraphicsMode`, `ConnectionOptions`, its `Draft`,
-  `ConnectionOptionsFragment`) and the three `/gfx` arguments, and the resources have
+  `ConnectionOptionsFragment`) and the 3.3 class `RemoteScale` and the three `/gfx` arguments, and the resources have
   `xml/captantan_connection_options`; every configuration of `Theme.Main` has the parent
   `Theme.Captantan`, and the dex has Material's `MaterialAlertDialogBuilder`; the dex has
   `captantan/PhysicalKeyboard` with its four native methods and `libfreerdp-android.so` exports a function
