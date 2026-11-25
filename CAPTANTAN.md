@@ -1064,10 +1064,10 @@ size last wanted in place of what the settings held. The lines are
 written on the session thread. Channel events that happened while that thread was busy connecting are
 written when it gets to them, in order, with `(<n> ms ago)`.
 
-**Measured on a device on 2026-11-24** (the Android 17 foldable phone; test builds of this package; a Windows 11 host and a GNOME Remote Desktop 51 host in
-remote-login mode; the trigger was upstream's "Fit screen" path: rotate, unfold, fold, drop a split-screen
-divider, and once a quick run of display-size overrides with `adb shell wm size`). 35 layouts were sent in
-all.
+**Measured on a device on 2026-11-24** (the Android 17 foldable phone; test builds of this package; a
+Windows 11 host and a GNOME Remote Desktop 51 host in remote-login mode; the trigger was upstream's "Fit
+screen" path: rotate, unfold, fold, drop a split-screen divider, and once a quick run of display-size
+overrides with `adb shell wm size`). 35 layouts were sent in all.
 
 - **Caps before any layout, on each of the twelve channels seen** (six Windows sessions with one channel
   each, two GNOME sessions with five and one). Both hosts send the same caps: 16 monitors, area factors
