@@ -56,7 +56,7 @@
     <string name="captantan_notification_permission_why">Allow notifications to see the sessions that run in the background and end them from there.</string>
     <!-- RDP options (roadmap 1.4) -->
     <string name="captantan_options_title">RDP options</string>
-    <string name="captantan_options_summary">Graphics mode and other settings of this app</string>
+    <string name="captantan_options_summary">Graphics mode, remote scale and other settings of this app</string>
     <string name="captantan_options_cat_graphics">Graphics</string>
     <string name="captantan_graphics_mode">Graphics mode</string>
     <string name="captantan_graphics_mode_unavailable">This build has no H.264 decoder</string>
@@ -71,6 +71,33 @@
         <item>best</item>
         <item>avc420</item>
         <item>no_h264</item>
+    </string-array>
+    <!-- Remote scale (roadmap 3.3, captantan/RemoteScale.java) -->
+    <string name="captantan_options_cat_display">Display</string>
+    <string name="captantan_remote_scale">Remote scale</string>
+    <string name="captantan_remote_scale_note">How large the remote desktop draws its text and controls. Automatic matches this device\'s own size of controls and follows the window to a screen of another density. A change applies the next time the session is shown, without reconnecting where the server allows it. Screen settings uses the Scale under Screen.</string>
+    <string-array name="captantan_remote_scale_entries">
+        <item>Screen settings</item>
+        <item>Automatic (from the screen\'s density)</item>
+        <item>100 %</item>
+        <item>125 %</item>
+        <item>150 %</item>
+        <item>175 %</item>
+        <item>200 %</item>
+        <item>250 %</item>
+        <item>300 %</item>
+    </string-array>
+    <!-- Stored names of captantan/RemoteScale, in the same order. Never change them. -->
+    <string-array name="captantan_remote_scale_values" translatable="false">
+        <item>screen</item>
+        <item>auto</item>
+        <item>100</item>
+        <item>125</item>
+        <item>150</item>
+        <item>175</item>
+        <item>200</item>
+        <item>250</item>
+        <item>300</item>
     </string-array>
     <!-- The session switcher, the connection list's marking and the "Open new connections"
          setting (roadmap 2.2, captantan/SessionSwitcher.java, HomeSessions.java,

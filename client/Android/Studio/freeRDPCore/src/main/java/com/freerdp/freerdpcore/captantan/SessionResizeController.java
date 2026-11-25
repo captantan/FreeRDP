@@ -266,7 +266,17 @@ public final class SessionResizeController implements DisplayControl.Listener
 	 * viewport, made valid as the native side makes a layout valid), so that it needs no resize
 	 * once it is connected. Other resolutions are left as they are.
 	 */
-	public void prepareConnect(BookmarkBase.ScreenSettings settings)
+	public void prepareConnect(BookmarkBase bookmark)
+	{
+		if (bookmark == null)
+			return;
+		prepareConnect(bookmark.getActiveScreenSettings());
+		// The remote scale (package 3.3), for the density the window has now.
+		RemoteScale.prepareConnect(activity, bookmark,
+		                           activity.getResources().getConfiguration().densityDpi);
+	}
+
+	private void prepareConnect(BookmarkBase.ScreenSettings settings)
 	{
 		if (settings == null || !(settings.isAutomatic() || settings.isFitScreen()))
 			return;
@@ -387,6 +397,17 @@ public final class SessionResizeController implements DisplayControl.Listener
 			               "); asked again when it is");
 			return;
 		}
+		// The remote scale (package 3.3): 0 / 0 is the session's own.
+		final int dpi = activity.getResources().getConfiguration().densityDpi;
+		final RemoteScale scale = RemoteScale.of(activity, h.getBookmark());
+		final int desktopScale = (scale != null) ? scale.desktopPercent(dpi) : 0;
+		final int deviceScale = (desktopScale > 0) ? RemoteScale.deviceFor(desktopScale) : 0;
+		final String scaleText = (desktopScale > 0) ? ", scale " + desktopScale + "/" +
+		                                                  deviceScale + " (" +
+		                                                  scale.storedName() + ")"
+		                                            : "";
+		int w = viewportWidth;
+		int hh = viewportHeight;
 		if (!follows(h))
 		{
 			if (!fixedLogged)
@@ -397,13 +418,17 @@ public final class SessionResizeController implements DisplayControl.Listener
 				               h.getBookmark().getActiveScreenSettings().getResolutionString()) +
 				               "), shown as it is");
 			}
-			return;
+			// A fixed size keeps its size; only a scale of its own is asked for (the native
+			// side skips it when the session already has it).
+			if (desktopScale == 0)
+				return;
+			w = h.getWidth();
+			hh = h.getHeight();
 		}
-		final int w = viewportWidth;
-		final int hh = viewportHeight;
 		if (w <= 0 || hh <= 0)
 			return;
-		final int serial = h.getDisplayControl().request(w, hh);
+		final int serial =
+		    h.getDisplayControl().request(w, hh, desktopScale, deviceScale, 0, 0, 0);
 		if (serial == 0)
 			return;
 		lastSerial = serial;
@@ -411,8 +436,8 @@ public final class SessionResizeController implements DisplayControl.Listener
 		askedHeight = hh;
 		askedAt = SystemClock.uptimeMillis();
 		Log.i(TAG, "request #" + serial + ": " + h + " " + w + "x" + hh + " from " + windowName +
-		               " (" + why + "; display " + displayId() + ", " + lastConfig.densityDpi +
-		               " dpi, last configuration change " + lastChange + ")");
+		               " (" + why + "; display " + displayId() + ", " + dpi +
+		               " dpi, last configuration change " + lastChange + scaleText + ")");
 	}
 
 	private void resetZoom(String why)
@@ -486,6 +511,10 @@ public final class SessionResizeController implements DisplayControl.Listener
 		               "; " + describeConfig(newConfig));
 		lastDisplayId = display;
 		lastConfig = new Configuration(newConfig);
+		// An automatic remote scale follows the density (package 3.3): ask again once settled,
+		// also when the window keeps its size in pixels.
+		if ((diff & ActivityInfo.CONFIG_DENSITY) != 0 && host != null)
+			restartWait();
 		return diff;
 	}
 

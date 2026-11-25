@@ -167,7 +167,11 @@ public final class ConnectionPrefs
 	public static final EnumField<GraphicsMode> GRAPHICS_MODE =
 	    new EnumField<>("graphics_mode", GraphicsMode.BEST, GraphicsMode.values());
 
-	private static final Field<?>[] FIELDS = { GRAPHICS_MODE };
+	/** Remote scale (roadmap 3.3). See RemoteScale. */
+	public static final EnumField<RemoteScale> REMOTE_SCALE =
+	    new EnumField<>("remote_scale", RemoteScale.SCREEN, RemoteScale.values());
+
+	private static final Field<?>[] FIELDS = { GRAPHICS_MODE, REMOTE_SCALE };
 
 	// ---------------------------------------------------------------------------------------------
 
@@ -253,6 +257,11 @@ public final class ConnectionPrefs
 	public GraphicsMode getGraphicsMode()
 	{
 		return get(GRAPHICS_MODE);
+	}
+
+	public RemoteScale getRemoteScale()
+	{
+		return get(REMOTE_SCALE);
 	}
 
 	// ---------------------------------------------------------------------------------------------
