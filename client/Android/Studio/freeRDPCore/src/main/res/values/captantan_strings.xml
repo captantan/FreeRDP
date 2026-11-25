@@ -3,7 +3,8 @@
 <!-- captantan fork: strings of the certificate prompts (captantan/CertificatePrompt.java), of the
      Back question in a session window (captantan/SessionWindow.java), of the "RDP options"
      screen of the bookmark editor (captantan/ConnectionOptions*.java), of the session switcher and of
-     the session notifications (captantan/SessionNotifications.java, SessionKeeper.java). -->
+     the session notifications (captantan/SessionNotifications.java, SessionKeeper.java), and of the
+     bookmark editor's Save check (captantan/BookmarkEditor.java). -->
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
     <string name="captantan_cert_title_new">Check the server certificate</string>
     <string name="captantan_cert_title_changed">Server certificate changed</string>
@@ -118,4 +119,7 @@
     <string name="captantan_pref_key_new_connection_window" translatable="false">captantan_new_connection_window</string>
     <!-- Live resizing (package 3.2): said once per session when the server cannot take the window's size. -->
     <string name="captantan_resize_limited">The remote desktop cannot take this window\'s size; it is shown at %1$d × %2$d</string>
+    <!-- Save in the bookmark editor on a bookmark without a label, host or port. -->
+    <string name="captantan_bookmark_incomplete_title">Not saved yet</string>
+    <string name="captantan_bookmark_incomplete_msg">A connection needs a label, a host and a port. Fill them in, then save.</string>
 </resources>
