@@ -29,8 +29,17 @@
             android:title="@string/captantan_remote_scale"
             android:entries="@array/captantan_remote_scale_entries"
             android:entryValues="@array/captantan_remote_scale_values"
-            android:defaultValue="screen"
+            android:defaultValue="auto"
             app:useSimpleSummaryProvider="true" />
+        <SeekBarPreference
+            android:key="remote_scale_custom"
+            android:title="@string/captantan_remote_scale_custom"
+            android:defaultValue="150"
+            app:min="100"
+            android:max="500"
+            app:seekBarIncrement="5"
+            app:showSeekBarValue="true"
+            app:updatesContinuously="true" />
         <Preference
             android:selectable="false"
             android:persistent="false"

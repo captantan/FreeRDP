@@ -397,15 +397,14 @@ public final class SessionResizeController implements DisplayControl.Listener
 			               "); asked again when it is");
 			return;
 		}
-		// The remote scale (package 3.3): 0 / 0 is the session's own.
+		// The remote scale (package 3.3): 0 / 0 is the session's own (a link).
 		final int dpi = activity.getResources().getConfiguration().densityDpi;
-		final RemoteScale scale = RemoteScale.of(activity, h.getBookmark());
-		final int desktopScale = (scale != null) ? scale.desktopPercent(dpi) : 0;
+		final int desktopScale = RemoteScale.desktopPercent(activity, h.getBookmark(), dpi);
 		final int deviceScale = (desktopScale > 0) ? RemoteScale.deviceFor(desktopScale) : 0;
-		final String scaleText = (desktopScale > 0) ? ", scale " + desktopScale + "/" +
-		                                                  deviceScale + " (" +
-		                                                  scale.storedName() + ")"
-		                                            : "";
+		final String scaleText =
+		    (desktopScale > 0) ? ", scale " + desktopScale + "/" + deviceScale + " (" +
+		                             RemoteScale.describe(activity, h.getBookmark()) + ")"
+		                       : "";
 		int w = viewportWidth;
 		int hh = viewportHeight;
 		if (!follows(h))

@@ -33,15 +33,16 @@ import com.freerdp.freerdpcore.domain.BookmarkBase;
  * and it is what FreeRDP's own {@code /scale:140} and {@code /scale:180} send (both factors the
  * same).
  *
- * <p><b>The values.</b>
+ * <p><b>The values.</b> This is the connection's only scale setting: upstream's Screen ->
+ * Scale (100 %, 140 %, 180 %, custom) is hidden in the editor and overwritten at connect.
  * <ul>
- * <li>{@link #SCREEN}: what the bookmark's Screen settings say (upstream's "Scale": 100 %, 140 %,
- * 180 % or custom). The fork adds nothing; this was the behaviour before 3.3.</li>
- * <li>{@link #AUTO}: from the density of the window's display ({@link #automatic}), so that the
- * remote desktop's controls are about the size this device draws its own: one remote pixel at
- * 100 % is taken as one Android dp. Follows the window to a display of another density.</li>
- * <li>Fixed: 100 % to 300 %, the steps Windows offers in its own display settings up to 300 %.</li>
+ * <li>{@link #AUTO} (the default): from the density of the window's display
+ * ({@link #automatic}). Follows the window to a display of another density.</li>
+ * <li>Fixed: the steps Windows offers in its own display settings, 100 % to 500 %.</li>
+ * <li>{@link #CUSTOM}: any percentage from 100 to 500, the field
+ * {@link ConnectionPrefs#REMOTE_SCALE_CUSTOM}.</li>
  * </ul>
+ * A bookmark that never chose gets the default, so a changed default reaches it.
  *
  * <p><b>Where it is used.</b> At connect, {@link SessionResizeController#prepareConnect} writes
  * the scale into the bookmark's screen settings as upstream's custom scale, which
@@ -55,21 +56,37 @@ import com.freerdp.freerdpcore.domain.BookmarkBase;
  */
 public enum RemoteScale implements ConnectionPrefs.Stored
 {
-	SCREEN("screen", 0),
 	AUTO("auto", 0),
 	P100("100", 100),
 	P125("125", 125),
 	P150("150", 150),
 	P175("175", 175),
 	P200("200", 200),
+	P225("225", 225),
 	P250("250", 250),
-	P300("300", 300);
+	P300("300", 300),
+	P350("350", 350),
+	P400("400", 400),
+	P450("450", 450),
+	P500("500", 500),
+	CUSTOM("custom", 0);
 
 	private static final String TAG = SessionResizeController.TAG;
 
-	/** The protocol's range of the desktop scale factor. */
+	/** The protocol's range of the desktop scale factor (and of a custom scale). */
 	public static final int MIN_PERCENT = 100;
 	public static final int MAX_PERCENT = 500;
+
+	/** The steps Windows offers in its display settings, which the fixed values are. */
+	private static final int[] STEPS = { 100, 125, 150, 175, 200, 225, 250,
+		                                 300, 350, 400, 450, 500 };
+
+	/**
+	 * Automatic: percent per dpi of the window's density. One remote pixel at 100 % for one
+	 * Android dp would be 100 / 160; less, because a phone or tablet is held closer than a
+	 * desktop monitor and the remote desktop is a desktop's interface. See {@link #automatic}.
+	 */
+	static final double AUTO_PERCENT_PER_DPI = 0.75 * 100.0 / DisplayMetrics.DENSITY_DEFAULT;
 
 	private final String storedName;
 	private final int percent;
@@ -85,44 +102,42 @@ public enum RemoteScale implements ConnectionPrefs.Stored
 		return storedName;
 	}
 
-	/** The setting of a session's bookmark (the default for a quick connect, null for a link). */
-	public static RemoteScale of(Context context, BookmarkBase bookmark)
+	/**
+	 * The desktop scale factor in percent for a session's bookmark and a window of this density,
+	 * or 0 for a session without a bookmark (a {@code freerdp://} link: its own arguments).
+	 * A quick connect gets the default.
+	 */
+	public static int desktopPercent(Context context, BookmarkBase bookmark, int densityDpi)
 	{
 		if (bookmark == null)
-			return null;
-		return ConnectionPrefs.load(context, bookmark.getId()).getRemoteScale();
-	}
-
-	/**
-	 * The desktop scale factor in percent for a window of this density, or 0 for {@link #SCREEN}
-	 * (the session's own).
-	 */
-	public int desktopPercent(int densityDpi)
-	{
-		switch (this)
+			return 0;
+		final ConnectionPrefs prefs = ConnectionPrefs.load(context, bookmark.getId());
+		final RemoteScale scale = prefs.getRemoteScale();
+		switch (scale)
 		{
-			case SCREEN:
-				return 0;
 			case AUTO:
 				return automatic(densityDpi);
+			case CUSTOM:
+				return prefs.get(ConnectionPrefs.REMOTE_SCALE_CUSTOM);
 			default:
-				return percent;
+				return scale.percent;
 		}
 	}
 
 	/**
-	 * Automatic: one remote pixel at 100 % for one Android dp, that is density / 160, in the
-	 * steps Windows offers (25 % up to 250 %, then 50 %), rounded to the nearest, within 100 to
-	 * 500. 390 dpi gives 250 %, 340 dpi 225 %, 320 dpi 200 %, 240 dpi 150 %, 160 dpi 100 %.
+	 * Automatic: the density times {@link #AUTO_PERCENT_PER_DPI}, rounded to the nearest of the
+	 * steps Windows offers. 390 dpi gives 175 %, 280 dpi 125 %, 480 dpi 225 %, 160 dpi 100 %.
 	 */
 	public static int automatic(int densityDpi)
 	{
 		if (densityDpi <= 0)
 			densityDpi = DisplayMetrics.DENSITY_DEFAULT;
-		final double exact = densityDpi * 100.0 / DisplayMetrics.DENSITY_DEFAULT;
-		final int step = (exact < 262.5) ? 25 : 50;
-		final int rounded = (int)(Math.round(exact / step) * step);
-		return Math.max(MIN_PERCENT, Math.min(MAX_PERCENT, rounded));
+		final double exact = densityDpi * AUTO_PERCENT_PER_DPI;
+		int best = STEPS[0];
+		for (int step : STEPS)
+			if (Math.abs(step - exact) < Math.abs(best - exact))
+				best = step;
+		return best;
 	}
 
 	/** The device scale factor sent beside a desktop scale factor (see the class comment). */
@@ -137,29 +152,26 @@ public enum RemoteScale implements ConnectionPrefs.Stored
 
 	/**
 	 * At connect: the scale for this bookmark and density, written into its screen settings as
-	 * upstream's custom scale (so that LibFreeRDP passes it). {@link #SCREEN} leaves upstream's
-	 * as it is. Logged.
+	 * upstream's custom scale (so that LibFreeRDP passes it). Logged.
 	 */
 	static void prepareConnect(Context context, BookmarkBase bookmark, int densityDpi)
 	{
-		final RemoteScale scale = of(context, bookmark);
-		if (scale == null)
-			return;
-		final BookmarkBase.ScreenSettings settings = bookmark.getActiveScreenSettings();
-		final int desktop = scale.desktopPercent(densityDpi);
+		final int desktop = desktopPercent(context, bookmark, densityDpi);
 		if (desktop == 0)
-		{
-			Log.i(TAG, "remote scale " + scale.storedName + " (bookmark " + bookmark.getId() +
-			               "): the screen settings' " +
-			               (settings.isCustomScale() ? settings.getScaleDesktop() + "/" +
-			                                               settings.getScaleDevice()
-			                                         : settings.getScalePreset() + "/" +
-			                                               settings.getScalePreset()));
 			return;
-		}
 		final int device = deviceFor(desktop);
-		settings.setScale("custom", desktop, device);
-		Log.i(TAG, "remote scale " + scale.storedName + " (bookmark " + bookmark.getId() +
-		               "): connect at " + desktop + "/" + device + " (" + densityDpi + " dpi)");
+		bookmark.getActiveScreenSettings().setScale("custom", desktop, device);
+		Log.i(TAG, "remote scale " +
+		               ConnectionPrefs.load(context, bookmark.getId()).getRemoteScale().storedName +
+		               " (bookmark " + bookmark.getId() + "): connect at " + desktop + "/" + device +
+		               " (" + densityDpi + " dpi)");
+	}
+
+	/** For the log: the setting's stored name. */
+	static String describe(Context context, BookmarkBase bookmark)
+	{
+		return (bookmark == null)
+		    ? "link"
+		    : ConnectionPrefs.load(context, bookmark.getId()).getRemoteScale().storedName;
 	}
 }

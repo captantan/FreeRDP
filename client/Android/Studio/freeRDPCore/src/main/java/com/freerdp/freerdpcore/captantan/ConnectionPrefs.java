@@ -169,9 +169,13 @@ public final class ConnectionPrefs
 
 	/** Remote scale (roadmap 3.3). See RemoteScale. */
 	public static final EnumField<RemoteScale> REMOTE_SCALE =
-	    new EnumField<>("remote_scale", RemoteScale.SCREEN, RemoteScale.values());
+	    new EnumField<>("remote_scale", RemoteScale.AUTO, RemoteScale.values());
 
-	private static final Field<?>[] FIELDS = { GRAPHICS_MODE, REMOTE_SCALE };
+	/** The percentage of a custom remote scale (REMOTE_SCALE = CUSTOM), 100 to 500. */
+	public static final IntField REMOTE_SCALE_CUSTOM =
+	    new IntField("remote_scale_custom", 150, RemoteScale.MIN_PERCENT, RemoteScale.MAX_PERCENT);
+
+	private static final Field<?>[] FIELDS = { GRAPHICS_MODE, REMOTE_SCALE, REMOTE_SCALE_CUSTOM };
 
 	// ---------------------------------------------------------------------------------------------
 
