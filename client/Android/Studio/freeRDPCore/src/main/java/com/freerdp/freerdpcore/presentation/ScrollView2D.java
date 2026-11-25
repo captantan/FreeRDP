@@ -1151,6 +1151,9 @@ public class ScrollView2D extends FrameLayout
 			{
 				// viewport-only change (e.g. keyboard): keep position, don't re-center
 				top = lastCenterTop;
+				// captantan fork: but not below what is visible: the scroll range starts at the
+				// child's top, so a picture kept lower than that could not be scrolled into view
+				top = Math.min(top, getPaddingTop() + Math.max(0, usableH - contentH));
 			}
 			else
 			{

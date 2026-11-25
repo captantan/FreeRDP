@@ -1225,7 +1225,10 @@ shown in another window all take the same path. No reconnect, and the window is 
   - `ScrollView2D.java`: `recenter()`, which the controller calls (posted) on every change of the
     viewport. `onLayout` keeps the picture's old top while its height stays the same, which is meant
     for the keyboard; on a rotation of a fixed-size session it left most of the picture below the
-    screen (seen on the device: 1920x1080 in portrait, then landscape).
+    screen (seen on the device: 1920x1080 in portrait, then landscape). And in that keyboard case the
+    kept top is now lowered to what still fits above the keyboard (or to the top, from where the picture
+    scrolls): a picture shorter than the window, centred, could otherwise not be scrolled out from under
+    the keyboard (seen on the device with the same session).
   - `res/values/strings.xml`: `resolution_automatic` and `resolution_fit` say "(follows the window)", and
     the first two items of `resolutions_array` refer to them.
   - `domain/BookmarkBase.java`: back to upstream's (see package 3.1).
@@ -1453,7 +1456,7 @@ compile check runs on the merge.
        that upstream adds is fine; a value upstream removes from the original eight would make window
        size changes recreate the window again: keep it.
      - `SessionInputManager.java`: keep the first line of `PinchZoomListener.onScaleBegin`.
-     - `ScrollView2D.java`: keep `recenter()`. If upstream changes how `onLayout` centres the content
+     - `ScrollView2D.java`: keep `recenter()` and the line after `top = lastCenterTop`. If upstream changes how `onLayout` centres the content
        (`lastCenterContentH`, `lastCenterTop`), `recenter` must still make the next layout centre it
        afresh.
      - `ExtendedKeyboardView.java`, `TouchPointerView.java`: keep `rebuild()`. If upstream adds state to
