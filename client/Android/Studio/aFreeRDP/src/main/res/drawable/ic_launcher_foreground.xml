@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- captantan fork: launcher icon foreground (roadmap 1.7): a white ring with two offset
+     chevrons running clockwise. Overrides freeRDPCore's drawable of the same name.
+     Source: aFreeRDP/captantan-launcher-icon.svg. See CAPTANTAN.md, "Launcher icon". -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M30,54a24,24 0,1 0,48 0a24,24 0,1 0,-48 0z"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5.5" />
+    <path
+        android:pathData="M46.4,40.88L54,48.28L46.4,55.68M61.6,52.32L54,59.72L61.6,67.12"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="4.8" />
+</vector>
