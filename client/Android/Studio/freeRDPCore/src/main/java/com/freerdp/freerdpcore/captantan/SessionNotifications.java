@@ -400,5 +400,4 @@ final class SessionNotifications
 	{
 		return (host.getId() << 2) | kind;
 	}
-
 }
