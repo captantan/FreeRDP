@@ -1059,6 +1059,56 @@ the size last wanted in place of what the settings held. The lines are
 written on the session thread. Channel events that happened while that thread was busy connecting are
 written when it gets to them, in order, with `(<n> ms ago)`.
 
+**Measured on a device on 2026-11-24** (the Android 17 foldable phone; test builds of this package, the
+last runs on the build of the final native code; a Windows 11 host and a GNOME Remote Desktop 51 host in
+remote-login mode; the trigger was upstream's "Fit screen" path: rotate, unfold, fold, drop a split-screen
+divider, and once a quick run of display-size overrides with `adb shell wm size`). 35 layouts were sent in
+all.
+
+- **Caps before any layout, on each of the twelve channels seen** (six Windows sessions with one channel
+  each, two GNOME sessions with five and one). Both hosts send the same caps: 16 monitors, area factors
+  8192 x 8192. The channel opens 1 to 2 seconds after the session connects and its caps follow within 4
+  to 163 ms.
+- **Windows 11:** 13 layouts, each answered with a desktop of the new size 53 to 96 ms later (one took
+  2.1 s while the network was coming back), no reconnect, no drop. The new size arrived as a graphics
+  reset on the graphics channel, as on GNOME; no second resize from a reactivation was seen.
+- **GNOME Remote Desktop:** 19 layouts to a reachable session, each answered 54 to 104 ms later, no
+  reconnect, no drop. A session went through up to five channels: the system daemon redirects at once, and
+  when the user's session is not there yet a second redirection follows the login. After each one the
+  state was reset: a waiting request was reported as deferred for "no disp channel", then for "caps not
+  received yet", then skipped or sent.
+- **Reconnect through the broker returns at the size last asked for** (GNOME, twice: once after the host
+  machine had gone to sleep in the middle of a run, once after the connection was cut on the host with
+  `ss -K`): both times the session, connected in portrait, came back at the size last asked for (a
+  landscape size, then the unfolded size, 2.5 s after the cut), and the waiting request was then skipped
+  because the desktop already had that size. The log
+  showed the settings holding another size than the one wanted at every redirection of such a reconnect,
+  not only after the library's reset, so the `Redirect` hook is what does it.
+- **The one drop** (GNOME, first run): three layouts were sent and not answered, and 9.6 s after the first
+  the connection ended with a TCP timeout and no error code; the next reconnect attempts could not
+  resolve the host's name. The host machine had gone to sleep. A layout the server rejects would end the
+  session with an error code and no automatic reconnect; that was never seen.
+- **Newest wins:** two requests made while the session thread was reconnecting never showed; the third
+  was the one acted on.
+- **The interval and its timer:** with size changes 144 and 140 ms apart, the first was sent, the second
+  was clamped and deferred ("356 ms to go"), the third replaced it ("217 ms to go") and was sent by the
+  timer 501 ms after the first. The server answered with that size.
+- **Clamp:** odd widths were made even (1379 to 1378, 673 to 672, 1857 to 1856) and both hosts answered
+  with the even width.
+- **Scale:** the bookmark's 140 % went out as 140 / 140 with every layout.
+- **Threads:** with the graphics pipeline, which both hosts use, the resize and paint callbacks arrive
+  on the library's dynamic channel thread, not on the session thread (`SessionHost`'s comment says so
+  now). The display-control lines are all on the session thread.
+- **Upstream's trigger is inexact**, which is package 3.2's to replace: "Automatic" bookmarks never ask;
+  a divider drag asks once, when it is dropped; and during quick changes it read sizes of a layout pass
+  that had not finished (a height 103 pixels short, corrected by the request that followed 144 ms
+  later).
+- **Not exercised on a device:** a request equal to the last layout sent (the skip for "the desktop
+  already has this size" was), the area clamp and the refusals (no server sent caps that small),
+  `FLAG_FORCE`, a scale or a physical size given with a request, a plain reconnect without the broker
+  (the Windows connection survived two airplane-mode attempts of 20 seconds), a server without the
+  channel, and a tablet or desktop windowing.
+
 ## Package and version scheme
 
 - `versionName = <upstream release>-captantan.<R>`, for example `3.33.1-captantan.1`.
