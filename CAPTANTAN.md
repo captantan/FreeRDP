@@ -1429,6 +1429,117 @@ hidden and overwritten at connect.
 - **Unchanged:** Save on any sub-screen saves the whole bookmark (all sub-screens, and the RDP options
   draft) and closes the editor; Back on a sub-screen returns to the main screen and keeps the edits.
 
+**Session bar: overlay and hidden** (package 4.1)
+
+The fork's controls in the session window, in place of upstream's floating toolbar handle, which could
+not be hidden and covered remote UI. Upstream's `FloatingToolbar` class and `floating_toolbar.xml` stay
+(built and set up as before) but are not shown.
+
+- `freeRDPCore/.../captantan/SessionBar.java` (new): the bar, one per `SessionWindow`. Its class comment
+  says what each mode does and where the bar sits. **Buttons**, left to right (top to bottom on a
+  vertical bar): Sessions (`SessionSwitcher.open`), Keyboard (upstream's `toggleKeyboard`: the system
+  keyboard with the key bar), Touch pointer (upstream's `toggleTouchPointer`), Reset zoom (zoom 1:1 and
+  scroll to the top left, the touch pointer's own reset), Full screen, Session bar settings, Disconnect
+  (asks first, as the switcher does). Upstream's toolbar had two actions (touch pointer, keyboard) and
+  2.2 had added the switcher to it; all three are here, so nothing is lost with the handle. Material
+  icon buttons on a `MaterialCardView` in `colorSurfaceContainerHigh`, no fixed colours. Buttons shrink
+  from 44 dp to 32 dp when the edge is too short for all seven (a small desktop window, split screen).
+- **Full screen** flips upstream's two app-wide settings, "Hide Status Bar" and "Hide Navigation Bar"
+  (Settings, User interface), together: on if either is off, off if both are on. Upstream's own code
+  then hides the bars with swipe-to-show transient bars, and since 3.2 the remote desktop is resized to
+  the larger viewport. With the status bar hidden the session also draws under the camera cutout (the
+  bar does not: it keeps clear of the cutout). It is app-wide, not per connection, because the settings
+  are.
+- `freeRDPCore/.../captantan/SessionBarSettings.java` (new): the enums and the per-connection values.
+  Three `ConnectionPrefs` fields, on the "RDP options" screen in a "Session bar" category and in the
+  bar's own settings dialog:
+
+  | Key | Values (stored names) | Default | Why the default |
+  |---|---|---|---|
+  | `bar_mode` | `overlay`, `hidden`, (`reserved`) | `hidden` | the complaint was a control that covers the remote screen and cannot be hidden |
+  | `bar_edge` | `top`, `bottom`, `left`, `right` | `top` | on the phone the top of the session is below the status bar, so a swipe there meets neither Back (sides) nor Home (bottom) |
+  | `bar_opacity` | 30 to 100 (percent) | 85 | the picture shows through, the icons stay readable |
+
+  `reserved` (package 4.2) is a valid stored name but is not offered; until 4.2 it is shown as overlay.
+  A session without a saved bookmark (quick connect, a `freerdp://` link) gets the defaults; a change
+  made from its bar lasts for that session only (kept in `SessionBarSettings`, keyed by the session). A
+  change from a bookmarked session's bar is saved under its bookmark with its other settings kept.
+- `freeRDPCore/.../captantan/SessionBarGestures.java` (new): sees every touch and mouse event of the
+  window before its views do, by wrapping the window's `Window.Callback` (in front of AppCompat's own
+  wrapper; installed once, in `onCreate` after `setContentView`). Everything is passed on unchanged
+  except the three gestures below. No upstream view is edited for it.
+- **Overlay mode:** the bar floats centred on its edge, at the opacity, over the remote picture. The
+  remote desktop keeps its size (`SessionResizeController.setReservedInsets` is not called).
+- **Hidden mode:** nothing is drawn. The bar is revealed by
+  - **an edge swipe**: a finger or stylus that goes down in a 24 dp strip just inside the edge and moves
+    away from it by more than the touch slop, more than along it. The strip lies past the system's
+    gesture insets: at the top below the status bar (and below the area that pulls in hidden system
+    bars), at the bottom above the home-gesture area. On the left and right the strip is inside Back's
+    area, so a band of 200 dp in the middle of the edge (Android's limit per edge) is excluded from
+    Back while the bar is hidden (`setSystemGestureExclusionRects`); above and below the band Back works
+    as always, and a swipe that Android takes for Back is given up (the session never saw it). The
+    touch is held back from the session until it is clear which it is: a tap at the edge, a drag along
+    it, a second finger or a long press (the long-press timeout) are given to the session as they were.
+  - **the mouse**: the pointer resting in an 8 dp band at the edge for 250 ms (hover events still all
+    reach the session, so the remote pointer follows as before). In a desktop window the band is just
+    below the caption bar.
+  - **a call**: `SessionBar.reveal(cause)`, or `SessionBar.revealInFocusedWindow(cause)` (package 5.3).
+
+  It hides again after a button is used (not the settings button, which hides it when its dialog
+  closes), after a press anywhere else (that whole gesture is kept from the session, so hiding the bar
+  never clicks on the remote side), or 5 s (`HIDE_AFTER_MS`) after it was last touched or hovered.
+- **Where it sits.** In `captantan_session_bar_container`, a full-size layer on top of the session views
+  in `session.xml`. The layer is padded by what the bar keeps clear of, recomputed at every layout: the
+  visible system bars and a desktop window's caption bar (`systemBars()`), the camera cutout, the
+  on-screen keyboard, and upstream's key bar when it is up. So it follows rotation, folding, split
+  screen, window resizes and the keyboard. It takes the insets from upstream's insets listener before
+  they are consumed (`SessionBar.onWindowInsets`).
+- **Following the session.** `SessionWindow.show` applies the settings of the session it now shows
+  (`SessionBar.onShown`), so a switch in one window takes the other connection's mode, edge and
+  opacity; letting go of a session hides the bar and closes its dialog. Light or dark changing rebuilds
+  the bar with the theme's colours (`SessionWindow.onUiModeChanged`).
+- **Log** (tag `captantan.bar`, INFO), each line naming the window and the session:
+  `applied (shown|settings changed): w<n> s<n> "<title>": mode <m>, edge <e>, opacity <o> % (bookmark <id>
+  | no saved bookmark)`, `layout: ... layer WxH at x,y, keeps clear l t r b, swipe from l t r b, buttons
+  <n> dp[, Back excluded <rect>]` (when it changes), `reveal: ... (swipe from the <edge> edge | mouse at the
+  <edge> edge | <caller's cause>)`, `hide: ... (after <button> | tap outside | click outside | timeout 5 s
+  | after settings | the window let go of ...)`, `button: ... <name>`, `settings: ...`, `full screen on|off`.
+- Upstream files edited (each marked):
+  - `res/layout/session.xml`: `android:visibility="gone"` on the `floating_toolbar` include, and the
+    layer `captantan_session_bar_container` (a `FrameLayout`, `match_parent`) after it, last child, so on
+    top.
+  - `SessionActivity.java`: `hideSystemBars()` is public (the full screen button calls it); one line in
+    `onWindowInsetsChanged` after `setSystemInsets`: `window.getBar().onWindowInsets(windowInsets)`.
+- Ours, changed: `SessionWindow.java` (the bar, `getBar()`, `onShown`/`onReleased` in `show`, `release`
+  and `onSessionEnded`, rebuild on a night-mode change, `onDestroy`), `ConnectionPrefs.java` (three
+  fields and getters), `res/xml/captantan_connection_options.xml` (the category).
+- New resources: `res/layout/captantan_session_bar{,_settings}.xml`,
+  `res/drawable/captantan_ic_{fullscreen,fullscreen_exit,zoom_reset}.xml` (the first two are Material
+  icons, Apache-2.0; the zoom one is the fork's own drawing), strings in `captantan_strings.xml` (English
+  only). Reused: upstream's `ic_keyboard`, `ic_touch_pointer`, `ic_tune`, and 2.2's `captantan_ic_sessions`
+  and `captantan_ic_disconnect`.
+
+**For later packages (4.2, 4.3, 5.3).**
+
+- **Adding a button** (4.3's trackpad toggle, say): a `Button` with `style="?attr/materialIconButtonStyle"`,
+  an icon and a content description inside `captantan_bar_buttons` in `captantan_session_bar.xml`
+  (copy a sibling's attributes), and one `bind(id, "name", hidesAfter, action)` line in
+  `SessionBar.bindButtons`. The bar orients, sizes and logs it with the others.
+- **Revealing the bar from code** (5.3's key combination): `SessionBar.revealInFocusedWindow("<keys>")`,
+  or `window.getBar().reveal(cause)` for a given `SessionWindow`. It does nothing in overlay mode (the
+  bar is shown) and logs the cause. `hide(cause)` and `isShown()` are public too.
+- **The reserved mode** (4.2): offer `reserved` by adding it to `captantan_bar_mode_entries` /
+  `_values` and to the dialog's mode group; make `SessionBar.effectiveMode()` return it; and in
+  `SessionBar.layout()`, for that mode, call `window.getResizer().setReservedInsets(...)` with the bar's
+  thickness on its edge (the bar's measured height, or width for left and right, plus the gap), and with
+  zeros when the window shows another mode or no session (`onReleased`). The bar then sits in the strip:
+  the layer's padding already keeps it clear of the system insets, and the resize controller subtracts
+  the reserved insets from the viewport. Gestures are not needed in that mode (`wantsEdgeGesture` is
+  hidden-mode only).
+- **Not in this package**, written down for later: a quick remote-scale switch (needs a public "ask
+  again" on `SessionResizeController`, see the 3.3 block), zooming out below the fit (7.x), a "keep clear
+  of the camera" choice for full screen, a key combination (5.3).
+
 ## Package and version scheme
 
 - `versionName = <upstream release>-captantan.<R>`, for example `3.33.1-captantan.1`.
@@ -1657,6 +1768,20 @@ compile check runs on the merge.
      `connect`, `freeInstance`, `OnConnectionFailure` and `OnDisconnected` together; one missing makes
      `freeInstance` free a running session or never free one. If upstream starts waiting for connecting
      sessions itself, drop ours.
+   - The session bar (package 4.1):
+     - `res/layout/session.xml`: keep `android:visibility="gone"` on the `floating_toolbar` include and
+       `captantan_session_bar_container` as the last child of the root (so on top of everything,
+       `match_parent`). If upstream adds a view on top of the session (a new overlay), put it before the
+       layer, or the bar is drawn under it. If upstream rewrites or replaces the floating toolbar, check
+       that whatever it adds is either hidden the same way or reachable from the bar: a new action in
+       `FloatingToolbar.Listener` gets a button in the bar (see "For later packages" above).
+     - `SessionActivity.java`: keep `hideSystemBars()` public, and the `window.getBar().onWindowInsets`
+       line in `onWindowInsetsChanged` (before `return WindowInsetsCompat.CONSUMED`, with the unconsumed
+       `windowInsets`). If upstream starts using `Window.setCallback` or overrides `dispatchTouchEvent` /
+       `dispatchGenericMotionEvent` in the activity, check that `SessionBarGestures` still sees events
+       first (it wraps whatever callback is set when the window is built).
+     - If upstream changes the meaning of "Hide Status Bar" / "Hide Navigation Bar" or their keys, check
+       the full screen button in `SessionBar.toggleFullScreen`.
    - `ApplicationSettingsActivity.java` (`clearCertificateCache`) and `settings_app_security.xml`: keep the
      call to `CertificateStore.clear` and the removed "Accept all certificates". If upstream moves its
      certificate store again, update `CertificateStore`.
@@ -1732,7 +1857,9 @@ The workflow `.github/workflows/captantan-android.yml` runs on pull requests int
   with the types `specialUse`, `microphone` and `camera` and its subtype property, the permissions
   `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_SPECIAL_USE`, `FOREGROUND_SERVICE_MICROPHONE`,
   `FOREGROUND_SERVICE_CAMERA`, `POST_NOTIFICATIONS`, `RECORD_AUDIO` and `CAMERA`, and
-  `SessionOpenActivity`;
+  `SessionOpenActivity`; the package 4.1 classes (`SessionBar`, `SessionBarGestures`, `SessionBarSettings`
+  and its `Mode` and `Edge`), the bar's layer id in the session layout, its two layouts and new icons, and
+  the strings `bar_mode`, `bar_edge`, `bar_opacity` and `captantan.bar` in the dex;
 - test build: package `dev.captantan.freerdp.debug`, label `RDP debug`, the same version, signed with the
   committed public key, and byte-identical native libraries to the release APK.
 
