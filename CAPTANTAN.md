@@ -1293,7 +1293,9 @@ shown in another window all take the same path. No reconnect, and the window is 
   `android:inputType="textPassword"` on an AndroidX `EditTextPreference`, which AndroidX ignores, so both
   passwords were typed and shown in plain text. Each password preference (`bookmark.password`,
   `bookmark.gateway_password`; no other screen in `res/xml/` has one) gets a password `EditText` through
-  `setOnBindEditTextListener` and a summary that only says "not set" or `*******`. A new password
+  `setOnBindEditTextListener`, in a Material text field (`res/layout/captantan_password_dialog.xml`, set
+  with `setDialogLayoutResource`) whose eye icon shows the password while the dialog is open (each opening
+  starts hidden), and a summary that only says "not set" or `*******`. A new password
   preference must be added to `BookmarkEditor.PASSWORD_KEYS`.
 - **A text dialog is not cancelled by a tap outside it.** With an editor dialog open, the toolbar's Save
   button stays visible above the scrim; tapping it cancelled the dialog, dropping what was typed, and did
