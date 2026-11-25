@@ -1155,6 +1155,11 @@ shown in another window all take the same path. No reconnect, and the window is 
   pass that follows a new window size does, so the size is the laid-out one, not a guess from the
   configuration (3.1 saw upstream's trigger read a height 103 pixels short during quick changes). The
   native side then makes the width even and keeps 500 ms between layouts.
+- **Only a visible window asks.** Between `onStop` and `onStart` the window asks for nothing, and at
+  `onStart` the wait starts again. Measured on the foldable: folding stops the window first (the inner
+  screen goes to sleep), its bottom inset drops to 0 about 300 ms later, and the new configuration
+  arrives only when the window starts on the outer screen, 500 ms after that; without this rule the
+  half-folded insets went out as a layout of their own.
 - **Attach.** When a window binds a session (first connect, a switch, "open in new window", a recreated
   window, a reconnect) it asks at once if the viewport is settled, so a switch resizes without a wait, and
   when it settles if a wait is running (a window that has just opened). Asking for the size a session already
@@ -1171,7 +1176,7 @@ shown in another window all take the same path. No reconnect, and the window is 
     data. 3.1's change of the default for new bookmarks to "Fit screen" is undone, so the default is
     upstream's "Automatic" again.
   - "Custom" and the fixed sizes (640x480 ... 1920x1200): connect at that size, never resized. The picture
-    is shown 1:1, centred or scrollable, and can be zoomed.
+    is shown 1:1, centred or scrollable, and can be zoomed. A change of the window centres it again.
   - A quick connect is "Automatic" (upstream's new `BookmarkBase`), so it follows. A `freerdp://` link is
     not resized: its size is the link's (or FreeRDP's default).
 - **The picture.** Until the server answers, and whenever it cannot resize, the picture is shown as it
@@ -1217,6 +1222,10 @@ shown in another window all take the same path. No reconnect, and the window is 
   - `SessionInputManager.java`: `PinchZoomListener.onScaleBegin` starts from the view's zoom (its private
     copy went wrong after any reset from outside, upstream's touch pointer "reset" button included).
   - `ExtendedKeyboardView.java`, `TouchPointerView.java`: one `rebuild()` method each.
+  - `ScrollView2D.java`: `recenter()`, which the controller calls (posted) on every change of the
+    viewport. `onLayout` keeps the picture's old top while its height stays the same, which is meant
+    for the keyboard; on a rotation of a fixed-size session it left most of the picture below the
+    screen (seen on the device: 1920x1080 in portrait, then landscape).
   - `res/values/strings.xml`: `resolution_automatic` and `resolution_fit` say "(follows the window)", and
     the first two items of `resolutions_array` refer to them.
   - `domain/BookmarkBase.java`: back to upstream's (see package 3.1).
@@ -1444,6 +1453,9 @@ compile check runs on the merge.
        that upstream adds is fine; a value upstream removes from the original eight would make window
        size changes recreate the window again: keep it.
      - `SessionInputManager.java`: keep the first line of `PinchZoomListener.onScaleBegin`.
+     - `ScrollView2D.java`: keep `recenter()`. If upstream changes how `onLayout` centres the content
+       (`lastCenterContentH`, `lastCenterTop`), `recenter` must still make the next layout centre it
+       afresh.
      - `ExtendedKeyboardView.java`, `TouchPointerView.java`: keep `rebuild()`. If upstream adds state to
        either view (a field set after it is built) or builds it differently, `rebuild` must restore that
        state too; if upstream reads its colours from the theme at draw time, `rebuild` can go.
