@@ -44,6 +44,7 @@ public class BookmarkActivity
 	{
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_bookmark);
+		com.freerdp.freerdpcore.captantan.BookmarkEditor.install(this); // captantan fork
 
 		if (getSupportActionBar() != null)
 		{
@@ -112,12 +113,8 @@ public class BookmarkActivity
 			SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
 			if (!verifySettings(prefs))
 			{
-				new AlertDialog.Builder(this)
-				    .setTitle(R.string.error_bookmark_incomplete_title)
-				    .setMessage(R.string.error_bookmark_incomplete)
-				    .setPositiveButton(R.string.cancel, (d, w) -> finish())
-				    .setNegativeButton(R.string.cont, (d, w) -> d.cancel())
-				    .show();
+				// captantan fork: Save never discards (upstream asked "Cancel without saving?").
+				com.freerdp.freerdpcore.captantan.BookmarkEditor.showIncomplete(this);
 			}
 			else
 			{
