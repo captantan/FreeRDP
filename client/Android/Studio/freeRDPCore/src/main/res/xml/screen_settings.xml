@@ -41,7 +41,9 @@
             freerdp:bounds_min="480"
             app:useSimpleSummaryProvider="true" />
     </PreferenceCategory>
-    <PreferenceCategory android:title="@string/settings_cat_scale">
+    <!-- captantan fork: hidden; RDP options' "Remote scale" (captantan/RemoteScale) replaces it -->
+    <PreferenceCategory android:title="@string/settings_cat_scale"
+        app:isPreferenceVisible="false">
         <ListPreference
             android:entries="@array/scale_mode_array"
             android:entryValues="@array/scale_mode_values_array"

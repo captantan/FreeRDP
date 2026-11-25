@@ -592,8 +592,9 @@ public class SessionActivity extends AppCompatActivity
 			screenSettings.setHeight(screen_height);
 			screenSettings.setWidth(screen_width);
 		}
-		// captantan fork: connect at the size the session would be resized to (the viewport)
-		window.getResizer().prepareConnect(screenSettings);
+		// captantan fork: connect at the size the session would be resized to (the viewport),
+		// and at the remote scale of the RDP options
+		window.getResizer().prepareConnect(session.getBookmark());
 
 		// RECORD_AUDIO / CAMERA: only if the matching redirect is enabled.
 

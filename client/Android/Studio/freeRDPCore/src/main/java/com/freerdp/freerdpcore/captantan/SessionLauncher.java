@@ -112,22 +112,45 @@ public final class SessionLauncher
 	 */
 	public static boolean isDesktopWindowing(Activity activity)
 	{
+		return describeWindowing(activity).startsWith("yes");
+	}
+
+	/**
+	 * "yes (...)" or "no (...)", with what each test found (in the launch's log line, package
+	 * 3.3): the freeform windowing mode, Samsung's DeX flag, and the multi-window state.
+	 */
+	static String describeWindowing(Activity activity)
+	{
 		if (activity == null)
-			return false;
+			return "no (no activity)";
 		final Configuration config = activity.getResources().getConfiguration();
-		if (config.toString().contains("mWindowingMode=freeform"))
-			return true;
+		final String text = config.toString();
+		final String mode = configValue(text, "mWindowingMode=");
+		final boolean freeform = "freeform".equals(mode);
+		String dex;
+		boolean dexOn = false;
 		try
 		{
 			final Class<?> type = config.getClass();
 			final int enabled = type.getField("SEM_DESKTOP_MODE_ENABLED").getInt(type);
-			final int mode = type.getField("semDesktopModeEnabled").getInt(config);
-			return enabled == mode;
+			final int value = type.getField("semDesktopModeEnabled").getInt(config);
+			dexOn = (enabled == value);
+			dex = String.valueOf(value) + (dexOn ? " (on)" : "");
 		}
 		catch (ReflectiveOperationException | RuntimeException e)
 		{
-			return false; // not a Samsung device, or not this version of DeX
+			dex = "none"; // not a Samsung device, or not this version of DeX
 		}
+		return ((freeform || dexOn) ? "yes" : "no") + " (windowing mode " + mode + ", display's " +
+		    configValue(text, "mDisplayWindowingMode=") + ", DeX flag " + dex + ", multi-window " +
+		    activity.isInMultiWindowMode() + ")";
+	}
+
+	/** A value of the window configuration in Configuration.toString(), or "?". */
+	private static String configValue(String text, String name)
+	{
+		final int at = text.indexOf(name);
+		return (at < 0) ? "?" : text.substring(at + name.length()).split("[ ,}]", 2)[0];
 	}
 
 	/** Whether a session opened now from {@code activity} gets a new window. */
@@ -191,7 +214,7 @@ public final class SessionLauncher
 		               (live != null ? live.toString() : "new connection") + " opens in " +
 		               (newWindow ? "a new window" : "the session window") + " (setting " +
 		               getPlacement(from).stored + ", desktop windowing " +
-		               (isDesktopWindowing(from) ? "yes" : "no") + ")");
+		               describeWindowing(from) + ")");
 		from.startActivity(intent, options);
 	}
 

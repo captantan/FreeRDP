@@ -21,4 +21,29 @@
             android:summary="@string/captantan_graphics_mode_note" />
     </PreferenceCategory>
 
+    <!-- captantan fork (roadmap 3.3): captantan/RemoteScale -->
+    <PreferenceCategory
+        android:title="@string/captantan_options_cat_display">
+        <ListPreference
+            android:key="remote_scale"
+            android:title="@string/captantan_remote_scale"
+            android:entries="@array/captantan_remote_scale_entries"
+            android:entryValues="@array/captantan_remote_scale_values"
+            android:defaultValue="auto"
+            app:useSimpleSummaryProvider="true" />
+        <SeekBarPreference
+            android:key="remote_scale_custom"
+            android:title="@string/captantan_remote_scale_custom"
+            android:defaultValue="150"
+            app:min="100"
+            android:max="500"
+            app:seekBarIncrement="5"
+            app:showSeekBarValue="true"
+            app:updatesContinuously="true" />
+        <Preference
+            android:selectable="false"
+            android:persistent="false"
+            android:summary="@string/captantan_remote_scale_note" />
+    </PreferenceCategory>
+
 </PreferenceScreen>

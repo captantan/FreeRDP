@@ -10,6 +10,7 @@ package com.freerdp.freerdpcore.captantan;
 import android.os.Bundle;
 
 import androidx.preference.ListPreference;
+import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
 
 import com.freerdp.freerdpcore.R;
@@ -30,6 +31,31 @@ public class ConnectionOptionsFragment extends PreferenceFragmentCompat
 			graphics.setEnabled(false);
 			graphics.setSummaryProvider(null);
 			graphics.setSummary(R.string.captantan_graphics_mode_unavailable);
+		}
+
+		// Remote scale (roadmap 3.3): Automatic says what it gives on this screen; the custom
+		// percentage is shown only for Custom.
+		ListPreference scale = findPreference(ConnectionPrefs.REMOTE_SCALE.key);
+		Preference custom = findPreference(ConnectionPrefs.REMOTE_SCALE_CUSTOM.key);
+		if (scale != null)
+		{
+			scale.setSummaryProvider(p -> {
+				final ListPreference list = (ListPreference)p;
+				final CharSequence entry = list.getEntry();
+				if (!RemoteScale.AUTO.storedName().equals(list.getValue()))
+					return entry;
+				final int dpi = getResources().getConfiguration().densityDpi;
+				return getString(R.string.captantan_remote_scale_auto_now, entry,
+				                 RemoteScale.automatic(dpi), dpi);
+			});
+			if (custom != null)
+			{
+				custom.setVisible(RemoteScale.CUSTOM.storedName().equals(scale.getValue()));
+				scale.setOnPreferenceChangeListener((p, value) -> {
+					custom.setVisible(RemoteScale.CUSTOM.storedName().equals(value));
+					return true;
+				});
+			}
 		}
 	}
 }
