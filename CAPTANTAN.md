@@ -285,8 +285,8 @@ session. Two rules: a session is shown in at most one window, and a window shows
   the session's. They are shown in whichever window shows the session and move with it. While no window
   shows the session an open question waits without a dialog; after five minutes without a window
   (`BlockingPrompts.UNATTENDED_TIMEOUT_MS`) it is answered with reject or cancel, which ends that
-  connection attempt. `SessionHost.needsAttention()` says that a session is waiting like this. There is no
-  notification for it yet: that is package 2.3.
+  connection attempt. `SessionHost.needsAttention()` says that a session is waiting like this. Since package 2.3 an
+  alert asks for the answer (see "Sessions in the background").
 - **Launching.** `SessionActivity` is `launchMode="singleTop"` and no longer `documentLaunchMode="always"`
   (`freeRDPCore/src/main/AndroidManifest.xml`), and every launch inside the app uses
   `SessionWindow.LAUNCH_FLAGS` (`FLAG_ACTIVITY_NEW_TASK`): `ExternalDisplayManager.java` (was `NEW_TASK |
@@ -307,16 +307,23 @@ session. Two rules: a session is shown in at most one window, and a window shows
   window whose session ends closes, as upstream.
 - **A session that no window shows** keeps running in full. What that means, so that the switcher (2.2)
   and the notification (2.3) can be built knowing it:
-  - Its redirections stay on: sound keeps playing, and a redirected microphone or camera stays open to
-    the remote side. Nothing in the Java layer can pause a channel, so 2.1 does not stop them; it says
-    so. The Back question carries a warning for a session that redirects the microphone or camera, the
-    `detach` log line says it, and `SessionHost.redirectsMicrophoneOrCamera()` is there for the
-    notification of 2.3, which must show it. Not covered by a warning: a window that is closed some
-    other way (Recents, a launch that reuses it). Android itself stops microphone and camera capture
-    for an app with no visible activity and no foreground service, and shows its indicator while a
-    capture runs; that is the platform's rule and was not measured here.
-  - If it fails or the server ends it, it is dropped from the registry. A toast ("<title>: the session
-    has ended") is shown if the app is visible; with the app hidden nothing is shown (2.3).
+  - Its redirections stay on in the client: the sound channel keeps playing and a redirected
+    microphone or camera stays open to the remote side. Nothing in the Java layer can pause a channel,
+    so 2.1 does not stop them; it says so. The Back question carries a warning for a session that
+    redirects the microphone or camera, the `detach` log line says it, and the 2.3 notification names
+    such a session. Not covered by a warning: a window that is closed some other way (Recents, a launch
+    that reuses it).
+  - **Correction (package 2.3, measured):** that holds only while the app is visible or the keep-alive
+    service of 2.3 runs. With no activity visible and no foreground service, Android 17 cuts the app
+    off about five seconds after it leaves the screen: the microphone is silenced and the app's TCP
+    connections are closed, so every session drops and its reconnect waits until the app is visible
+    again (this was the "drops after about ten seconds hidden" of the 2.2 run). Sound would be silenced
+    too (Android 17's background audio rule). Since 2.3 the service runs whenever a session is live, so
+    a session shown nowhere keeps its connection, sound and microphone. See "Sessions in the
+    background".
+  - If it fails or the server ends it, it is dropped from the registry. Since 2.3 an alert says so when
+    no visible window showed it (a toast, as before, while the app is visible and notifications are
+    off).
   - A change of the remote clipboard is dropped and not replayed on attach (replaying could overwrite
     something copied on the device since). On attach the device's clipboard is sent to the session, as
     on every focus gain.
@@ -346,8 +353,8 @@ session. Two rules: a session is shown in at most one window, and a window shows
   window, or whose window is not visible, posts nothing to the UI thread and invalidates nothing.
 - **Reconnect gate.** Upstream held a dropped session's automatic reconnect while its activity was
   stopped (`LibFreeRDP.setForeground`). The rule is now the app's: every session may reconnect while any
-  activity of the app is visible (`SessionRegistry`, through `ActivityLifecycleCallbacks`). Package 2.3
-  changes "while visible".
+  activity of the app is visible (`SessionRegistry`, through `ActivityLifecycleCallbacks`), or, since
+  package 2.3, while the keep-alive service runs.
 - **Freeing.** A native instance is freed after its session thread's last callback, after the window has
   stopped sending input to it, on the registry's worker thread. `NativeSessionThreads` (1.6) still guards
   `LibFreeRDP.freeInstance`.
@@ -491,7 +498,9 @@ is shown in at most one window.
   connect and link sessions in the switcher, a window recreated or restored after process death, the
   settings "In a new window" and "In the session window", desktop windowing and DeX (the tablet).
   Seen and left for 2.3: with the app hidden for about ten seconds or more, every session's connection
-  dropped and reconnected when the app came back; two or three seconds hidden did not.
+  dropped and reconnected when the app came back; two or three seconds hidden did not. (2.3 measured
+  the cause, Android closing a background app's TCP connections, and keeps the app out of the
+  background while a session is live.)
 - Not in this package: the notification (2.3), the fork's session bar (4.1), resizing a session to the
   window it attaches to (milestone 3), key combinations (5.3), window titles and bounds (6.1), restyling the
   list rows beyond the marking (7.2b).
@@ -524,11 +533,12 @@ started while the app was visible is running.
   importance: sound and heads-up) carries the alerts.
 - `freeRDPCore/.../captantan/SessionOpenActivity.java` (new): where a tap goes. No UI
   (`Theme.NoDisplay`, finishes in `onCreate`, its own empty task affinity, not in Recents). It looks the
-  session up at the moment of the tap: live, it is shown through 2.1's launch path
-  (`SessionWindow.EXTRA_SESSION`, plus the connection reference for a bookmark or quick connect, never a
-  `freerdp://` link, which can carry a password); gone, the connection list opens. So a notification
-  never starts a connection by itself. A tap on the ongoing notification opens the session that was last
-  on screen, else the newest. Package 2.2's switcher can be opened from `SessionOpenActivity.open`.
+  session up at the moment of the tap: live, `SessionLauncher.show` (package 2.2) brings the window that
+  shows it to the front or opens it where the new-connection setting says; gone or ending, the connection
+  list opens (`SessionLauncher.showConnectionList`). So a notification never starts a connection by
+  itself, and the PendingIntents carry only a session token. A tap on the ongoing notification opens the
+  session that was last on screen, else the newest. A session that is ending reads "Ending" (2.2's
+  `captantan_state_ending`) and has no Disconnect button.
 - **Alerts.** A session that waits for an answer (certificate, login) that is not on screen, because no
   window shows it or its window is not visible, raises "<title> needs an answer"; a tap shows the session
   and with it the question. When no window shows it, 2.1 rejects the question after five minutes
@@ -538,12 +548,16 @@ started while the app was visible is running.
   from Java) while no visible window showed it leaves "<title>: the session has ended". A session that a
   visible window shows says it itself, as upstream did; an ending that was asked for or explained
   (disconnect, rejected certificate, cancelled login, the screen-off timer) raises nothing.
-- **Without the notification permission** the sessions stay alive all the same: the service runs, and
-  Android lists the app under the active apps in the quick settings (where "Stop" ends the whole app,
-  with every session). Nothing is in the notification shade, so the alerts are not seen; while the app is
+- **Without the notification permission** the sessions stay alive all the same: the service runs in the
+  foreground (measured, below). The documentation says Android then lists the app in its Task Manager
+  (the active apps at the foot of the quick settings, where "Stop" ends the whole app with every
+  session); the test phone showed no such entry. Nothing is in the notification shade, so the alerts are not seen; while the app is
   visible a toast stands in for them (2.1's "<title>: the session has ended", and "<title> needs an
   answer"). Upstream already asks for the permission when the connection list opens (`HomeActivity`,
-  unedited); the fork's own ask comes once, at the first connect, if it is still missing.
+  unedited); the fork's own ask comes once, at the first connect, if it is still missing. When it is
+  granted again while the service runs, the notification is posted at once.
+- **Look.** The notifications are the system's Material ones, with the system's colours: the app sets no
+  accent (the theme's `colorPrimary`, resolved in the service, came out black on the test phone).
 - **Reconnects.** Upstream held a dropped session's automatic reconnect while the app was not visible
   (`LibFreeRDP.setForeground`). With the service running they are allowed in the background too
   (`SessionRegistry.setKeptAlive`, new); upstream's retry limit (`AutoReconnectMaxRetries`) still ends
@@ -573,11 +587,58 @@ started while the app was visible is running.
   `notification: <n> sessions: <each session and its state> [types ...]` on every change of what the
   notification shows, `notification: Disconnect ...`, `notification tapped: ...`, `alert: ...` and
   `event: ...` for every alert, `service stop`, `notifications allowed / not allowed`, and at app start
-  the reason the previous process ended (`previous process exit: reason <n>`, `ApplicationExitInfo`; 10
-  is `REASON_USER_REQUESTED`, for example the quick settings' Stop).
+  the reason the previous process ended (`previous process exit: reason <n>, ..., <description>`,
+  `ApplicationExitInfo`; 10 is `REASON_USER_REQUESTED`, for example the Task Manager's Stop).
 - **For measuring without the service:** `adb shell setprop log.tag.captantan.nokeepalive DEBUG` keeps
   the service from being started for sessions started from then on (`INFO` or a restart of the device
   undoes it). The alerts still work.
+
+**Measured on a device on 2026-11-24** (the Android 17 phone, test build of this package, two bookmarks on
+two Windows hosts, one with microphone redirection; logcat throughout, `dumpsys activity services`,
+`dumpsys activity processes`, `dumpsys audio` and `dumpsys appops` at the steps):
+
+- **The service runs exactly while a session is live.** It was in the foreground within 50 ms of each
+  first session start (`isForeground=true foregroundId=2300001 types=0x40000080`, that is
+  `specialUse|microphone` for the bookmark with the microphone, `specialUse` alone for the other) and
+  gone, with its notification, within 20 ms of each last session's end (`dumpsys activity services`
+  lists nothing). Fourteen starts and stops, no crash, no service left without a session.
+- **Two sessions in the background.** Both left running, then about 16 minutes in other apps with the
+  screen on, then 10.5 minutes with the screen off, then back: both still connected, no reconnect, no
+  `session end`. The process stayed at foreground-service level (procState 4) and was never frozen.
+  The 2.2 run's "every session drops after about ten seconds hidden" did not happen.
+- **Disconnect from the notification** ended only that session; the notification went from two sessions
+  to one (buttons from "Disconnect <each>" and "Disconnect all" to "Disconnect"). **Tapping** it brought
+  back the window of the remaining session.
+- **Needs an answer:** Home while the certificate question was up posted "<title> needs an answer" ("in
+  a window that is not visible"); a tap brought the window back with the question, and the alert was
+  removed as soon as the question was on screen. Done twice.
+- **Ended:** a session the server ended (`tsdiscon` after a delay, the app in the background) left
+  "<title>: the session has ended"; the service stopped with it, the alert stayed.
+- **Notifications refused** (`pm revoke` of `POST_NOTIFICATIONS`, which also ended the app): at the next
+  connect the fork asked once, with the toast. With the permission refused, a session hidden for 3 minutes
+  46 seconds (another app in front) stayed connected; the service was in the foreground (procState 4) and
+  nothing of the app was in the notification shade. No "active apps" entry was seen in the quick
+  settings.
+- **Microphone, with the service** (Voice Recorder recording on the remote side): the app hidden for
+  33 seconds while recording. Throughout, procState 4 and `RECORD_AUDIO: mode=foreground`;
+  `dumpsys audio`'s recording history shows the capture never silenced, the privacy indicator stayed on,
+  and the remote recording has the sound from while the app was hidden.
+- **Microphone, without the service** (the `captantan.nokeepalive` switch): 1 second after leaving the
+  screen the process was at procState 15 (cached). 5 seconds after, within 30 ms of each other:
+  audioserver `App op 27 missing, silencing record` (the capture went silent, the indicator off) and
+  `Destroyed live tcp sockets for uids={<the app>}` (Android closed the app's connections; the session
+  thread logged `Broken pipe`, `ERRCONNECT_CONNECT_TRANSPORT_FAILED`). The reconnect waited until the app
+  was visible again (upstream's hold) and then connected. So without the service a detached session
+  loses its connection, not only its microphone; with it, the capture of a detached session is live,
+  visible (the notification names the session, Android's indicator is on) and can be ended from the
+  notification. It is not stopped on detach.
+- **Not exercised:** camera redirection (experimental, off), sound played while hidden (the Android 17
+  silencing of background playback rests on the documentation and on the measured microphone and
+  network behaviour), "Disconnect all" pressed, three or more sessions, the five-minute timeout of a
+  question in no window (the alert's timeout), a question raised while the session was shown in no window
+  at all (only "a window that is not visible" was exercised), reconnect after a network drop while hidden,
+  the screen-off timer set to a value, the Task Manager's Stop, Android 14 to 16, swiping the
+  notification away, and the merge with package 2.2 on the device (see the pull request).
 
 **The platform rules this rests on** (checked against the Android documentation on 2026-11-24, for target
 API 37 on Android 14 to 17):
@@ -973,8 +1034,8 @@ compile check runs on the merge.
    - `KeyboardAccessibilityService.java`: keep `SessionRegistry.getFocusedActivity()` in both places.
      Any new reader of "the active session" must ask the registry.
    - `GlobalApp.java`: keep `SessionRegistry.init(this)` and, after it, `SessionKeeper.init(this)`
-     (package 2.3) in `onCreate`, and `SessionRegistry.disconnectAll` in `DisconnectTask`. Upstream's `registerSessionListener` / `dispatch` (connection events posted to
-     the UI thread, one listener per instance) is what `SessionHost` listens with: if upstream changes
+     (package 2.3) in `onCreate`, and `SessionRegistry.disconnectAll` in `DisconnectTask`. Upstream's
+     `registerSessionListener` / `dispatch` (connection events posted to the UI thread, one listener per instance) is what `SessionHost` listens with: if upstream changes
      it, fix `SessionHost.connect`.
    - `SessionInputManager.java` (package 2.1): keep `releasePhysicalKeys`, which `SessionWindow` calls
      before it cuts a session's input off. `SessionWindow` also relies on `cancelPendingEvents` making

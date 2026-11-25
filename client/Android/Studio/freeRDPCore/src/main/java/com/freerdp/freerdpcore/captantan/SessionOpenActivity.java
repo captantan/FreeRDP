@@ -11,21 +11,18 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.util.Log;
 
-import com.freerdp.freerdpcore.presentation.SessionActivity;
-
 /**
  * A tap on one of package 2.3's notifications. No UI (theme {@code Theme.NoDisplay}, it finishes
  * in onCreate): it looks the session up when the tap happens, so a notification never starts a
  * connection by itself.
  *
  * <ul>
- * <li>The session is live: it is shown in a session window through 2.1's launch path
- * ({@link SessionWindow#EXTRA_SESSION}; its window comes to the front, or the one session window
- * shows it, or a new one opens). An open question (certificate, login) is shown there.
- * <li>The session is gone (an "ended" alert, or a tap that came too late): the connection list.
+ * <li>The session is live: {@link SessionLauncher#show} (package 2.2): the window that shows it
+ * comes to the front, else it opens where the new-connection setting says, through 2.1's launch
+ * path ({@link SessionWindow#EXTRA_SESSION}). An open question (certificate, login) is shown there.
+ * <li>The session is gone or ending (an "ended" alert, or a tap that came too late): the
+ * connection list.
  * </ul>
- *
- * <p>Package 2.2's switcher can be opened from here instead, in {@link #open}.
  */
 public final class SessionOpenActivity extends Activity
 {
@@ -43,22 +40,16 @@ public final class SessionOpenActivity extends Activity
 		final String token =
 		    (tap != null) ? tap.getStringExtra(SessionKeepAliveService.EXTRA_TOKEN) : null;
 		final SessionHost host = SessionRegistry.findByToken(token);
-		if (host != null)
+		if (host != null && !host.isEnding())
 		{
-			final Intent intent = new Intent(this, SessionActivity.class)
-			                          .addFlags(SessionWindow.LAUNCH_FLAGS)
-			                          .putExtra(SessionWindow.EXTRA_SESSION, host.getToken());
-			// So that a session task Android restores after the process died connects again
-			// instead of opening empty. Not for a freerdp:// link, which can carry a password.
-			if (host.getBookmark() != null && host.getLaunchKey() != null)
-				intent.putExtra(SessionActivity.PARAM_CONNECTION_REFERENCE, host.getLaunchKey());
+			// Package 2.2's rules: the window that shows it comes to the front, else the
+			// new-connection setting decides where it opens.
 			Log.i(TAG, "notification tapped: opening " + host);
-			startActivity(intent);
+			SessionLauncher.show(this, host);
 			return;
 		}
-		Log.i(TAG, "notification tapped: the session is gone, opening the connection list");
-		final Intent list = getPackageManager().getLaunchIntentForPackage(getPackageName());
-		if (list != null)
-			startActivity(list);
+		Log.i(TAG, "notification tapped: the session is " + (host != null ? "ending" : "gone") +
+		               ", opening the connection list");
+		SessionLauncher.showConnectionList(this, false);
 	}
 }

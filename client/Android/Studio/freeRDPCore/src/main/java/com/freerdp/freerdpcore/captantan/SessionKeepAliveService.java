@@ -122,6 +122,13 @@ public final class SessionKeepAliveService extends Service
 		Log.i(TAG, "notification: " + content.signature + " [types " + describeTypes(types) + "]");
 	}
 
+	/** Posts the notification again even if nothing in it changed (notifications allowed again). */
+	void repost()
+	{
+		shown = null;
+		refresh();
+	}
+
 	/** startForeground with these types; falls back to specialUse alone. False if it failed. */
 	private boolean goForeground(Notification notification, int wanted)
 	{

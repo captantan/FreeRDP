@@ -337,7 +337,12 @@ public final class SessionKeeper implements SessionRegistry.Listener
 		    SessionNotifications.canNotify(app, SessionNotifications.CHANNEL_SESSIONS);
 		if (notificationsAllowed != null && notificationsAllowed == allowed)
 			return;
+		final boolean nowAllowed = allowed && notificationsAllowed != null;
 		notificationsAllowed = allowed;
+		// Allowed again while the service runs: post its notification now, not at the next change.
+		final SessionKeepAliveService service = SessionKeepAliveService.running;
+		if (nowAllowed && service != null)
+			service.repost();
 		Log.i(TAG, "notifications " +
 		               (allowed ? "allowed"
 		                        : "not allowed: the service still keeps sessions alive, Android " +

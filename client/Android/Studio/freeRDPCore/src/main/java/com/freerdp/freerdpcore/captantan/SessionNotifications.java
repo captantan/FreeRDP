@@ -15,12 +15,9 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
 import android.os.Build;
-import android.view.ContextThemeWrapper;
 
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
-
-import com.google.android.material.color.MaterialColors;
 
 import com.freerdp.freerdpcore.R;
 import com.freerdp.freerdpcore.domain.BookmarkBase;
@@ -41,7 +38,8 @@ import java.util.List;
  *
  * <p>A tap opens {@link SessionOpenActivity}, which shows the session in a window through 2.1's
  * launch path, or the connection list when the session is gone. Notifications take the system's
- * look; what the app can set (the small icon's accent) comes from the theme's {@code colorPrimary}.
+ * Material look and its colours: no accent of the app's is set (the theme's colorPrimary, resolved
+ * from a service context, came out black on a device).
  */
 final class SessionNotifications
 {
@@ -169,6 +167,8 @@ final class SessionNotifications
 
 	static String stateText(Context context, SessionHost host)
 	{
+		if (host.isEnding())
+			return context.getString(R.string.captantan_state_ending);
 		if (host.isWaitingForAnswer())
 			return context.getString(R.string.captantan_state_waiting);
 		if (host.getPhase() == SessionHost.Phase.CONNECTED)
@@ -179,7 +179,8 @@ final class SessionNotifications
 	/**
 	 * The notification for these live sessions (at least one). A tap opens {@code tapTarget}.
 	 * Disconnect for each session while there are one or two (a notification has room for three
-	 * buttons), and Disconnect all from two on.
+	 * buttons), and Disconnect all from two on. A session that is ending (asked to disconnect and
+	 * not gone yet) reads "Ending" and has no button.
 	 */
 	static Ongoing ongoing(Context context, List<SessionHost> live, SessionHost tapTarget)
 	{
@@ -204,7 +205,6 @@ final class SessionNotifications
 		final NotificationCompat.Builder b =
 		    new NotificationCompat.Builder(context, CHANNEL_SESSIONS)
 		        .setSmallIcon(R.drawable.captantan_ic_notification)
-		        .setColor(accent(context))
 		        .setCategory(NotificationCompat.CATEGORY_SERVICE)
 		        .setPriority(NotificationCompat.PRIORITY_LOW)
 		        .setOngoing(true)
@@ -221,7 +221,6 @@ final class SessionNotifications
 		// On the lock screen: only how many, no names.
 		b.setPublicVersion(new NotificationCompat.Builder(context, CHANNEL_SESSIONS)
 		                       .setSmallIcon(R.drawable.captantan_ic_notification)
-		                       .setColor(accent(context))
 		                       .setContentTitle(count)
 		                       .setShowWhen(false)
 		                       .build());
@@ -241,8 +240,9 @@ final class SessionNotifications
 				b.setContentText(state + " · " + note);
 				b.setStyle(new NotificationCompat.BigTextStyle().bigText(state + "\n" + note));
 			}
-			b.addAction(0, context.getString(R.string.captantan_action_disconnect),
-			            disconnect(context, host));
+			if (!host.isEnding())
+				b.addAction(0, context.getString(R.string.captantan_action_disconnect),
+				            disconnect(context, host));
 		}
 		else
 		{
@@ -269,10 +269,14 @@ final class SessionNotifications
 			if (n == 2)
 			{
 				for (SessionHost host : live)
+				{
+					if (host.isEnding())
+						continue;
 					b.addAction(0,
 					            context.getString(R.string.captantan_action_disconnect_one,
 					                              host.getTitle()),
 					            disconnect(context, host));
+				}
 			}
 			b.addAction(0, context.getString(R.string.captantan_action_disconnect_all),
 			            disconnectAll(context));
@@ -284,6 +288,8 @@ final class SessionNotifications
 	static String describe(SessionHost host)
 	{
 		final String phase = (host.getPhase() == SessionHost.Phase.CONNECTED) ? "connected" : "connecting";
+		if (host.isEnding())
+			return phase + ", ending";
 		return host.isWaitingForAnswer() ? phase + ", waiting for an answer" : phase;
 	}
 
@@ -341,7 +347,6 @@ final class SessionNotifications
 	{
 		return new NotificationCompat.Builder(context, CHANNEL_EVENTS)
 		    .setSmallIcon(R.drawable.captantan_ic_notification)
-		    .setColor(accent(context))
 		    .setPriority(NotificationCompat.PRIORITY_HIGH)
 		    .setAutoCancel(true)
 		    .setVisibility(NotificationCompat.VISIBILITY_PRIVATE);
@@ -396,11 +401,4 @@ final class SessionNotifications
 		return (host.getId() << 2) | kind;
 	}
 
-	/** The theme's colorPrimary (from the wallpaper on Android 12 and later). */
-	private static int accent(Context context)
-	{
-		final Context themed = new ContextThemeWrapper(context, R.style.Theme_Main);
-		return MaterialColors.getColor(themed, androidx.appcompat.R.attr.colorPrimary,
-		                               NotificationCompat.COLOR_DEFAULT);
-	}
 }
