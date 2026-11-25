@@ -366,7 +366,7 @@ session. Two rules: a session is shown in at most one window, and a window shows
   `window.onDestroy()` in place of the disconnect, the free and the timer cancel in `onDestroy`; a new
   `onNewIntent`; `window.attachExisting` at the top of `processIntent`; `window.start(session, title)` as
   the body of `connectWithTitle`; no `setUIEventListener(this)` in `bindSession`; `window.onBack()` in
-  `handleBackPressed`; a null check in `onConfigurationChanged`; and at the end of the class
+  `handleBackPressed`; a null check in `onConfigurationChanged` (replaced in package 3.2 by `window.onConfigurationChanged`); and at the end of the class
   `windowPorts`, through which `SessionWindow` sets the activity's `session` field and calls upstream's
   own `onSessionConnected`, `onSessionFailed` and `onSessionDisconnected`.
 - **What stayed in `SessionActivity`:** the views, input, toolbar, insets, system bars, permissions, the
@@ -948,17 +948,17 @@ native half; the Java side that decides when to ask is package 3.2.
   `onDisplayControlEvent` receives what the native side reports, on the session thread.
 - `android_disp.c` (edited): `android_disp_init` and `android_disp_uninit` tell `captantan_disp.c` that the
   channel opened or closed (one line each), and the body of `android_disp_send_monitor_layout` is replaced:
-  it queues a request instead of sending. So upstream's own path (`LibFreeRDP.sendMonitorLayout`, called by
-  `SessionActivity.onConfigurationChanged` for a "Fit screen" bookmark) goes through the same queue and
-  the same rules, with no edit to `LibFreeRDP.java`, `SessionActivity.java` or the JNI function.
+  it queues a request instead of sending. So upstream's own path (`LibFreeRDP.sendMonitorLayout`, which
+  `SessionActivity.onConfigurationChanged` called for a "Fit screen" bookmark until package 3.2) goes
+  through the same queue and the same rules, with no edit to `LibFreeRDP.java` or the JNI function.
 - `android_freerdp.c` (edited): `captantan_disp_new` at the end of `android_client_new`,
   `captantan_disp_free` in `android_client_free`, and the include. `android_freerdp.h` (edited): one
   pointer in `androidContext`. `android_event.c` (edited): an include, a case in `android_process_event`
   and one in `android_event_free`. `cpp/CMakeLists.txt` (edited): the two new files.
 
-- `domain/BookmarkBase.java` (edited, one line): a new bookmark's resolution is "Fit screen", not
-  "Automatic" (the maintainer's choice, 2026-11-24). The two connect alike, at the window's size; until
-  package 3.2 only "Fit screen" follows the window afterwards. Bookmarks that exist keep what they store.
+- `domain/BookmarkBase.java`: package 3.1 made "Fit screen" the default of a new bookmark, as a stopgap
+  because only "Fit screen" followed the window then. Package 3.2 makes "Automatic" and "Fit screen"
+  behave the same and dropped that edit: the file is upstream's again.
 
 **The rules** (all on the native side, so they hold for every caller):
 
@@ -1118,6 +1118,125 @@ in all.
 - **After the runs** one thing was taken out: a second hook that wrote a not yet confirmed size into the
   settings before a plain reconnect (see "Reconnects" for why). It ran once in the runs, just before the
   broker path replaced the settings anyway. The final build differs from the one measured by that removal.
+
+**Live resizing: the remote desktop follows the window** (package 3.2)
+
+Every change of the space the remote desktop is shown in becomes one layout request through
+`DisplayControl` (package 3.1), and the picture then fills that space at 1:1. Unfolding, folding, rotating,
+entering and leaving split screen, a divider drag, a desktop window drag or maximise, and a session being
+shown in another window all take the same path. No reconnect, and the window is not recreated.
+
+- `freeRDPCore/.../captantan/SessionResizeController.java` (new): one per session window, made by
+  `SessionWindow`. The viewport, the wait, the request, what is done with the result, the log. Its class
+  comment is the reference.
+- **The viewport** is the part of the window the remote desktop may cover: the session activity's root view
+  (`session_root_view`) as laid out, minus the system insets the session is padded for, minus a reserved
+  strip:
+  - top: the status bar and the display cutout (none while the status bar is hidden by the app's
+    setting), and the caption bar of a desktop window, which is always subtracted;
+  - left, right, bottom: the navigation bar (none while it is hidden by the setting) and, with "fit rounded
+    corners", the screen's rounded corners;
+  - the reserved strip: `SessionResizeController.setReservedInsets(left, top, right, bottom)`, pixels per
+    edge, 0 today. Package 4.2 (the session bar's reserved mode) sets it to its strip; a change resizes the
+    session like any other change of the viewport. 4.2 still lays its bar out and keeps the session view
+    out of that strip itself: the controller only decides the size. `getViewportWidth()` /
+    `getViewportHeight()` say what the viewport is now. `SessionWindow.getResizer()` reaches it.
+  - **Not** subtracted: the on-screen keyboard (IME), the app's key bar above it, the floating toolbar,
+    the touch pointer, a system bar pulled in for a moment by a swipe, dialogs and sheets. They lie over the
+    picture; while the keyboard is up the session view is shorter and scrolls, as before. With target SDK
+    37 the window is edge to edge, so the IME never resizes the root view; it arrives only as an IME inset,
+    which the activity uses to lift the key bar and the controller ignores.
+  - The activity computes these insets as before (`onWindowInsetsChanged`) and hands them over with
+    `setSystemInsets`; the caption bar is new there.
+- **When it asks.** Each change of the viewport (a layout pass that gives the root another size, new
+  insets, a new reserved strip) starts a wait of `SETTLE_MS` = 400 ms, and the next change starts it again.
+  When the viewport has stayed the same that long, the session the window shows is asked for it: one
+  `DisplayControl.request(width, height)`. A configuration change triggers nothing by itself: the layout
+  pass that follows a new window size does, so the size is the laid-out one, not a guess from the
+  configuration (3.1 saw upstream's trigger read a height 103 pixels short during quick changes). The
+  native side then makes the width even and keeps 500 ms between layouts.
+- **Attach.** When a window binds a session (first connect, a switch, "open in new window", a recreated
+  window, a reconnect) it asks at once if the viewport is settled, so a switch resizes without a wait, and
+  when it settles if a wait is running (a window that has just opened). Asking for the size a session already
+  has costs nothing (the native side skips it). A session shown in no window is never asked anything; it
+  keeps its size until a window shows it.
+- **A new connection** is made at the size it would be resized to: `prepareConnect` (a hook after upstream's
+  own size code in `SessionActivity.connect`) writes the viewport, made valid as a layout is made valid
+  (even width, 200 to 8192), into the bookmark's screen settings for "Automatic" and "Fit screen". So the
+  request on attach is skipped once the channel is up, and nothing is resized a second after connecting.
+- **What the resolution settings mean now** (Bookmark, Screen, Resolution):
+  - "Automatic" and "Fit screen": the same. Connect at the window's viewport and follow it live. The list
+    says so ("Automatic (follows the window)", "Fit screen (follows the window)"; English only, the
+    translations keep upstream's words). Existing "Automatic" bookmarks follow with no change to stored
+    data. 3.1's change of the default for new bookmarks to "Fit screen" is undone, so the default is
+    upstream's "Automatic" again.
+  - "Custom" and the fixed sizes (640x480 ... 1920x1200): connect at that size, never resized. The picture
+    is shown 1:1, centred or scrollable, and can be zoomed.
+  - A quick connect is "Automatic" (upstream's new `BookmarkBase`), so it follows. A `freerdp://` link is
+    not resized: its size is the link's (or FreeRDP's default).
+- **The picture.** Until the server answers, and whenever it cannot resize, the picture is shown as it
+  always was: 1:1, centred when smaller than the viewport, scrollable when larger, pinch to zoom. When the
+  remote desktop changes size, and when the window starts showing another session, zoom and scroll are reset
+  to 1:1 at the top left. A result the server cannot meet as asked, `CLAMPED` for another reason than the odd
+  width (below 200, above 8192, above the server's area) or `REFUSED`, is said once per session in a short
+  toast with the size shown ("The remote desktop cannot take this window's size; it is shown at W × H").
+  An odd width losing one column is normal and not mentioned. A server without Display Control
+  (`NO_CHANNEL` for good) is not mentioned to the user: the request stays deferred and the picture is shown
+  as it is; 8 s after the session was shown the log says `no live resize`.
+- **Configuration changes.** The session activity's `configChanges` now also has `fontScale`,
+  `fontWeightAdjustment`, `uiMode`, `colorMode`, `touchscreen` and `layoutDirection` (it had `orientation`,
+  `keyboard`, `keyboardHidden`, `screenSize`, `smallestScreenSize`, `density`, `screenLayout`,
+  `navigation`). Checked against the Android documentation on 2026-11-24: a fold, a multi-window or
+  freeform resize and a move between displays change `screenSize`, `smallestScreenSize`, `screenLayout`,
+  `orientation` and `density`; a different display can also change `touchscreen` and `colorMode`; the
+  user changes `fontScale`, `fontWeightAdjustment` and the night mode in `uiMode`; Android 17 no longer
+  recreates by default for `keyboard`, `keyboardHidden`, `navigation`, `touchscreen`, `colorMode` and a
+  desk-dock `uiMode` (not for night mode), so `uiMode` and `fontScale` were the real gaps. Not added:
+  `locale`, `mcc`, `mnc`, `grammaticalGender`: a new language should rebuild every text, and recreating is
+  cheap since 2.1 (the window detaches and attaches, no reconnect; it costs the on-screen keyboard and
+  the zoom). `layoutDirection` alone (the developer option that forces right to left) is applied by the
+  view system without recreating.
+  - **Night mode without recreation.** `SessionWindow.onConfigurationChanged` sees the night bits change,
+    rebases the activity's theme (dialogs and sheets made later take it), and builds the two views that
+    read colours once when built again in their state: the key bar (`ExtendedKeyboardView.rebuild`: page,
+    expanded, insets and modifier lamps kept) and the touch pointer (`TouchPointerView.rebuild`: its
+    place kept; the window replays the remote cursor). The rest of the window is black or has fixed
+    colours (upstream's floating toolbar).
+- **One more thing in `SessionHost`**: a size report equal to the bitmap's size and format keeps the
+  bitmap (a connect reported the same size three times, each a new 18 MB bitmap); the log line says
+  `(unchanged, bitmap kept)`.
+- `SessionWindow.java` (ours, changed): makes the controller, tells it about bind, unbind, a new surface
+  and the window's end, `getResizer()`, `onConfigurationChanged`.
+- Upstream files edited (each marked):
+  - `SessionActivity.java`: `onConfigurationChanged` calls `window.onConfigurationChanged(newConfig)` in
+    place of upstream's monitor layout for "Fit screen" (removed, not left beside it); in
+    `onWindowInsetsChanged` the caption bar is added to the top inset (two lines) and the insets are
+    handed to the controller (one call); in `connect` one line after upstream's size code,
+    `prepareConnect`.
+  - `freeRDPCore/src/main/AndroidManifest.xml`: the six `configChanges` values.
+  - `SessionInputManager.java`: `PinchZoomListener.onScaleBegin` starts from the view's zoom (its private
+    copy went wrong after any reset from outside, upstream's touch pointer "reset" button included).
+  - `ExtendedKeyboardView.java`, `TouchPointerView.java`: one `rebuild()` method each.
+  - `res/values/strings.xml`: `resolution_automatic` and `resolution_fit` say "(follows the window)", and
+    the first two items of `resolutions_array` refer to them.
+  - `domain/BookmarkBase.java`: back to upstream's (see package 3.1).
+- **Log** (tag `captantan.resize`, INFO; with `captantan.disp` and `captantan.session` it tells the
+  whole story):
+  - `window w<n>: display <id>, <dpi> dpi, <w>x<h> dp, portrait|landscape, fullscreen|multi-window|freeform,
+    night yes|no, font scale <f>, viewport <w>x<h>` when a window opens;
+  - `configuration w<n>: changed [screenSize smallestScreenSize ...]; DISPLAY <a> -> <b>; <the same>` on
+    every configuration change (the display part only if the display changed);
+  - `viewport w<n>: <w>x<h> (was ..., layout|insets ...|reserved strip ...)`;
+  - `connect from w<n> at <w>x<h> (viewport ..., display ..., ... dpi)`;
+  - `request #<serial>: s<n> "<title>" <w>x<h> from w<n> (settled for 400 ms|attach; display ..., ... dpi,
+    last configuration change [...])`, then `result #<serial>: ... SENT|SKIPPED|DEFERRED|CLAMPED|REFUSED ...`;
+  - `remote desktop s<n> now <w>x<h> (was ..., viewport ..., <ms> ms after request #<serial> for <w>x<h>)`;
+  - `zoom and scroll reset in w<n> (...)`, `not following w<n>: ... has a fixed size (...)`,
+    `no live resize: ...`, `availability ...`.
+  - To see that the activity is not relaunched, add `ActivityTaskManager`: a relaunch prints a `Relaunch`
+    / `START` line for `SessionActivity` and `captantan.session` a second `window open: w<n> (recreated)`.
+- **Not in this package:** a per-connection scale and following the density (3.3), the session bar (4.1,
+  4.2), window titles and remembered bounds (6.1).
 
 ## Package and version scheme
 
@@ -1301,9 +1420,38 @@ compile check runs on the merge.
        where `Redirect` is called; `rdp_client_connect_confirm_active`: whether a reconnect calls
        `DesktopResize` for the server's size, which today it does not), and the desktop clients'
        `RESIZE_MIN_DELAY` if they change it.
-   - `domain/BookmarkBase.java`: keep `resolution = FITSCREEN` as the field's default in
-     `ScreenSettings`. Package 3.2 decides what "Automatic" means; if it makes both resize live, this
-     edit can go.
+   - The resize controller (package 3.2):
+     - `SessionActivity.java`, `onConfigurationChanged`: keep `window.onConfigurationChanged(newConfig)`
+       and nothing that sends a monitor layout (`LibFreeRDP.sendMonitorLayout`) from the activity. If
+       upstream changes its own resize there (a new condition, a new size source), do not take it back
+       in: carry what it means into `SessionResizeController` (which sessions follow, what the size is).
+       In the output of this, only comments may match:
+
+       ```bash
+       git grep -n 'sendMonitorLayout' -- client/Android/Studio
+       ```
+
+     - `SessionActivity.java`, `onWindowInsetsChanged`: keep the caption-bar lines after `insetsTop` and
+       the `setSystemInsets` call after `scrollView.setPadding`. The four values passed must stay what
+       the scroll view is padded by when the key bar is hidden: if upstream changes how the session is
+       padded (a new inset type, rounded corners, a new overlay that reserves space), change the call to
+       match, and say in "the viewport" above what it is now. Never pass the IME inset.
+     - `SessionActivity.java`, `connect`: keep `prepareConnect(screenSettings)` after upstream's last
+       write of the size into `screenSettings`. If upstream moves the size code, the hook moves with it.
+     - The session root must stay the view whose size is the window's (id `session_root_view`,
+       `match_parent`, no `fitsSystemWindows` resizing): the controller measures it.
+     - `freeRDPCore/src/main/AndroidManifest.xml`: keep the six added `configChanges` values. A new value
+       that upstream adds is fine; a value upstream removes from the original eight would make window
+       size changes recreate the window again: keep it.
+     - `SessionInputManager.java`: keep the first line of `PinchZoomListener.onScaleBegin`.
+     - `ExtendedKeyboardView.java`, `TouchPointerView.java`: keep `rebuild()`. If upstream adds state to
+       either view (a field set after it is built) or builds it differently, `rebuild` must restore that
+       state too; if upstream reads its colours from the theme at draw time, `rebuild` can go.
+     - `res/values/strings.xml`: keep the two strings' texts and the two `@string` items in
+       `resolutions_array`. If upstream changes the resolution choices, check what each means for
+       `SessionResizeController.follows`.
+     - `domain/BookmarkBase.java` is upstream's again: no edit to keep. If upstream changes
+       `ScreenSettings` (`isAutomatic`, `isFitScreen`, the values), fix `follows` and `prepareConnect`.
    - `LibFreeRDP.java`: besides the removed `/cert:ignore`, keep the `NativeSessionThreads` calls in
      `connect`, `freeInstance`, `OnConnectionFailure` and `OnDisconnected` together; one missing makes
      `freeInstance` free a running session or never free one. If upstream starts waiting for connecting

@@ -143,7 +143,7 @@ public final class SessionResizeController implements DisplayControl.Listener
 		if (h != null && h.getPhase() == SessionHost.Phase.CONNECTED &&
 		    h.getDisplayControl().getAvailability() == DisplayControl.Availability.NO_CHANNEL)
 			Log.i(TAG, "no live resize: " + h + " has no Display Control channel " +
-			               NO_CHANNEL_AFTER_MS + " ms after it was shown in " + windowName +
+			               NO_CHANNEL_AFTER_MS + " ms after it was shown in " + this.windowName +
 			               "; the picture is shown as it is (scaled or scrollable)");
 	};
 
