@@ -48,7 +48,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  *
  * <p><b>Log.</b> {@code adb logcat -s captantan.disp}, at INFO, each line naming the session:
  * channel connected and disconnected, caps received with the limits, each request, layout sent,
- * skip, deferral, clamp and refusal, and the size a reconnect is made with.
+ * skip, deferral, clamp and refusal, and the size a redirected connection is made with.
  */
 public final class DisplayControl
 {
@@ -465,7 +465,7 @@ public final class DisplayControl
 			case EVENT_CONNECT_SIZE:
 				Log.i(TAG, "next connection: " + who + " will ask for " + a + "x" + b +
 				               ", the size last wanted (#" + serial + "), not " + d + "x" + e +
-				               " (" + (c == 1 ? "redirection" : "reconnect") + ")" + age);
+				               " (redirection)" + age);
 				return;
 
 			default:

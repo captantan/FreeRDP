@@ -763,7 +763,7 @@ static BOOL android_client_new(freerdp* instance, rdpContext* context)
 	instance->VerifyChangedCertificateEx = android_verify_changed_certificate_ex;
 	instance->LogonErrorInfo = nullptr;
 
-	/* captantan fork: display control state; wraps RetryDialog and Redirect, so it comes last */
+	/* captantan fork: display control state; it sets instance->Redirect, so it comes last */
 	if (!captantan_disp_new(instance))
 		return FALSE;
 	return TRUE;

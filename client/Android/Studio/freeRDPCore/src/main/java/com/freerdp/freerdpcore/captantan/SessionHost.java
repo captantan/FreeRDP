@@ -49,9 +49,11 @@ import java.util.function.Consumer;
  * <li>Measured in package 3.1: with the graphics pipeline (GFX), which both kinds of host use,
  * OnGraphicsResize and OnGraphicsUpdate do not come on android_thread_func's thread but on the
  * library's dynamic channel thread, where the graphics channel is decoded (gdi_ResetGraphics
- * calls the resize from there). Only OnSettingsChanged, at each connect, is on the session
- * thread. Resize and paint still share one thread, which is what "The frame" below relies on;
- * that thread is not the one the display-control events arrive on.
+ * calls the resize from there). Only OnSettingsChanged is on the session thread, and it comes
+ * once, at the session's first connect: a reconnect does not repeat it, and the size it comes
+ * back with arrives as an OnGraphicsResize. Resize and paint still share one thread, which is
+ * what "The frame" below relies on; that thread is not the one the display-control events
+ * arrive on, and a redirection or reconnect brings a new one.
  * <li>Everything else runs on the UI thread: the connection events (onConnectionSuccess,
  * onConnectionFailure, onDisconnected arrive through GlobalApp, which posts them), attach and
  * detach, {@link #disconnect}, and every call into the window. The phase and the window are

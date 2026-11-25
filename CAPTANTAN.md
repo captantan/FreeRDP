@@ -998,26 +998,31 @@ millimetres; X11 invents a 75 dpi monitor and SDL passes what its display report
 without it. The desktop and device scale factors are the session's settings (as upstream's Android client
 and X11) unless the request gives them: 100 to 500, and 100, 140 or 180.
 
-**Reconnects come back at the size last asked for.** While a session is connected, `DesktopWidth` and
-`DesktopHeight` in the settings are the server's: the library sets them when the server answers a layout
-(`gdi_ResetGraphics`, or the capabilities of a reactivation), and gdi, the bitmap and the pointer mapping
-follow them, so the fork does not touch them then. They are written, from the size last asked for, at the
-two moments a new connection of the session is about to be made, through two callbacks that
-`captantan_disp_new` wraps:
+**Reconnects.** While a session is connected, `DesktopWidth` and `DesktopHeight` in the settings are the
+server's: the library sets them when the server answers a layout (`gdi_ResetGraphics`, or the capabilities
+of a reactivation), and gdi, the bitmap and the pointer mapping follow them, so the fork does not touch
+them then. What a reconnect comes back with depends on its path:
 
-- **Plain reconnect** (`rdp_client_reconnect`): it connects from the settings as they are, so it already
-  returns at the size the server last confirmed. The wrapped `RetryDialog` adds a size that was asked for
-  and not confirmed (asked while the connection was down, or deferred).
+- **Plain reconnect** (`rdp_client_reconnect`): it connects from the settings as they are, so it returns
+  at the size the server last confirmed, which after a resize is the size last asked for, and is also the
+  size gdi has. The fork leaves this alone on purpose. On a reconnect the library takes the server's size
+  from its capabilities without calling `DesktopResize` (and without `PostConnect`: gdi is kept), and only
+  the graphics pipeline's reset resizes gdi afterwards, so asking a server without that pipeline for
+  another size than gdi has would leave gdi behind. A size that was asked for and never confirmed (asked
+  while the connection was down) goes out as a layout once the new channel's caps are in.
 - **Reconnect through the broker**, which is what a GNOME Remote Desktop remote-login session does
   (`rdp_client_reconnect_via_broker`, for a redirection with a one-time token): the library throws the
   settings away and starts again from the copy taken at the first connect, then calls the client's
-  `Redirect` callback. Without the fork's `Redirect` the session would come back at the size of the first
-  connect; with it the size last asked for is written before the connection is made. The same callback
-  runs for every redirection, so the redirected connection at connect time carries a size asked for while
-  the first leg was up.
+  `Redirect` callback; the connection to the broker changes them once more before the redirection itself
+  calls the callback again. Without the fork such a session comes back at another size, usually that of
+  its first connect. `captantan_disp_new` sets `instance->Redirect`, and it writes the size last asked for
+  (and the scale factors) into the settings each time, just before the redirected connection is made. The
+  same callback runs for the redirections of the first connect, so a size asked for during the login leg
+  is carried over. Such a server uses the graphics pipeline (GNOME Remote Desktop requires it), whose
+  reset resizes gdi.
 - Only the desktop size and the two scale factors go on the wire at connect for one monitor (the monitor
   block is sent only for more than one), so nothing else needs keeping current.
-- After such a reconnect the server may still give another size than asked; the request is then looked at
+- After a reconnect the server may still give another size than asked; the request is then looked at
   again for the new channel and sent if the desktop differs.
 
 **The Java-facing contract (for package 3.2).** Everything is on `DisplayControl`, reached with
@@ -1054,13 +1059,12 @@ two moments a new connection of the session is about to be made, through two cal
 **Log.** `adb logcat -s captantan.disp`, at INFO, every line naming the session (`s<n> "<title>"`):
 `channel connected` and `channel disconnected`, `caps received` with the limits, `request #<n>`,
 `layout sent #<n>`, `skipped #<n>`, `deferred #<n>`, `clamped #<n>`, `refused #<n>`, and
-`next connection: ... will ask for <w>x<h> ..., not <w>x<h>` when a reconnect or redirection is given
-the size last wanted in place of what the settings held. The lines are
+`next connection: ... will ask for <w>x<h> ..., not <w>x<h>` when a redirected connection is given the
+size last wanted in place of what the settings held. The lines are
 written on the session thread. Channel events that happened while that thread was busy connecting are
 written when it gets to them, in order, with `(<n> ms ago)`.
 
-**Measured on a device on 2026-11-24** (the Android 17 foldable phone; test builds of this package, the
-last runs on the build of the final native code; a Windows 11 host and a GNOME Remote Desktop 51 host in
+**Measured on a device on 2026-11-24** (the Android 17 foldable phone; test builds of this package; a Windows 11 host and a GNOME Remote Desktop 51 host in
 remote-login mode; the trigger was upstream's "Fit screen" path: rotate, unfold, fold, drop a split-screen
 divider, and once a quick run of display-size overrides with `adb shell wm size`). 35 layouts were sent in
 all.
@@ -1107,7 +1111,10 @@ all.
   already has this size" was), the area clamp and the refusals (no server sent caps that small),
   `FLAG_FORCE`, a scale or a physical size given with a request, a plain reconnect without the broker
   (the Windows connection survived two airplane-mode attempts of 20 seconds), a server without the
-  channel, and a tablet or desktop windowing.
+  channel or without the graphics pipeline, and a tablet or desktop windowing.
+- **After the runs** one thing was taken out: a second hook that wrote a not yet confirmed size into the
+  settings before a plain reconnect (see "Reconnects" for why). It ran once in the runs, just before the
+  broker path replaced the settings anyway. The final build differs from the one measured by that removal.
 
 ## Package and version scheme
 
@@ -1278,10 +1285,9 @@ compile check runs on the merge.
        ```
 
      - `android_freerdp.c`: keep `captantan_disp_new(instance)` as the last thing `android_client_new`
-       does, after upstream has set `instance->RetryDialog` (it wraps that callback and
-       `instance->Redirect`), and `captantan_disp_free(instance)` in `android_client_free` before the
-       event queue goes. If upstream sets `instance->Redirect` itself, set it before our call so that
-       ours wraps it. `android_freerdp.h`: keep the `captantanDisp` pointer in `androidContext`.
+       does (it sets `instance->Redirect`, and wraps one that is already set), and
+       `captantan_disp_free(instance)` in `android_client_free` before the event queue goes. If upstream
+       sets `instance->Redirect` itself, set it before our call so that ours wraps it. `android_freerdp.h`: keep the `captantanDisp` pointer in `androidContext`.
      - `android_event.c`: keep the include of `captantan_disp.h` and the two cases, beside the
        keyboard's. `cpp/CMakeLists.txt`: keep the two source lines.
      - Library code it leans on, to read again if a merge touches it: `channels/disp/client/disp_main.c`
@@ -1289,8 +1295,9 @@ compile check runs on the merge.
        server closes), `libfreerdp/core/timer.c` (`freerdp_timer_add` with `mainloop`, which runs the
        callback on the session thread), `libfreerdp/core/connection.c` (`rdp_client_reconnect`,
        `rdp_client_reconnect_via_broker` and `rdp_client_redirect`: where the settings are reset and
-       where `Redirect` is called), `client/common/client.c` (`client_auto_reconnect_ex` calling
-       `RetryDialog` before each attempt), and the desktop clients' `RESIZE_MIN_DELAY` if they change it.
+       where `Redirect` is called; `rdp_client_connect_confirm_active`: whether a reconnect calls
+       `DesktopResize` for the server's size, which today it does not), and the desktop clients'
+       `RESIZE_MIN_DELAY` if they change it.
    - `domain/BookmarkBase.java`: keep `resolution = FITSCREEN` as the field's default in
      `ScreenSettings`. Package 3.2 decides what "Automatic" means; if it makes both resize live, this
      edit can go.

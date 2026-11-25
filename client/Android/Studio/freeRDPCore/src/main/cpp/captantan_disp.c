@@ -22,8 +22,9 @@
  * - The size is made valid first: width and height 200 to 8192, the width even ([MS-RDPEDISP]
  *   2.2.2.2.1), and the area within what the caps allow (2.2.2.2). GNOME Remote Desktop ends the
  *   session on a size outside 200 to 8192.
- * - The size last wanted is written into the settings whenever a new connection is about to be
- *   made, so that a reconnect comes back at that size (see captantan_disp_apply_wanted).
+ * - The size last wanted is written into the settings when a connection of the session is
+ *   redirected, so that a reconnect through a broker comes back at that size and not at the size
+ *   of the first connect (see captantan_disp_apply_wanted).
  *
  * The layout is one monitor, the app's window:
  *   Flags              DISPLAYCONTROL_MONITOR_PRIMARY, at (0, 0): the only monitor is the primary.
@@ -51,7 +52,7 @@
  * request on any thread (the UI thread today). They only change the state under its lock and
  * queue one event for the session thread (upstream's android_event queue, as
  * captantan_keyboard.c does). Everything else, the send and every call into Java included, runs
- * on the session thread: from that event, from the timer, and from the two connection hooks.
+ * on the session thread: from that event, from the timer, and from the redirection hook.
  */
 
 #include <freerdp/config.h>
@@ -91,7 +92,7 @@
 #define CAPTANTAN_DISP_EVENT_DEFERRED 7 /* a x b, c: CAPTANTAN_DISP_DEFER_*, d: milliseconds */
 #define CAPTANTAN_DISP_EVENT_CLAMPED 8  /* a x b valid, c: CAPTANTAN_DISP_CLAMP_*, d x e as asked */
 #define CAPTANTAN_DISP_EVENT_REFUSED 9  /* a x b as asked, c: CAPTANTAN_DISP_REFUSE_*, d: detail */
-#define CAPTANTAN_DISP_EVENT_CONNECT_SIZE 10 /* a x b, c: 1 redirection, 2 reconnect, d x e before */
+#define CAPTANTAN_DISP_EVENT_CONNECT_SIZE 10 /* a x b for the next connection, d x e before */
 
 #define CAPTANTAN_DISP_SKIP_LAST_SENT 1    /* equal to the last layout sent on this channel */
 #define CAPTANTAN_DISP_SKIP_CURRENT_SIZE 2 /* nothing sent yet and the desktop already is so */
@@ -109,9 +110,6 @@
 #define CAPTANTAN_DISP_REFUSE_NO_MONITORS 2  /* the server's caps allow no monitor */
 #define CAPTANTAN_DISP_REFUSE_AREA 3         /* the caps' area does not hold 200 x 200 */
 #define CAPTANTAN_DISP_REFUSE_SEND_FAILED 4  /* the channel refused the write; d: its code */
-
-#define CAPTANTAN_DISP_CONNECT_REDIRECT 1
-#define CAPTANTAN_DISP_CONNECT_RECONNECT 2
 
 typedef struct
 {
@@ -180,7 +178,6 @@ typedef struct
 	FreeRDP_TimerID timer;
 
 	/* Set once, before the session thread exists. */
-	pRetryDialog retryDialog; /* upstream's, wrapped by captantan_disp_retry_dialog */
 	pConnectCallback redirect;
 } captantanDisp;
 
@@ -854,21 +851,30 @@ UINT32 captantan_disp_request(freerdp* inst, INT32 width, INT32 height, UINT32 d
 	return serial;
 }
 
-/* Session thread, just before a new connection of this session is made. Writes the size last
- * asked for into the settings the connection is made from, so that it comes up at that size and
- * not at the size of the first connect.
+/* Session thread, when a connection of this session is redirected, just before the redirected
+ * connection is made. Writes the size last asked for into the settings that connection is made
+ * from.
  *
- * Why here. While a session is connected, DesktopWidth and DesktopHeight are the server's: the
- * library sets them when the server answers a layout (gdi_ResetGraphics, or the capabilities of a
- * reactivation) and gdi, the Java bitmap and the pointer mapping follow them, so they are not
- * touched then. A plain reconnect (rdp_client_reconnect) connects from those settings as they
- * are, so it already returns at the size the server last confirmed; this only adds a size that
- * was asked for and never confirmed. A reconnect of a session that was redirected with a one-time
- * token (GNOME Remote Desktop's remote login: rdp_client_reconnect_via_broker) throws the
- * settings away and starts again from the copy taken at the first connect, and calls the client's
- * Redirect callback right after: without this it would come back at the size of the first
- * connect. */
-static void captantan_disp_apply_wanted(freerdp* inst, UINT32 why)
+ * Why here, and only here. While a session is connected, DesktopWidth and DesktopHeight are the
+ * server's: the library sets them when the server answers a layout (gdi_ResetGraphics, or the
+ * capabilities of a reactivation), and gdi, the Java bitmap and the pointer mapping follow them.
+ *
+ * A plain reconnect (rdp_client_reconnect) connects from those settings as they are, so it
+ * returns at the size the server last confirmed, which is also the size gdi has. That is left
+ * alone on purpose: on a reconnect the library takes the server's size from its capabilities
+ * without calling DesktopResize, and only the graphics pipeline's reset resizes gdi afterwards,
+ * so asking a server without that pipeline for another size than gdi has would leave gdi behind.
+ * A size that was asked for and never confirmed goes out as a layout once the new channel's caps
+ * are in, like any waiting request.
+ *
+ * A reconnect of a session that was redirected with a one-time token (GNOME Remote Desktop's
+ * remote login: rdp_client_reconnect_via_broker) throws the settings away and starts again from
+ * the copy taken at the first connect, then calls the client's Redirect callback, and the
+ * connection to the broker changes them once more before the redirection itself calls it again
+ * (seen on a device). Without this the session would come back at some other size, usually that
+ * of its first connect. Such a server uses the graphics pipeline (GNOME Remote Desktop requires
+ * it), whose reset resizes gdi. */
+static void captantan_disp_apply_wanted(freerdp* inst)
 {
 	captantanDisp* st = captantan_disp_get(inst);
 	if (!st || !inst->context || !inst->context->settings)
@@ -913,7 +919,6 @@ static void captantan_disp_apply_wanted(freerdp* inst, UINT32 why)
 	note.serial = req.serial;
 	note.a = width;
 	note.b = height;
-	note.c = why;
 	note.d = oldWidth;
 	note.e = oldHeight;
 	note.at = winpr_GetTickCount64NS();
@@ -929,26 +934,8 @@ static BOOL captantan_disp_redirect(freerdp* inst)
 	if (st && st->redirect && !st->redirect(inst))
 		return FALSE;
 
-	captantan_disp_apply_wanted(inst, CAPTANTAN_DISP_CONNECT_REDIRECT);
+	captantan_disp_apply_wanted(inst);
 	return TRUE;
-}
-
-/* instance->RetryDialog: upstream's (android_retry_dialog), then, for a reconnect that goes
- * ahead, the wanted size. Upstream's waits until the app may reconnect, so the size is taken
- * after it returns. */
-static SSIZE_T captantan_disp_retry_dialog(freerdp* inst, const char* what, size_t current,
-                                           void* userarg)
-{
-	captantanDisp* st = captantan_disp_get(inst);
-	SSIZE_T delay = -1;
-
-	if (st && st->retryDialog)
-		delay = st->retryDialog(inst, what, current, userarg);
-
-	if ((delay >= 0) && what && (strcmp(what, "connection") == 0))
-		captantan_disp_apply_wanted(inst, CAPTANTAN_DISP_CONNECT_RECONNECT);
-
-	return delay;
 }
 
 BOOL captantan_disp_new(freerdp* inst)
@@ -967,10 +954,8 @@ BOOL captantan_disp_new(freerdp* inst)
 		return FALSE;
 	}
 
-	/* Called after upstream has set its callbacks: the two connection hooks wrap them. */
-	st->retryDialog = inst->RetryDialog;
+	/* Called after upstream has set its callbacks: a Redirect of upstream's would be wrapped. */
 	st->redirect = inst->Redirect;
-	inst->RetryDialog = captantan_disp_retry_dialog;
 	inst->Redirect = captantan_disp_redirect;
 
 	afc->captantanDisp = st;
