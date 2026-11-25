@@ -91,7 +91,7 @@
 #define CAPTANTAN_DISP_EVENT_DEFERRED 7 /* a x b, c: CAPTANTAN_DISP_DEFER_*, d: milliseconds */
 #define CAPTANTAN_DISP_EVENT_CLAMPED 8  /* a x b valid, c: CAPTANTAN_DISP_CLAMP_*, d x e as asked */
 #define CAPTANTAN_DISP_EVENT_REFUSED 9  /* a x b as asked, c: CAPTANTAN_DISP_REFUSE_*, d: detail */
-#define CAPTANTAN_DISP_EVENT_CONNECT_SIZE 10 /* a x b, c: 1 redirection, 2 reconnect */
+#define CAPTANTAN_DISP_EVENT_CONNECT_SIZE 10 /* a x b, c: 1 redirection, 2 reconnect, d x e before */
 
 #define CAPTANTAN_DISP_SKIP_LAST_SENT 1    /* equal to the last layout sent on this channel */
 #define CAPTANTAN_DISP_SKIP_CURRENT_SIZE 2 /* nothing sent yet and the desktop already is so */
@@ -891,8 +891,10 @@ static void captantan_disp_apply_wanted(freerdp* inst, UINT32 why)
 	(void)captantan_disp_clamp_protocol(&width, &height);
 	captantan_disp_scales(settings, &req, &desktopScale, &deviceScale);
 
-	if ((freerdp_settings_get_uint32(settings, FreeRDP_DesktopWidth) == width) &&
-	    (freerdp_settings_get_uint32(settings, FreeRDP_DesktopHeight) == height) &&
+	const UINT32 oldWidth = freerdp_settings_get_uint32(settings, FreeRDP_DesktopWidth);
+	const UINT32 oldHeight = freerdp_settings_get_uint32(settings, FreeRDP_DesktopHeight);
+
+	if ((oldWidth == width) && (oldHeight == height) &&
 	    (freerdp_settings_get_uint32(settings, FreeRDP_DesktopScaleFactor) == desktopScale) &&
 	    (freerdp_settings_get_uint32(settings, FreeRDP_DeviceScaleFactor) == deviceScale))
 		return;
@@ -912,6 +914,8 @@ static void captantan_disp_apply_wanted(freerdp* inst, UINT32 why)
 	note.a = width;
 	note.b = height;
 	note.c = why;
+	note.d = oldWidth;
+	note.e = oldHeight;
 	note.at = winpr_GetTickCount64NS();
 	captantan_disp_tell(inst, &note);
 }

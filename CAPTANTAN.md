@@ -1054,7 +1054,8 @@ two moments a new connection of the session is about to be made, through two cal
 **Log.** `adb logcat -s captantan.disp`, at INFO, every line naming the session (`s<n> "<title>"`):
 `channel connected` and `channel disconnected`, `caps received` with the limits, `request #<n>`,
 `layout sent #<n>`, `skipped #<n>`, `deferred #<n>`, `clamped #<n>`, `refused #<n>`, and
-`next connection: ... will ask for <w>x<h>` when a reconnect is given the size last wanted. The lines are
+`next connection: ... will ask for <w>x<h> ..., not <w>x<h>` when a reconnect or redirection is given
+the size last wanted in place of what the settings held. The lines are
 written on the session thread. Channel events that happened while that thread was busy connecting are
 written when it gets to them, in order, with `(<n> ms ago)`.
 

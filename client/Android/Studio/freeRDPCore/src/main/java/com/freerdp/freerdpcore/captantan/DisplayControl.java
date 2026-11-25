@@ -464,8 +464,8 @@ public final class DisplayControl
 
 			case EVENT_CONNECT_SIZE:
 				Log.i(TAG, "next connection: " + who + " will ask for " + a + "x" + b +
-				               ", the size last wanted (#" + serial + ", " +
-				               (c == 1 ? "redirection" : "reconnect") + ")" + age);
+				               ", the size last wanted (#" + serial + "), not " + d + "x" + e +
+				               " (" + (c == 1 ? "redirection" : "reconnect") + ")" + age);
 				return;
 
 			default:
