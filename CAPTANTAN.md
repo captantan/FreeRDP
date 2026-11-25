@@ -640,8 +640,15 @@ two Windows hosts, one with microphone redirection; logcat throughout, `dumpsys 
   network behaviour), "Disconnect all" pressed, three or more sessions, the five-minute timeout of a
   question in no window (the alert's timeout), a question raised while the session was shown in no window
   at all (only "a window that is not visible" was exercised), reconnect after a network drop while hidden,
-  the screen-off timer set to a value, the Task Manager's Stop, Android 14 to 16, swiping the
-  notification away, and the merge with package 2.2 on the device (see the pull request).
+  the screen-off timer set to a value, the Task Manager's Stop, Android 14 to 16, and swiping the
+  notification away.
+- **After the merge with package 2.2** (second test build, same day): "Disconnect <title>" showed that
+  session as "Ending" for about 0.1 s, then the notification listed the other session alone (and the
+  service dropped the microphone type with the session that had it); a tap brought the remaining
+  session's window to the front through `SessionLauncher` (`bring to front: w2 ... asked from
+  SessionOpenActivity`). The "Running sessions" channel switched off and on in the system settings while
+  a session ran: the notification went, and came back the moment the app was opened again (`notification:
+  not in the shade although allowed; posting it again`). No accent colour any more (`color=0x00000000`).
 
 **The platform rules this rests on** (checked against the Android documentation on 2026-11-24, for target
 API 37 on Android 14 to 17):
