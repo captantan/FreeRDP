@@ -1284,6 +1284,27 @@ shown in another window all take the same path. No reconnect, and the window is 
 - **Not in this package:** a per-connection scale and following the density (3.3), the session bar (4.1,
   4.2), window titles and remembered bounds (6.1).
 
+**Bookmark editor: masked passwords, Save keeps changes** (found while testing 3.3, 2026-11-25)
+
+`captantan/BookmarkEditor.java` (new), hooked into `presentation/BookmarkActivity.java` (edited: one line in
+`onCreate`, one in the Save handler) through fragment lifecycle callbacks, so no upstream fragment changes.
+
+- **Passwords are masked.** `credentials_settings.xml` and `gateway_settings.xml` set
+  `android:inputType="textPassword"` on an AndroidX `EditTextPreference`, which AndroidX ignores, so both
+  passwords were typed and shown in plain text. Each password preference (`bookmark.password`,
+  `bookmark.gateway_password`; no other screen in `res/xml/` has one) gets a password `EditText` through
+  `setOnBindEditTextListener` and a summary that only says "not set" or `*******`. A new password
+  preference must be added to `BookmarkEditor.PASSWORD_KEYS`.
+- **A text dialog is not cancelled by a tap outside it.** With an editor dialog open, the toolbar's Save
+  button stays visible above the scrim; tapping it cancelled the dialog, dropping what was typed, and did
+  not save, so the next Save stored the bookmark without the edit. Now the dialog ends only with OK,
+  Cancel or Back.
+- **Save never discards.** On a bookmark without a label, host or port, upstream's Save asked "Cancel
+  without saving?", and its main button, "Cancel", closed the editor and dropped every change. Save now
+  says what is missing and leaves the editor open. Back keeps upstream's question.
+- **Unchanged:** Save on any sub-screen saves the whole bookmark (all sub-screens, and the RDP options
+  draft) and closes the editor; Back on a sub-screen returns to the main screen and keeps the edits.
+
 ## Package and version scheme
 
 - `versionName = <upstream release>-captantan.<R>`, for example `3.33.1-captantan.1`.
