@@ -1247,6 +1247,40 @@ shown in another window all take the same path. No reconnect, and the window is 
     `no live resize: ...`, `availability ...`.
   - To see that the activity is not relaunched, add `ActivityTaskManager`: a relaunch prints a `Relaunch`
     / `START` line for `SessionActivity` and `captantan.session` a second `window open: w<n> (recreated)`.
+- **Measured on a device on 2026-11-24** (the Android 17 foldable phone, test builds of this package, a
+  Windows 11 host and a GNOME Remote Desktop 51 host in remote-login mode, two runs with the
+  maintainer; tags `captantan.resize`, `captantan.disp`, `captantan.session` and the window manager's
+  lifecycle events):
+  - **Unfolding is a configuration change on the same display**, not a move to another one: display 0
+    folded and unfolded, in all 38 configuration changes logged. The bits were `screenLayout
+    screenSize smallestScreenSize` (and the hidden window-configuration bit, `0x20000000`). The
+    density did not change: Android reported 390 dpi on both screens of this phone, so following the
+    density (3.3) does not come up on a fold here. Rotation:
+    `orientation screenSize`. Split screen: `screenLayout screenSize smallestScreenSize`; a divider
+    drop: `screenSize smallestScreenSize`.
+  - **One layout per change**, 400 to 401 ms after the last viewport change, on both hosts: unfold,
+    fold, rotation both ways folded and unfolded (both hosts), entering split screen, a divider drop,
+    leaving split screen (Windows only). Each was answered with a desktop of the new size in 49 to 160 ms, so the picture filled the
+    new space about half a second after the window settled. 25 layouts in all, no reconnect, no drop.
+  - **The window was never recreated** (no relaunch event, no `window open ... (recreated)`) through
+    all of that and two dark-theme switches, which rebuilt the key bar and touch pointer in place.
+  - **New connections needed no resize:** each connected at the viewport (1080x2146 folded, 2076x1913
+    unfolded) and its first request was skipped (`CURRENT_SIZE`) once the channel's caps came, 1 to 2 s
+    after connecting.
+  - **Attach:** a Windows session shown in a new window on the unfolded screen, after it had been
+    connected folded, was resized to that window 400 ms after the window settled (2076x1913, answered in
+    57 ms). An in-window switch to a fixed-size session asked for nothing.
+  - **Odd widths** in split screen (1379, 1857) went out one pixel narrower, silently.
+  - **The keyboard** opened and closed without a viewport change.
+  - **Fixed size** (1920x1080 on GNOME): never asked to resize; rotation and the keyboard showed two
+    upstream layout bugs that this package fixed (see `ScrollView2D.java` above).
+  - **Found and fixed between the runs:** folding sent one extra layout for the half-folded window
+    (the "only a visible window asks" rule above).
+  - **Not exercised on a device:** a `CLAMPED` toast or `REFUSED` (no server limits that low), a
+    server without Display Control, a reconnect after a resize, a recreated window, font scale and
+    font weight changes, desktop windowing and the caption bar, the tablet, `setReservedInsets`, a
+    `freerdp://` link, and an in-window switch from one following session to another after the window
+    changed (the attach in a new window is the same path).
 - **Not in this package:** a per-connection scale and following the density (3.3), the session bar (4.1,
   4.2), window titles and remembered bounds (6.1).
 
