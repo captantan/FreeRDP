@@ -35,7 +35,7 @@
     <string name="captantan_channel_sessions_desc">Shown while a session is live, also with no window open. Lists the sessions and ends them.</string>
     <string name="captantan_channel_events">Session alerts</string>
     <string name="captantan_channel_events_desc">A session in the background needs an answer, or has ended.</string>
-    <plurals name="captantan_sessions_running">
+    <plurals name="captantan_notification_sessions_running">
         <item quantity="one">%d session running</item>
         <item quantity="other">%d sessions running</item>
     </plurals>

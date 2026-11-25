@@ -217,7 +217,7 @@ final class SessionNotifications
 			b.setContentIntent(open(context, tapTarget, PI_OPEN));
 
 		final String count =
-		    context.getResources().getQuantityString(R.plurals.captantan_sessions_running, n, n);
+		    context.getResources().getQuantityString(R.plurals.captantan_notification_sessions_running, n, n);
 		// On the lock screen: only how many, no names.
 		b.setPublicVersion(new NotificationCompat.Builder(context, CHANNEL_SESSIONS)
 		                       .setSmallIcon(R.drawable.captantan_ic_notification)
