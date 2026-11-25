@@ -145,7 +145,7 @@ public class SessionActivity extends AppCompatActivity
 
 	private FloatingToolbar floatingToolbar;
 
-	void hideSystemBars()
+	public void hideSystemBars() // captantan fork: public, for the session bar's full screen button
 	{
 		boolean hideStatusBar = ApplicationSettingsActivity.getHideStatusBar(this);
 		boolean hideNavBar = ApplicationSettingsActivity.getHideNavigationBar(this);
@@ -480,6 +480,8 @@ public class SessionActivity extends AppCompatActivity
 			window.getResizer().setSystemInsets(
 			    Math.max(safeLeft, navInsets.left), rootView.getPaddingTop() + safeTop,
 			    Math.max(safeRight, navInsets.right), Math.max(safeBottom, navInsets.bottom));
+		if (window != null) // captantan fork: the session bar places itself from these (roadmap 4.1)
+			window.getBar().onWindowInsets(windowInsets);
 
 		// insets are consumed here, so lift the extended keyboard above the IME
 		if (extKeyboard != null)

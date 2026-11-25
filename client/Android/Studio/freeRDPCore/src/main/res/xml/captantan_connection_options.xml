@@ -46,4 +46,36 @@
             android:summary="@string/captantan_remote_scale_note" />
     </PreferenceCategory>
 
+    <!-- captantan fork (roadmap 4.1): captantan/SessionBar -->
+    <PreferenceCategory
+        android:title="@string/captantan_options_cat_bar">
+        <ListPreference
+            android:key="bar_mode"
+            android:title="@string/captantan_bar_mode"
+            android:entries="@array/captantan_bar_mode_entries"
+            android:entryValues="@array/captantan_bar_mode_values"
+            android:defaultValue="hidden"
+            app:useSimpleSummaryProvider="true" />
+        <ListPreference
+            android:key="bar_edge"
+            android:title="@string/captantan_bar_edge"
+            android:entries="@array/captantan_bar_edge_entries"
+            android:entryValues="@array/captantan_bar_edge_values"
+            android:defaultValue="top"
+            app:useSimpleSummaryProvider="true" />
+        <SeekBarPreference
+            android:key="bar_opacity"
+            android:title="@string/captantan_bar_opacity_percent"
+            android:defaultValue="85"
+            app:min="30"
+            android:max="100"
+            app:seekBarIncrement="5"
+            app:showSeekBarValue="true"
+            app:updatesContinuously="true" />
+        <Preference
+            android:selectable="false"
+            android:persistent="false"
+            android:summary="@string/captantan_bar_note" />
+    </PreferenceCategory>
+
 </PreferenceScreen>
