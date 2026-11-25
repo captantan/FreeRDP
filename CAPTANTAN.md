@@ -926,6 +926,199 @@ beside the key lines, two runs):
 - Not measured: a GNOME Remote Desktop host, function keys, Menu, Print Screen, Pause, Escape, the JIS,
   Korean and ABNT keys, Num Lock and Scroll Lock, and the setting "Use Android keyboard layout" on.
 
+**Live resizing: display control made safe** (package 3.1)
+
+The remote desktop is resized without reconnecting over the RDP Display Control channel (`disp`,
+[MS-RDPEDISP]): the client sends a monitor layout and the server changes its desktop. Upstream's Android
+client sends that layout straight from the UI thread, whenever it is asked, whatever the state of the
+channel: it does not wait for the server's capabilities, sends the same layout twice, sends as fast as it
+is asked, and a request made while no channel is open (during a redirection, a reconnect) is lost. GNOME
+Remote Desktop ends the session on a layout that arrives before it has sent its capabilities and on a size
+outside 200 to 8192. The fork puts the rules of the desktop clients (`client/X11/xf_disp.c`,
+`client/SDL/SDL3/sdl_disp.cpp`, `client/Wayland/wlf_disp.c`) between the request and the channel, so a
+resize can be asked for at any moment without knowing the state of the protocol. This package is the
+native half; the Java side that decides when to ask is package 3.2.
+
+- `freeRDPCore/src/main/cpp/captantan_disp.c`, `.h` (new): the state per session, the rules, the layout,
+  one event type for upstream's input queue (as `captantan_keyboard.c`), and the two natives of
+  `DisplayControl`. Its head comment has the rules and the reason for every field of the layout.
+- `freeRDPCore/.../captantan/DisplayControl.java` (new): one per `SessionHost`
+  (`SessionHost.getDisplayControl()`). The request call, the listener, and the log.
+- `captantan/SessionHost.java` (ours, changed): it makes the `DisplayControl`, and
+  `onDisplayControlEvent` receives what the native side reports, on the session thread.
+- `android_disp.c` (edited): `android_disp_init` and `android_disp_uninit` tell `captantan_disp.c` that the
+  channel opened or closed (one line each), and the body of `android_disp_send_monitor_layout` is replaced:
+  it queues a request instead of sending. So upstream's own path (`LibFreeRDP.sendMonitorLayout`, called by
+  `SessionActivity.onConfigurationChanged` for a "Fit screen" bookmark) goes through the same queue and
+  the same rules, with no edit to `LibFreeRDP.java`, `SessionActivity.java` or the JNI function.
+- `android_freerdp.c` (edited): `captantan_disp_new` at the end of `android_client_new`,
+  `captantan_disp_free` in `android_client_free`, and the include. `android_freerdp.h` (edited): one
+  pointer in `androidContext`. `android_event.c` (edited): an include, a case in `android_process_event`
+  and one in `android_event_free`. `cpp/CMakeLists.txt` (edited): the two new files.
+
+- `domain/BookmarkBase.java` (edited, one line): a new bookmark's resolution is "Fit screen", not
+  "Automatic" (the maintainer's choice, 2026-11-24). The two connect alike, at the window's size; until
+  package 3.2 only "Fit screen" follows the window afterwards. Bookmarks that exist keep what they store.
+
+**The rules** (all on the native side, so they hold for every caller):
+
+- **Queued, newest wins.** A request stores the wanted size and wakes the session thread
+  (`EVENT_TYPE_CAPTANTAN_DISP`); requests made before that thread runs collapse into the newest. The send
+  and every report to Java happen on the session thread. The channel's own callbacks arrive on the dynamic
+  channel thread; they only change the state under its lock and wake the session thread.
+- **Not before the caps.** Nothing is sent until the server's `DISPLAYCONTROL_CAPS_PDU` has arrived on the
+  channel that is open now. A request made earlier is kept and sent after them.
+- **A new channel resets.** After a server redirection (GNOME Remote Desktop's handover to the user's
+  session) or a reconnect there is a new channel and a new server-side instance: what was sent before is
+  forgotten, and the wanted size is looked at again once its caps are in.
+- **No duplicates.** A layout equal to the last one sent on this channel is skipped. While nothing has been
+  sent on this channel, a request equal to the session's desktop as it is (size and scale factors) is
+  skipped too, so a session that reconnected at the wanted size sends nothing. `FLAG_FORCE` skips this
+  check (for a server that did not act on the last layout); the caps and the interval are still waited for.
+- **At least 500 ms apart** (the desktop clients' `RESIZE_MIN_DELAY`), and the caps count as a send,
+  because Windows ignores a layout that follows its caps at once (the X11 and SDL clients found that). A
+  request that comes too early is sent when the time is up, by a timer of the library's main loop
+  (`freerdp_timer_add`); if a newer request arrives meanwhile, that one is sent. Package 3.2 debounces on
+  top of this; this interval is the safety net.
+- **Valid sizes only.** Width and height are brought into 200 to 8192 and the width is made even
+  ([MS-RDPEDISP] 2.2.2.2.1), then the area is brought within what the caps allow (monitors x factor A x
+  factor B, 2.2.2.1), keeping the shape. A size that is not positive, caps that allow no monitor, and an
+  area limit below 200 x 200 are refused: nothing is sent and Java is told why.
+- **Never ends the session.** The event always succeeds (a failed event ends the session in upstream's
+  queue); a layout the channel does not take is reported as refused.
+
+**The layout** is one monitor, the app's window: primary, at (0, 0), width and height as made valid.
+Orientation is always landscape (0 degrees): the window is not a panel that was turned, a tall window is a
+tall monitor, and when the device rotates Android hands the app a window of another shape. This is what
+upstream's Android client sent in practice (the `/orientation` setting, which the app never sets) and what
+SDL sends for a window whose display reports no rotation; GNOME Remote Desktop ignores the field, Windows
+would mark the monitor as rotated, and FreeRDP-based servers reject a value other than 0, 90, 180, 270.
+The physical size is 0 ("unknown", as upstream's Android client) unless the request gives one in
+millimetres; X11 invents a 75 dpi monitor and SDL passes what its display reports, and both servers work
+without it. The desktop and device scale factors are the session's settings (as upstream's Android client
+and X11) unless the request gives them: 100 to 500, and 100, 140 or 180.
+
+**Reconnects.** While a session is connected, `DesktopWidth` and `DesktopHeight` in the settings are the
+server's: the library sets them when the server answers a layout (`gdi_ResetGraphics`, or the capabilities
+of a reactivation), and gdi, the bitmap and the pointer mapping follow them, so the fork does not touch
+them then. What a reconnect comes back with depends on its path:
+
+- **Plain reconnect** (`rdp_client_reconnect`): it connects from the settings as they are, so it returns
+  at the size the server last confirmed, which after a resize is the size last asked for, and is also the
+  size gdi has. The fork leaves this alone on purpose. On a reconnect the library takes the server's size
+  from its capabilities without calling `DesktopResize` (and without `PostConnect`: gdi is kept), and only
+  the graphics pipeline's reset resizes gdi afterwards, so asking a server without that pipeline for
+  another size than gdi has would leave gdi behind. A size that was asked for and never confirmed (asked
+  while the connection was down) goes out as a layout once the new channel's caps are in.
+- **Reconnect through the broker**, which is what a GNOME Remote Desktop remote-login session does
+  (`rdp_client_reconnect_via_broker`, for a redirection with a one-time token): the library throws the
+  settings away and starts again from the copy taken at the first connect, then calls the client's
+  `Redirect` callback; the connection to the broker changes them once more before the redirection itself
+  calls the callback again. Without the fork such a session comes back at another size, usually that of
+  its first connect. `captantan_disp_new` sets `instance->Redirect`, and it writes the size last asked for
+  (and the scale factors) into the settings each time, just before the redirected connection is made. The
+  same callback runs for the redirections of the first connect, so a size asked for during the login leg
+  is carried over. Such a server uses the graphics pipeline (GNOME Remote Desktop requires it), whose
+  reset resizes gdi.
+- Only the desktop size and the two scale factors go on the wire at connect for one monitor (the monitor
+  block is sent only for more than one), so nothing else needs keeping current.
+- After a reconnect the server may still give another size than asked; the request is then looked at
+  again for the new channel and sent if the desktop differs.
+
+**The Java-facing contract (for package 3.2).** Everything is on `DisplayControl`, reached with
+`SessionHost.getDisplayControl()`:
+
+- `int request(int width, int height)`: ask for a remote desktop of that many pixels, the rest as the
+  session was connected. `int request(width, height, desktopScale, deviceScale, physicalWidthMm,
+  physicalHeightMm, flags)`: the same with a scale (0 for the session's), a physical size (0 for unknown)
+  and `FLAG_FORCE`. UI thread, any moment of a live session, as often as wanted. Returns the request's
+  serial number, or 0 if the session is over. The native signature (`nativeRequest`) already has all of
+  these, so 3.2 and 3.3 do not change it.
+- `getAvailability()`: `NO_CHANNEL` (not connected yet, between two connections, or the server has no
+  Display Control), `WAITING_FOR_CAPS`, `READY`. `getLimits()`: the caps (`maxMonitors`, `areaFactorA`,
+  `areaFactorB`, `maxArea()`), null unless `READY`. A server without the channel stays `NO_CHANNEL` for
+  good; nothing tells that apart from "not yet" except time after the session connected.
+- `addListener(Listener)`: on the UI thread, `onDisplayControlAvailability(control)` whenever the two
+  above change, and `onDisplayControlResult(control, result)` for what became of a request. A `Result` has
+  the `serial`, an `Outcome`, `width` and `height`, a `Reason` and a `detail`:
+  - `SENT`: a layout of that size left the device. It does not mean the server resized: that arrives as a
+    new surface (`SessionWindow.onSurfaceChanged`).
+  - `SKIPPED` with `LAST_SENT` or `CURRENT_SIZE`: the server already has it.
+  - `DEFERRED` with `NO_CHANNEL`, `NO_CAPS` or `MIN_INTERVAL` (`detail`: milliseconds to go): kept, sent
+    later. Reported once per reason.
+  - `CLAMPED`: the size was not valid and `width` x `height` is used in its place; `detail` has the
+    `CLAMP_*` bits (odd width, below 200, above 8192, above the server's area). Another result follows.
+  - `REFUSED` with `INVALID_SIZE`, `NO_MONITORS`, `AREA_TOO_SMALL` or `SEND_FAILED` (`detail`: the
+    channel's error code): not sent, not kept.
+- One request can have several results, and gets results again with the same serial number when a new
+  channel appears, because it is looked at again. A request that a newer one replaced before it was sent
+  gets no further result.
+- A request made through upstream's `LibFreeRDP.sendMonitorLayout` takes the same path and shows in the
+  same log, but its caller gets no serial number.
+
+**Log.** `adb logcat -s captantan.disp`, at INFO, every line naming the session (`s<n> "<title>"`):
+`channel connected` and `channel disconnected`, `caps received` with the limits, `request #<n>`,
+`layout sent #<n>`, `skipped #<n>`, `deferred #<n>`, `clamped #<n>`, `refused #<n>`, and
+`next connection: ... will ask for <w>x<h> ..., not <w>x<h>` when a redirected connection is given the
+size last wanted in place of what the settings held. The lines are
+written on the session thread. Channel events that happened while that thread was busy connecting are
+written when it gets to them, in order, with `(<n> ms ago)`.
+
+**Measured on a device on 2026-11-24** (the Android 17 foldable phone; test builds of this package; a
+Windows 11 host and a GNOME Remote Desktop 51 host in remote-login mode; the trigger was upstream's "Fit
+screen" path: rotate, unfold, fold, drop a split-screen divider, and once a quick run of display-size
+overrides with `adb shell wm size`, once on each host and once more on GNOME). 41 layouts were captured
+in all.
+
+- **Caps before any layout, on each of the twelve channels seen** (six Windows sessions with one channel
+  each, two GNOME sessions with five and one). Both hosts send the same caps: 16 monitors, area factors
+  8192 x 8192. The channel opens 1 to 2 seconds after the session connects and its caps follow within 4
+  to 163 ms.
+- **Windows 11:** 16 layouts, each answered with a desktop of the new size 53 to 96 ms later (one took
+  2.1 s while the network was coming back, and the second of two layouts 501 ms apart took 260 ms), no
+  reconnect, no drop. The new size arrived as a graphics
+  reset on the graphics channel, as on GNOME; no second resize from a reactivation was seen.
+- **GNOME Remote Desktop:** 22 layouts to a reachable session, each answered 54 to 104 ms later, no
+  reconnect, no drop. A session went through up to five channels: the system daemon redirects at once, and
+  when the user's session is not there yet a second redirection follows the login. After each one the
+  state was reset: a waiting request was reported as deferred for "no disp channel", then for "caps not
+  received yet", then skipped or sent.
+- **Reconnect through the broker returns at the size last asked for** (GNOME, twice: once after the host
+  machine had gone to sleep in the middle of a run, once after the connection was cut on the host with
+  `ss -K`): both times the session, connected in portrait, came back at the size last asked for (a
+  landscape size, then the unfolded size, 2.5 s after the cut), and the waiting request was then skipped
+  because the desktop already had that size. The log
+  showed the settings holding another size than the one wanted at every redirection of such a reconnect,
+  not only after the library's reset, so the `Redirect` hook is what does it.
+- **The one drop** (GNOME, first run): three layouts were sent and not answered, and 9.6 s after the first
+  the connection ended with a TCP timeout and no error code; the next reconnect attempts could not
+  resolve the host's name. The host machine had gone to sleep. A layout the server rejects would end the
+  session with an error code and no automatic reconnect; that was never seen.
+- **Newest wins:** two requests made while the session thread was reconnecting never showed; the third
+  was the one acted on.
+- **The interval and its timer** (three times, the same on both hosts): with size changes about 140 ms
+  apart, the first was sent, the second was clamped and deferred ("356 ms to go"), the third replaced
+  it ("217 ms to go") and was sent by the timer 501 ms after the first. Both servers answered with that
+  size, GNOME in 54 ms, Windows in 260 ms.
+- **Clamp:** odd widths were made even (1379 to 1378, 673 to 672, 1857 to 1856) and both hosts answered
+  with the even width.
+- **Scale:** the bookmark's 140 % went out as 140 / 140 with every layout.
+- **Threads:** with the graphics pipeline, which both hosts use, the resize and paint callbacks arrive
+  on the library's dynamic channel thread, not on the session thread (`SessionHost`'s comment says so
+  now). The display-control lines are all on the session thread.
+- **Upstream's trigger is inexact**, which is package 3.2's to replace: "Automatic" bookmarks never ask;
+  a divider drag asks once, when it is dropped; and during quick changes it read sizes of a layout pass
+  that had not finished (a height 103 pixels short, corrected by the request that followed 144 ms
+  later).
+- **Not exercised on a device:** a request equal to the last layout sent (the skip for "the desktop
+  already has this size" was), the area clamp and the refusals (no server sent caps that small),
+  `FLAG_FORCE`, a scale or a physical size given with a request, a plain reconnect without the broker
+  (the Windows connection survived two airplane-mode attempts of 20 seconds), a server without the
+  channel or without the graphics pipeline, and a tablet or desktop windowing.
+- **After the runs** one thing was taken out: a second hook that wrote a not yet confirmed size into the
+  settings before a plain reconnect (see "Reconnects" for why). It ran once in the runs, just before the
+  broker path replaced the settings anyway. The final build differs from the one measured by that removal.
+
 ## Package and version scheme
 
 - `versionName = <upstream release>-captantan.<R>`, for example `3.33.1-captantan.1`.
@@ -1078,6 +1271,39 @@ compile check runs on the merge.
      - `winpr/libwinpr/input/keycode.c` (`KEYCODE_TO_VKCODE_EVDEV`) is where the positions come from. If
        upstream fills one of the twelve gaps, the entry in `captantan_keyboard_override` only repeats it.
        `GetVirtualKeyCodeFromKeycode` asserts that an entry is not 0: the table has none at 3.33.1.
+   - The display control files (package 3.1):
+     - `android_disp.c`: keep the call to `captantan_disp_channel_opened` in `android_disp_init` (after
+       `disp->custom = afc`, which `captantan_disp.c` reads), the call to `captantan_disp_channel_closed`
+       in `android_disp_uninit`, and our body of `android_disp_send_monitor_layout`, which queues. A
+       conflict in that function means upstream changed how it builds or sends the layout: keep ours and
+       carry what upstream now puts into the layout into `captantan_disp_run` if it still applies. If
+       upstream adds a caps handler, a timer, a duplicate check or its own queueing here (it sets
+       `disp->DisplayControlCaps`, or the JNI function stops calling `SendMonitorLayout` on the caller's
+       thread), compare it with the rules under "Live resizing"; where it covers them, prefer upstream's
+       and drop ours, and update this file. Nothing but `captantan_disp.c` may call
+       `SendMonitorLayout`:
+
+       ```bash
+       git grep -n 'SendMonitorLayout' -- client/Android
+       ```
+
+     - `android_freerdp.c`: keep `captantan_disp_new(instance)` as the last thing `android_client_new`
+       does (it sets `instance->Redirect`, and wraps one that is already set), and
+       `captantan_disp_free(instance)` in `android_client_free` before the event queue goes. If upstream
+       sets `instance->Redirect` itself, set it before our call so that ours wraps it. `android_freerdp.h`: keep the `captantanDisp` pointer in `androidContext`.
+     - `android_event.c`: keep the include of `captantan_disp.h` and the two cases, beside the
+       keyboard's. `cpp/CMakeLists.txt`: keep the two source lines.
+     - Library code it leans on, to read again if a merge touches it: `channels/disp/client/disp_main.c`
+       (the caps callback and `SendMonitorLayout`, and that the channel's context outlives a channel the
+       server closes), `libfreerdp/core/timer.c` (`freerdp_timer_add` with `mainloop`, which runs the
+       callback on the session thread), `libfreerdp/core/connection.c` (`rdp_client_reconnect`,
+       `rdp_client_reconnect_via_broker` and `rdp_client_redirect`: where the settings are reset and
+       where `Redirect` is called; `rdp_client_connect_confirm_active`: whether a reconnect calls
+       `DesktopResize` for the server's size, which today it does not), and the desktop clients'
+       `RESIZE_MIN_DELAY` if they change it.
+   - `domain/BookmarkBase.java`: keep `resolution = FITSCREEN` as the field's default in
+     `ScreenSettings`. Package 3.2 decides what "Automatic" means; if it makes both resize live, this
+     edit can go.
    - `LibFreeRDP.java`: besides the removed `/cert:ignore`, keep the `NativeSessionThreads` calls in
      `connect`, `freeInstance`, `OnConnectionFailure` and `OnDisconnected` together; one missing makes
      `freeInstance` free a running session or never free one. If upstream starts waiting for connecting
@@ -1142,7 +1368,9 @@ The workflow `.github/workflows/captantan-android.yml` runs on pull requests int
   `Theme.Captantan`, and the dex has Material's `MaterialAlertDialogBuilder`; the dex has
   `captantan/PhysicalKeyboard` with its four native methods and `libfreerdp-android.so` exports a function
   for each (package 5.1: they are found by name at run time, so a misnamed one would compile and fail at
-  the first key); the dex has the package 2.1 classes (`SessionHost`, `SessionRegistry`,
+  the first key); the dex has `captantan/DisplayControl` with its two native methods and `onNativeEvent`,
+  and `libfreerdp-android.so` exports the two natives and looks the callback up with the expected
+  signature (package 3.1); the dex has the package 2.1 classes (`SessionHost`, `SessionRegistry`,
   `SessionWindow`), and no activity in the manifest has `documentLaunchMode`; the package 2.2 classes
   (`SessionSwitcher`, `SessionLauncher`, `HomeSessions`), the toolbar button's id and the switcher's
   layouts; the dex has the package 2.3 classes (`SessionKeeper`, `SessionKeepAliveService`,

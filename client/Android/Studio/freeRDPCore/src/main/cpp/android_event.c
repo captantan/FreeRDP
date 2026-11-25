@@ -24,6 +24,7 @@
 #include "android_freerdp.h"
 #include "android_cliprdr.h"
 #include "captantan_keyboard.h" /* captantan fork */
+#include "captantan_disp.h"     /* captantan fork */
 
 /* Merges a pure move into a pure move still waiting at the tail of the queue */
 WINPR_ATTR_NODISCARD
@@ -210,6 +211,12 @@ static BOOL android_process_event(ANDROID_EVENT_QUEUE* queue, freerdp* inst)
 			/* captantan fork: key events of a physical keyboard (captantan_keyboard.c) */
 			case EVENT_TYPE_CAPTANTAN_KEYBOARD:
 				rc = captantan_keyboard_process_event(inst, event);
+				break;
+
+			/* captantan fork: display control, a look at the channel and the wanted size
+			 * (captantan_disp.c) */
+			case EVENT_TYPE_CAPTANTAN_DISP:
+				rc = captantan_disp_process_event(inst, event);
 				break;
 
 			case EVENT_TYPE_DISCONNECT:
@@ -533,6 +540,11 @@ void android_event_free(ANDROID_EVENT* event)
 		/* captantan fork */
 		case EVENT_TYPE_CAPTANTAN_KEYBOARD:
 			captantan_keyboard_event_free(event);
+			break;
+
+		/* captantan fork */
+		case EVENT_TYPE_CAPTANTAN_DISP:
+			captantan_disp_event_free(event);
 			break;
 
 		default:

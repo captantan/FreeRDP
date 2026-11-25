@@ -26,6 +26,7 @@
 #include <freerdp/client/disp.h>
 
 #include "android_disp.h"
+#include "captantan_disp.h" /* captantan fork */
 
 #define TAG CLIENT_TAG("android.disp")
 
@@ -36,6 +37,8 @@ BOOL android_disp_init(androidContext* afc, DispClientContext* disp)
 
 	afc->disp = disp;
 	disp->custom = afc;
+	/* captantan fork: wait for the caps, see captantan_disp.c */
+	captantan_disp_channel_opened(afc->common.context.instance, disp);
 
 	WLog_DBG(TAG, "disp channel connected");
 	return TRUE;
@@ -47,6 +50,7 @@ BOOL android_disp_uninit(androidContext* afc, DispClientContext* disp)
 	WINPR_UNUSED(disp);
 
 	afc->disp = nullptr;
+	captantan_disp_channel_closed(afc->common.context.instance, disp); /* captantan fork */
 	WLog_DBG(TAG, "disp channel disconnected");
 	return TRUE;
 }
@@ -55,33 +59,12 @@ BOOL android_disp_send_monitor_layout(androidContext* afc, UINT32 width, UINT32 
 {
 	WINPR_ASSERT(afc);
 
-	DispClientContext* disp = afc->disp;
-	if (!disp || !disp->SendMonitorLayout)
-	{
-		WLog_WARN(TAG, "disp channel not available");
+	/* captantan fork: nothing is sent from the caller's thread. The request is queued for the
+	 * session thread, which sends it when the channel allows (captantan_disp.c). Upstream's body
+	 * built the layout and called SendMonitorLayout here. */
+	if ((width > INT32_MAX) || (height > INT32_MAX))
 		return FALSE;
-	}
 
-	rdpSettings* settings = afc->common.context.settings;
-
-	DISPLAY_CONTROL_MONITOR_LAYOUT layout = WINPR_C_ARRAY_INIT;
-	layout.Flags = DISPLAY_CONTROL_MONITOR_PRIMARY;
-	layout.Top = layout.Left = 0;
-	layout.Width = width;
-	layout.Height = height;
-	layout.PhysicalWidth = 0;
-	layout.PhysicalHeight = 0;
-	layout.Orientation = freerdp_settings_get_uint16(settings, FreeRDP_DesktopOrientation);
-	layout.DesktopScaleFactor = freerdp_settings_get_uint32(settings, FreeRDP_DesktopScaleFactor);
-	layout.DeviceScaleFactor = freerdp_settings_get_uint32(settings, FreeRDP_DeviceScaleFactor);
-
-	UINT rc = disp->SendMonitorLayout(disp, 1, &layout);
-	if (rc != CHANNEL_RC_OK)
-	{
-		WLog_ERR(TAG, "SendMonitorLayout failed: %" PRIu32, rc);
-		return FALSE;
-	}
-
-	WLog_DBG(TAG, "SendMonitorLayout: %" PRIu32 "x%" PRIu32, width, height);
-	return TRUE;
+	return captantan_disp_request(afc->common.context.instance, (INT32)width, (INT32)height, 0, 0,
+	                              0, 0, 0) != 0;
 }

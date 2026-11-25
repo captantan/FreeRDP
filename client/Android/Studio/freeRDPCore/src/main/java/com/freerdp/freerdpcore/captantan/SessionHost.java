@@ -43,6 +43,17 @@ import java.util.function.Consumer;
  * thread (android_thread_func). They copy the frame, store what a later window needs, and post
  * everything else to the UI thread. The certificate, credentials and experimental-feature calls
  * wait there for the answer.
+ * <li>{@link #onDisplayControlEvent} (package 3.1) also runs on the session's native thread: what
+ * the native side did about the Display Control channel and about resize requests. It is logged
+ * there and {@link DisplayControl} posts it to its listeners on the UI thread.
+ * <li>Measured in package 3.1: with the graphics pipeline (GFX), which both kinds of host use,
+ * OnGraphicsResize and OnGraphicsUpdate do not come on android_thread_func's thread but on the
+ * library's dynamic channel thread, where the graphics channel is decoded (gdi_ResetGraphics
+ * calls the resize from there). Only OnSettingsChanged is on the session thread, and it comes
+ * once, at the session's first connect: a reconnect does not repeat it, and the size it comes
+ * back with arrives as an OnGraphicsResize. Resize and paint still share one thread, which is
+ * what "The frame" below relies on; that thread is not the one the display-control events
+ * arrive on, and a redirection or reconnect brings a new one.
  * <li>Everything else runs on the UI thread: the connection events (onConnectionSuccess,
  * onConnectionFailure, onDisconnected arrive through GlobalApp, which posts them), attach and
  * detach, {@link #disconnect}, and every call into the window. The phase and the window are
@@ -125,6 +136,8 @@ public final class SessionHost implements LibFreeRDP.UIEventListener, GlobalApp.
 	private final BlockingPrompts prompts;
 	private final CertificatePrompt certificatePrompt;
 	private final SessionPrompts sessionPrompts;
+	/** Live resizing of the remote desktop (package 3.1). */
+	private final DisplayControl displayControl;
 
 	/** Written on the UI thread only. */
 	private volatile Phase phase = Phase.CONNECTING;
@@ -171,6 +184,8 @@ public final class SessionHost implements LibFreeRDP.UIEventListener, GlobalApp.
 		this.prompts = new BlockingPrompts(toString(), SessionRegistry::changed);
 		this.certificatePrompt = new CertificatePrompt(this.context, prompts, () -> quiet = true);
 		this.sessionPrompts = new SessionPrompts(prompts, () -> quiet = true);
+		// Before the connection is started: the native side reports to it from the first channel on.
+		this.displayControl = new DisplayControl(this, this.instance);
 
 		// From here to the session's end every UI callback of this instance comes to the host.
 		state.setUIEventListener(this);
@@ -311,6 +326,16 @@ public final class SessionHost implements LibFreeRDP.UIEventListener, GlobalApp.
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * Live resizing of the remote desktop: ask for a size, and hear whether the session can be
+	 * resized and what became of each request (package 3.1). Any thread; see the class for which
+	 * of its calls need the UI thread.
+	 */
+	public DisplayControl getDisplayControl()
+	{
+		return displayControl;
 	}
 
 	/** The window that shows the session, or null. UI thread. */
@@ -609,6 +634,17 @@ public final class SessionHost implements LibFreeRDP.UIEventListener, GlobalApp.
 	@Override public void OnGraphicsResize(int width, int height, int bpp)
 	{
 		newSurface(width, height, bpp);
+	}
+
+	/**
+	 * What the native side did about the Display Control channel or a resize request
+	 * (captantan_disp.c, through {@link DisplayControl}). Session thread. The OnGraphicsResize
+	 * that answers a layout comes on another thread (see the class comment), after the layout
+	 * was sent but possibly before its "sent" has been reported here.
+	 */
+	void onDisplayControlEvent(int kind, int serial, int a, int b, int c, int d, int e, int ageMs)
+	{
+		displayControl.onEvent(kind, serial, a, b, c, d, e, ageMs);
 	}
 
 	private void newSurface(int width, int height, int bpp)

@@ -600,7 +600,9 @@ public class BookmarkBase implements Parcelable, Cloneable
 				    return new ScreenSettings[size];
 			    }
 		    };
-		private int resolution = AUTOMATIC;
+		// captantan fork: was AUTOMATIC. Both connect at the window's size; only "Fit screen"
+		// follows the window afterwards. Bookmarks that exist keep what they store.
+		private int resolution = FITSCREEN;
 		private int colors = 32;
 		private int width = 0;
 		private int height = 0;
