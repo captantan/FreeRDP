@@ -1579,9 +1579,16 @@ tries; what was dropped is listed at the end of this block, so it is not tried a
 - **4.2** has less left: the docked strip is in. What remains is whether to offer "docked in full screen
   too" (the `reserved` name is free for it), and the quick remote-scale switch (needs a public "ask
   again" on `SessionResizeController`, see the 3.3 block).
-- **Not in this package**, written down for later: zooming out below the fit (7.x), a "keep clear of the
-  camera" choice for full screen, a key combination (5.3), and session tabs in a desktop window's
-  caption bar, as a browser has them (6.1, Tanner's idea).
+- **Not in this package**, written down for later:
+  - zooming out below the fit (7.x);
+  - a key combination (5.3);
+  - a full-screen setting, "true full screen" or "keep clear of the camera" (safe area). Asked for after
+    the tablet's cutout hid GNOME's clock: the session draws under the cutout, and only the bar keeps
+    clear of it;
+  - full screen in a desktop window (6.1). Android makes the window whole-screen without its caption. On
+    leaving full screen the window stayed that way for about 7 s on the tablet before restoring, and the
+    setting is app-wide;
+  - session tabs in a desktop window's caption bar, as a browser has them (6.1, Tanner's idea).
 
 ## Package and version scheme
 
