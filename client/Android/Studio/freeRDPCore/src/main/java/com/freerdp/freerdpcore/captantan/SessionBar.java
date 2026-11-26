@@ -843,17 +843,17 @@ public final class SessionBar
 			}
 		}
 
-		// Docked: the strip is the bar's thickness, plus whatever the bar keeps clear of on its
-		// edge beyond what the session view is padded for already (a camera cutout, say).
+		// Docked: the strip is the bar's thickness. On the left and right it is also what the bar
+		// keeps clear of there beyond the navigation bar the session view is padded for already
+		// (a camera cutout in landscape). Read from the insets, not the session view's padding:
+		// that is set by the insets pass after this one, and reading it made the strip wobble.
 		if (docked && isShown())
 		{
 			final int thick = size + (vertical ? buttons.getPaddingLeft() + buttons.getPaddingRight()
 			                                   : buttons.getPaddingTop() + buttons.getPaddingBottom());
-			final View scroll = activity.findViewById(R.id.sessionScrollView);
-			final int[] r = window.getResizer().getReservedInsets();
-			final int padL = scroll != null ? scroll.getPaddingLeft() - r[0] : 0;
-			final int padT = scroll != null ? scroll.getPaddingTop() - r[1] : 0;
-			final int padR = scroll != null ? scroll.getPaddingRight() - r[2] : 0;
+			final Insets nav = insets != null
+			                       ? insets.getInsets(WindowInsetsCompat.Type.navigationBars())
+			                       : Insets.NONE;
 			switch (edge)
 			{
 				case BOTTOM:
@@ -862,13 +862,14 @@ public final class SessionBar
 					reserve(0, 0, 0, thick);
 					break;
 				case LEFT:
-					reserve(thick + Math.max(0, safe.left - padL), 0, 0, 0);
+					reserve(thick + Math.max(0, safe.left - nav.left), 0, 0, 0);
 					break;
 				case RIGHT:
-					reserve(0, 0, thick + Math.max(0, safe.right - padR), 0);
+					reserve(0, 0, thick + Math.max(0, safe.right - nav.right), 0);
 					break;
 				default:
-					reserve(0, thick + Math.max(0, safe.top - padT), 0, 0);
+					// the session view starts below the status bar and caption already
+					reserve(0, thick, 0, 0);
 					break;
 			}
 		}
