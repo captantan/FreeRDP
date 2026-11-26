@@ -128,6 +128,8 @@ public final class SessionWindow
 	private final TouchPointerView touchPointerView;
 	/** Keeps the remote desktop the size of this window's viewport (package 3.2). */
 	private final SessionResizeController resizer;
+	/** The session bar (package 4.1), set up for each session this window shows. */
+	private final SessionBar bar;
 	/** The configuration's night bits the views were built with. */
 	private int night;
 
@@ -158,6 +160,7 @@ public final class SessionWindow
 		this.scrollView = activity.findViewById(R.id.sessionScrollView);
 		this.touchPointerView = activity.findViewById(R.id.touchPointerView);
 		this.resizer = new SessionResizeController(activity, name);
+		this.bar = new SessionBar(this, input);
 		this.night = activity.getResources().getConfiguration().uiMode &
 		             Configuration.UI_MODE_NIGHT_MASK;
 
@@ -169,7 +172,8 @@ public final class SessionWindow
 		Log.i(TAG, "window open: " + name + (shown != null ? " (recreated)" : ""));
 
 		// The switcher's button on upstream's floating toolbar (floating_toolbar.xml). The toolbar
-		// already makes it draggable like its other buttons; a tap opens the switcher.
+		// already makes it draggable like its other buttons; a tap opens the switcher. Since
+		// package 4.1 that toolbar is not shown (session.xml) and the session bar has the switcher.
 		final View sessions = activity.findViewById(R.id.captantan_floating_toolbar_sessions);
 		if (sessions != null)
 		{
@@ -194,6 +198,15 @@ public final class SessionWindow
 	public SessionResizeController getResizer()
 	{
 		return resizer;
+	}
+
+	/**
+	 * The window's session bar (package 4.1): {@link SessionBar#reveal} for a key combination
+	 * (5.3), {@link SessionBar#onWindowInsets} from the activity's insets listener.
+	 */
+	public SessionBar getBar()
+	{
+		return bar;
 	}
 
 	/** The session this window shows, or null. */
@@ -411,6 +424,8 @@ public final class SessionWindow
 
 		target.attach(this);
 		target.setPainting(started);
+		// The bar takes the mode, edge and opacity of the session it now shows.
+		bar.onShown(target);
 
 		if (connected)
 			bind();
@@ -449,6 +464,7 @@ public final class SessionWindow
 			return;
 		unbind(true);
 		host = null;
+		bar.onReleased();
 		ports.setSession(null);
 		was.detach(this, reason);
 	}
@@ -595,6 +611,7 @@ public final class SessionWindow
 			ports.disconnected();
 		unbind(false);
 		host = null;
+		bar.onReleased();
 		ports.setSession(null);
 		from.detach(this, "session ended");
 	}
@@ -667,9 +684,10 @@ public final class SessionWindow
 		if (keyboard instanceof ExtendedKeyboardView)
 			((ExtendedKeyboardView)keyboard).rebuild(); // captantan fork method
 		touchPointerView.rebuild();                    // captantan fork method
+		bar.rebuild();
 		if (host != null && bound)
 			host.replayPointer(activity);
-		Log.i(TAG, "ui mode changed in " + name + ": key bar and touch pointer rebuilt");
+		Log.i(TAG, "ui mode changed in " + name + ": key bar, touch pointer and session bar rebuilt");
 	}
 
 	/** Hook in onWindowFocusChanged(). */
@@ -681,8 +699,9 @@ public final class SessionWindow
 
 	/**
 	 * Hook in handleBackPressed(), after upstream's own uses of Back (hide the keyboards, Alt+F4).
-	 * Back never ends a session by itself: it asks whether to leave it running and go to the
-	 * connection list, or to disconnect it. Always true (handled).
+	 * In full screen Back first leaves full screen ({@link SessionBar#leaveFullScreen}). Back never
+	 * ends a session by itself: it asks whether to leave it running and go to the connection list,
+	 * or to disconnect it. Always true (handled).
 	 */
 	public boolean onBack()
 	{
@@ -692,6 +711,8 @@ public final class SessionWindow
 			activity.finish();
 			return true;
 		}
+		if (bar.leaveFullScreen("Back"))
+			return true;
 		if (backDialog != null && backDialog.isShowing())
 			return true;
 		backDialog =
@@ -728,6 +749,7 @@ public final class SessionWindow
 		SessionSwitcher.closeFor(activity);
 		release("window closed");
 		resizer.onDestroy();
+		bar.onDestroy();
 		dropUnstarted();
 		SessionRegistry.setFocus(this, false);
 		Log.i(TAG, "window closed: " + name);

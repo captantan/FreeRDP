@@ -175,7 +175,21 @@ public final class ConnectionPrefs
 	public static final IntField REMOTE_SCALE_CUSTOM =
 	    new IntField("remote_scale_custom", 150, RemoteScale.MIN_PERCENT, RemoteScale.MAX_PERCENT);
 
-	private static final Field<?>[] FIELDS = { GRAPHICS_MODE, REMOTE_SCALE, REMOTE_SCALE_CUSTOM };
+	/** Session bar mode (roadmap 4.1). See SessionBar. */
+	public static final EnumField<SessionBarSettings.Mode> BAR_MODE =
+	    new EnumField<>("bar_mode", SessionBarSettings.DEFAULT_MODE, SessionBarSettings.Mode.values());
+
+	/** The edge the session bar sits at (roadmap 4.1). */
+	public static final EnumField<SessionBarSettings.Edge> BAR_EDGE =
+	    new EnumField<>("bar_edge", SessionBarSettings.DEFAULT_EDGE, SessionBarSettings.Edge.values());
+
+	/** The session bar's opacity in percent (roadmap 4.1). */
+	public static final IntField BAR_OPACITY =
+	    new IntField("bar_opacity", SessionBarSettings.DEFAULT_OPACITY,
+	                 SessionBarSettings.MIN_OPACITY, SessionBarSettings.MAX_OPACITY);
+
+	private static final Field<?>[] FIELDS = { GRAPHICS_MODE, REMOTE_SCALE, REMOTE_SCALE_CUSTOM,
+		                                       BAR_MODE, BAR_EDGE, BAR_OPACITY };
 
 	// ---------------------------------------------------------------------------------------------
 
@@ -266,6 +280,21 @@ public final class ConnectionPrefs
 	public RemoteScale getRemoteScale()
 	{
 		return get(REMOTE_SCALE);
+	}
+
+	public SessionBarSettings.Mode getBarMode()
+	{
+		return get(BAR_MODE);
+	}
+
+	public SessionBarSettings.Edge getBarEdge()
+	{
+		return get(BAR_EDGE);
+	}
+
+	public int getBarOpacity()
+	{
+		return get(BAR_OPACITY);
 	}
 
 	// ---------------------------------------------------------------------------------------------

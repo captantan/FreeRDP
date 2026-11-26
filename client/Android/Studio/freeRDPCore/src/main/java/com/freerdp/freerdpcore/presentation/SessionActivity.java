@@ -145,7 +145,7 @@ public class SessionActivity extends AppCompatActivity
 
 	private FloatingToolbar floatingToolbar;
 
-	void hideSystemBars()
+	public void hideSystemBars() // captantan fork: public, for the session bar's full screen button
 	{
 		boolean hideStatusBar = ApplicationSettingsActivity.getHideStatusBar(this);
 		boolean hideNavBar = ApplicationSettingsActivity.getHideNavigationBar(this);
@@ -163,8 +163,10 @@ public class SessionActivity extends AppCompatActivity
 
 		WindowInsetsControllerCompat controller =
 		    WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
-		controller.setAppearanceLightStatusBars(false);
-		controller.setAppearanceLightNavigationBars(false);
+		// captantan fork: dark icons while the bars have the docked session bar's light colour (4.1)
+		final boolean lightBars = window != null && window.getBar().lightSystemBars();
+		controller.setAppearanceLightStatusBars(lightBars);
+		controller.setAppearanceLightNavigationBars(lightBars);
 
 		getWindow().setStatusBarColor(android.graphics.Color.TRANSPARENT);
 		getWindow().setNavigationBarColor(android.graphics.Color.TRANSPARENT);
@@ -189,8 +191,12 @@ public class SessionActivity extends AppCompatActivity
 			{
 				// whatever stays hidden keeps immersive behaviour; BEHAVIOR_DEFAULT would let any
 				// tap on the session pull the bar back in
+				// captantan fork: from Android 12 BEHAVIOR_DEFAULT brings the bars back by a swipe
+				// only, for real, and tells the window, so the session bar can follow them (4.1)
 				controller.setSystemBarsBehavior(
-				    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+				    Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+				        ? WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
+				        : WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
 				controller.hide(toHide);
 			}
 
@@ -473,13 +479,18 @@ public class SessionActivity extends AppCompatActivity
 		// above it must not pad for the nav bar again
 		boolean kbdVisible = extKeyboard != null && extKeyboard.getVisibility() == View.VISIBLE;
 		int scrollBottom = kbdVisible ? 0 : Math.max(safeBottom, navInsets.bottom);
-		scrollView.setPadding(Math.max(safeLeft, navInsets.left), safeTop,
-		                      Math.max(safeRight, navInsets.right), scrollBottom);
+		// captantan fork: plus the strip of the docked session bar (roadmap 4.1)
+		final int[] docked = window != null ? window.getResizer().getReservedInsets() : new int[4];
+		scrollView.setPadding(Math.max(safeLeft, navInsets.left) + docked[0], safeTop + docked[1],
+		                      Math.max(safeRight, navInsets.right) + docked[2],
+		                      scrollBottom + docked[3]);
 		// captantan fork: the viewport's insets, the same without the keyboards (not the IME)
 		if (window != null)
 			window.getResizer().setSystemInsets(
 			    Math.max(safeLeft, navInsets.left), rootView.getPaddingTop() + safeTop,
 			    Math.max(safeRight, navInsets.right), Math.max(safeBottom, navInsets.bottom));
+		if (window != null) // captantan fork: the session bar places itself from these (roadmap 4.1)
+			window.getBar().onWindowInsets(windowInsets);
 
 		// insets are consumed here, so lift the extended keyboard above the IME
 		if (extKeyboard != null)

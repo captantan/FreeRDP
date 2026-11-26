@@ -303,6 +303,19 @@ jobs:
           done
           grep -qF 'captantan.SessionOpenActivity"' "$RUNNER_TEMP/manifest-rel.txt" || fail "the merged manifest has no activity captantan.SessionOpenActivity"
           echo "background sessions: keep-alive service with types $fgs (specialUse|microphone|camera), its permissions and the tap activity present"
+          # Session bar (roadmap 4.1): the bar, its touch filter and its settings, the layer in the
+          # session layout it is put into, its own layouts, and the per-connection keys the "RDP
+          # options" screen edits by name.
+          for c in SessionBar SessionBarGestures SessionBarSettings 'SessionBarSettings$Mode' 'SessionBarSettings$Edge'; do
+            grep -qaF "Lcom/freerdp/freerdpcore/captantan/$c;" "$RUNNER_TEMP/classes.dex.all" || fail "the APK lacks the class captantan/$c"
+          done
+          for r in id/captantan_session_bar_container layout/captantan_session_bar layout/captantan_session_bar_settings id/captantan_bar_buttons drawable/captantan_ic_fullscreen drawable/captantan_ic_zoom_reset; do
+            grep -qF "$r" "$RUNNER_TEMP/resources.txt" || fail "the APK lacks the resource $r"
+          done
+          for k in bar_mode bar_edge bar_opacity captantan.bar; do
+            grep -qaF "$k" "$RUNNER_TEMP/classes.dex.all" || fail "the APK lacks the string '$k' of the session bar"
+          done
+          echo "session bar: classes, layer, layouts, icons and per-connection keys present"
 
           echo "== preview badging"
           "$AAPT" dump badging "$PRE" > "$RUNNER_TEMP/preview-badging.txt"
