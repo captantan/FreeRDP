@@ -1457,7 +1457,7 @@ not be hidden and covered remote UI. Upstream's `FloatingToolbar` class and `flo
   | Key | Values (stored names) | Default | Why the default |
   |---|---|---|---|
   | `bar_mode` | `overlay`, `hidden`, (`reserved`) | `hidden` | the complaint was a control that covers the remote screen and cannot be hidden |
-  | `bar_edge` | `top`, `bottom`, `left`, `right` | `top` | on the phone the top of the session is below the status bar, so a swipe there meets neither Back (sides) nor Home (bottom) |
+  | `bar_edge` | `top`, `bottom`, `left`, `right` | `top` | away from the thumb and the keyboard; the bottom has the key bar and the keyboard, the sides are short on a phone in landscape |
   | `bar_opacity` | 30 to 100 (percent) | 85 | the picture shows through, the icons stay readable |
 
   `reserved` (package 4.2) is a valid stored name but is not offered; until 4.2 it is shown as overlay.
@@ -1467,19 +1467,17 @@ not be hidden and covered remote UI. Upstream's `FloatingToolbar` class and `flo
 - `freeRDPCore/.../captantan/SessionBarGestures.java` (new): sees every touch and mouse event of the
   window before its views do, by wrapping the window's `Window.Callback` (in front of AppCompat's own
   wrapper; installed once, in `onCreate` after `setContentView`). Everything is passed on unchanged
-  except the three gestures below. No upstream view is edited for it.
+  except the mouse reveal and the tap outside below. No upstream view is edited for it.
 - **Overlay mode:** the bar floats centred on its edge, at the opacity, over the remote picture. The
   remote desktop keeps its size (`SessionResizeController.setReservedInsets` is not called).
 - **Hidden mode:** nothing is drawn. The bar is revealed by
-  - **an edge swipe**: a finger or stylus that goes down in a 24 dp strip just inside the edge and moves
-    away from it by more than the touch slop, more than along it. The strip lies past the system's
-    gesture insets: at the top below the status bar (and below the area that pulls in hidden system
-    bars), at the bottom above the home-gesture area. On the left and right the strip is inside Back's
-    area, so a band of 200 dp in the middle of the edge (Android's limit per edge) is excluded from
-    Back while the bar is hidden (`setSystemGestureExclusionRects`); above and below the band Back works
-    as always, and a swipe that Android takes for Back is given up (the session never saw it). The
-    touch is held back from the session until it is clear which it is: a tap at the edge, a drag along
-    it, a second finger or a long press (the long-press timeout) are given to the session as they were.
+  - **Back** (the gesture or the button), after upstream's own uses of it: Back first hides the on-screen
+    keyboard if it is up, and sends Alt+F4 instead if upstream's "Use Back as Alt+F4" setting is on (then
+    Back never reveals the bar). After that, Back with the bar not shown reveals it (`SessionBar.onBack`,
+    from `SessionWindow.onBack`), and Back with the bar shown, or in overlay mode, asks as before whether to
+    leave the session running or disconnect it. There is no edge swipe: a swipe from the edge was tried
+    first and dropped before release as hard to use next to Android's own Back and Home gestures, so the
+    bar takes nothing from the system's gestures or from touches at the edges.
   - **the mouse**: the pointer resting in an 8 dp band at the edge for 250 ms (hover events still all
     reach the session, so the remote pointer follows as before). In a desktop window the band is just
     below the caption bar.
@@ -1500,9 +1498,8 @@ not be hidden and covered remote UI. Upstream's `FloatingToolbar` class and `flo
   the bar with the theme's colours (`SessionWindow.onUiModeChanged`).
 - **Log** (tag `captantan.bar`, INFO), each line naming the window and the session:
   `applied (shown|settings changed): w<n> s<n> "<title>": mode <m>, edge <e>, opacity <o> % (bookmark <id>
-  | no saved bookmark)`, `layout: ... layer WxH at x,y, keeps clear l t r b, swipe from l t r b, buttons
-  <n> dp[, Back excluded <rect>]` (when it changes), `reveal: ... (swipe from the <edge> edge | mouse at the
-  <edge> edge | <caller's cause>)`, `hide: ... (after <button> | tap outside | click outside | timeout 5 s
+  | no saved bookmark)`, `layout: ... layer WxH at x,y, keeps clear l t r b, buttons <n> dp` (when it
+  changes), `reveal: ... (Back | mouse at the <edge> edge | <caller's cause>)`, `hide: ... (after <button> | tap outside | click outside | timeout 5 s
   | after settings | the window let go of ...)`, `button: ... <name>`, `settings: ...`, `full screen on|off`.
 - Upstream files edited (each marked):
   - `res/layout/session.xml`: `android:visibility="gone"` on the `floating_toolbar` include, and the
@@ -1511,7 +1508,8 @@ not be hidden and covered remote UI. Upstream's `FloatingToolbar` class and `flo
   - `SessionActivity.java`: `hideSystemBars()` is public (the full screen button calls it); one line in
     `onWindowInsetsChanged` after `setSystemInsets`: `window.getBar().onWindowInsets(windowInsets)`.
 - Ours, changed: `SessionWindow.java` (the bar, `getBar()`, `onShown`/`onReleased` in `show`, `release`
-  and `onSessionEnded`, rebuild on a night-mode change, `onDestroy`), `ConnectionPrefs.java` (three
+  and `onSessionEnded`, rebuild on a night-mode change, `onDestroy`, and Back asking the bar first in
+  `onBack`), `ConnectionPrefs.java` (three
   fields and getters), `res/xml/captantan_connection_options.xml` (the category).
 - New resources: `res/layout/captantan_session_bar{,_settings}.xml`,
   `res/drawable/captantan_ic_{fullscreen,fullscreen_exit,zoom_reset}.xml` (the first two are Material
@@ -1534,8 +1532,8 @@ not be hidden and covered remote UI. Upstream's `FloatingToolbar` class and `flo
   thickness on its edge (the bar's measured height, or width for left and right, plus the gap), and with
   zeros when the window shows another mode or no session (`onReleased`). The bar then sits in the strip:
   the layer's padding already keeps it clear of the system insets, and the resize controller subtracts
-  the reserved insets from the viewport. Gestures are not needed in that mode (`wantsEdgeGesture` is
-  hidden-mode only).
+  the reserved insets from the viewport. Back and the mouse reveal nothing in that mode (`onBack` and
+  `wantsMouseReveal` are hidden-mode only).
 - **Not in this package**, written down for later: a quick remote-scale switch (needs a public "ask
   again" on `SessionResizeController`, see the 3.3 block), zooming out below the fit (7.x), a "keep clear
   of the camera" choice for full screen, a key combination (5.3).

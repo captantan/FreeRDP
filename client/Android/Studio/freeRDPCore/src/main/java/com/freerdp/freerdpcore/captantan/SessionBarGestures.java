@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
  *
- * captantan fork: the session bar's edge swipe, mouse reveal and tap outside (roadmap 4.1).
+ * captantan fork: the session bar's mouse reveal and tap outside (roadmap 4.1).
  */
 
 package com.freerdp.freerdpcore.captantan;
@@ -18,7 +18,6 @@ import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.SearchEvent;
 import android.view.View;
-import android.view.ViewConfiguration;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
@@ -32,12 +31,6 @@ import java.util.List;
  * on unchanged except these:
  *
  * <ul>
- * <li><b>Edge swipe.</b> A finger or stylus that goes down in the bar's swipe zone
- * ({@link SessionBar#inSwipeZone}) is held back from the session. If it then moves away from the
- * edge by more than the touch slop, and more away than along it, the gesture is the bar's: the bar
- * is revealed and nothing of the gesture reaches the session. Anything else (it lifts, moves along
- * the edge, a second finger, or it stays down for the long-press time) gives the held events to
- * the session as they were, so a tap or a drag at the edge still reaches the remote desktop.</li>
  * <li><b>Mouse at the edge.</b> A mouse pointer that rests in the bar's mouse band
  * ({@link SessionBar#atMouseEdge}) for {@link #MOUSE_DWELL_MS} reveals the bar. Hover events still
  * all reach the session (the remote pointer follows as before).</li>
@@ -45,6 +38,8 @@ import java.util.List;
  * whole gesture is kept from the session (so hiding the bar never clicks on the remote side).</li>
  * </ul>
  *
+ * Back, the other way to reveal the bar, comes through {@link SessionBar#onBack}; there is no edge
+ * swipe, so touches at the edges all reach the session and the system's gestures are untouched.
  * Events on the bar itself pass through to it, and keep it shown ({@link SessionBar#touched}).
  * Coordinates are the window's (the decor view's), as {@link View#getLocationInWindow} gives.
  */
@@ -56,30 +51,20 @@ final class SessionBarGestures implements Window.Callback
 	private final SessionBar bar;
 	private final Window.Callback next;
 	private final Handler handler = new Handler(Looper.getMainLooper());
-	private final int touchSlop;
-	private final long holdTimeout;
 
-	/** The DOWN held back from the session while it may still become a swipe, or null. */
-	private MotionEvent held;
-	/** True until the end of a gesture that is the bar's (a swipe, a tap outside). */
+	/** True until the end of a gesture that is the bar's (a tap outside the bar). */
 	private boolean consuming;
 	private boolean dwellPending;
 
-	private final Runnable giveHeldOnTimeout = () -> {
-		if (held != null)
-			giveHeld(null);
-	};
 	private final Runnable dwell;
 
-	private SessionBarGestures(Activity activity, SessionBar bar, Window.Callback next)
+	private SessionBarGestures(SessionBar bar, Window.Callback next)
 	{
 		this.bar = bar;
 		this.next = next;
-		this.touchSlop = ViewConfiguration.get(activity).getScaledTouchSlop();
-		this.holdTimeout = ViewConfiguration.getLongPressTimeout();
 		this.dwell = () -> {
 			dwellPending = false;
-			if (bar.wantsEdgeGesture())
+			if (bar.wantsMouseReveal())
 				bar.reveal("mouse at the " + bar.getEdge().storedName() + " edge");
 		};
 	}
@@ -88,22 +73,16 @@ final class SessionBarGestures implements Window.Callback
 	static SessionBarGestures install(Activity activity, SessionBar bar)
 	{
 		final Window window = activity.getWindow();
-		final SessionBarGestures g = new SessionBarGestures(activity, bar, window.getCallback());
+		final SessionBarGestures g = new SessionBarGestures(bar, window.getCallback());
 		window.setCallback(g);
 		return g;
 	}
 
-	/** Forgets a held or consumed gesture (the session is let go, the mode changes). */
+	/** Forgets a consumed gesture and a pending dwell (the session is let go, the mode changes). */
 	void reset()
 	{
-		handler.removeCallbacks(giveHeldOnTimeout);
 		handler.removeCallbacks(dwell);
 		dwellPending = false;
-		if (held != null)
-		{
-			held.recycle();
-			held = null;
-		}
 		consuming = false;
 	}
 
@@ -112,9 +91,6 @@ final class SessionBarGestures implements Window.Callback
 
 	@Override public boolean dispatchTouchEvent(MotionEvent ev)
 	{
-		if (held != null)
-			return onHeld(ev);
-
 		final int action = ev.getActionMasked();
 		if (consuming)
 		{
@@ -123,108 +99,20 @@ final class SessionBarGestures implements Window.Callback
 			return true;
 		}
 
-		if (action == MotionEvent.ACTION_DOWN)
+		if (action == MotionEvent.ACTION_DOWN && bar.isRevealed())
 		{
-			final float x = ev.getX(), y = ev.getY();
-			if (bar.isRevealed())
+			if (bar.barContains(ev.getX(), ev.getY()))
 			{
-				if (bar.barContains(x, y))
-				{
-					bar.touched();
-				}
-				else
-				{
-					bar.hide(isMouse(ev) ? "click outside" : "tap outside");
-					consuming = true;
-					return true;
-				}
+				bar.touched();
 			}
-			else if (isFingerOrStylus(ev) && bar.wantsEdgeGesture() && bar.inSwipeZone(x, y))
+			else
 			{
-				held = MotionEvent.obtain(ev);
-				handler.postDelayed(giveHeldOnTimeout, holdTimeout);
+				bar.hide(isMouse(ev) ? "click outside" : "tap outside");
+				consuming = true;
 				return true;
 			}
 		}
 		return next.dispatchTouchEvent(ev);
-	}
-
-	private boolean onHeld(MotionEvent ev)
-	{
-		switch (ev.getActionMasked())
-		{
-			case MotionEvent.ACTION_MOVE:
-			{
-				final float dx = ev.getX() - held.getX();
-				final float dy = ev.getY() - held.getY();
-				final float inward, along;
-				switch (bar.getEdge())
-				{
-					case TOP:
-						inward = dy;
-						along = dx;
-						break;
-					case BOTTOM:
-						inward = -dy;
-						along = dx;
-						break;
-					case LEFT:
-						inward = dx;
-						along = dy;
-						break;
-					default:
-						inward = -dx;
-						along = dy;
-						break;
-				}
-				if (inward > touchSlop && inward > Math.abs(along))
-				{
-					drop();
-					consuming = true;
-					bar.reveal("swipe from the " + bar.getEdge().storedName() + " edge");
-					return true;
-				}
-				if (Math.abs(along) > touchSlop || inward < -touchSlop)
-					return giveHeld(ev);
-				return true;
-			}
-			case MotionEvent.ACTION_CANCEL:
-				// the system took the gesture (Back, Home): the session never saw it begin
-				drop();
-				return true;
-			default:
-				// UP (a tap at the edge), a second finger, anything else: the session's after all
-				return giveHeld(ev);
-		}
-	}
-
-	/** Gives the held DOWN, then {@code current} if there is one, to the session. */
-	private boolean giveHeld(MotionEvent current)
-	{
-		handler.removeCallbacks(giveHeldOnTimeout);
-		final MotionEvent down = held;
-		held = null;
-		boolean handled = next.dispatchTouchEvent(down);
-		down.recycle();
-		if (current != null)
-			handled = next.dispatchTouchEvent(current);
-		return handled;
-	}
-
-	private void drop()
-	{
-		handler.removeCallbacks(giveHeldOnTimeout);
-		if (held != null)
-		{
-			held.recycle();
-			held = null;
-		}
-	}
-
-	private static boolean isFingerOrStylus(MotionEvent ev)
-	{
-		final int tool = ev.getToolType(0);
-		return tool == MotionEvent.TOOL_TYPE_FINGER || tool == MotionEvent.TOOL_TYPE_STYLUS;
 	}
 
 	private static boolean isMouse(MotionEvent ev)
@@ -251,7 +139,7 @@ final class SessionBarGestures implements Window.Callback
 						if (bar.barContains(x, y) || bar.atMouseEdge(x, y))
 							bar.touched();
 					}
-					else if (bar.wantsEdgeGesture() && bar.atMouseEdge(x, y))
+					else if (bar.wantsMouseReveal() && bar.atMouseEdge(x, y))
 					{
 						if (!dwellPending)
 						{

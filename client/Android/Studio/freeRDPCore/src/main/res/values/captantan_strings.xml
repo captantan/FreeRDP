@@ -186,7 +186,7 @@
     <string name="captantan_bar_opacity">Opacity</string>
     <string name="captantan_options_cat_bar">Session bar</string>
     <string name="captantan_bar_opacity_percent">Opacity (%)</string>
-    <string name="captantan_bar_note">Overlay: the bar floats over the remote desktop at its edge. Hidden: swipe in from the edge, or rest the mouse pointer at it, to show the bar; it hides again after use, a tap elsewhere or a few seconds. On the left and right, swipe in from the middle of the edge (Back works above and below).</string>
+    <string name="captantan_bar_note">Overlay: the bar floats over the remote desktop at its edge. Hidden: press Back, or rest the mouse pointer at the edge, to show the bar; it hides again after use, a tap elsewhere or a few seconds. Back with the bar shown asks whether to leave the session running or disconnect.</string>
     <string-array name="captantan_bar_mode_entries">
         <item>@string/captantan_bar_mode_overlay</item>
         <item>@string/captantan_bar_mode_hidden</item>

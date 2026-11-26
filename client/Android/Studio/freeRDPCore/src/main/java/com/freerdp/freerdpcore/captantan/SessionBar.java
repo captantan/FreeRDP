@@ -33,9 +33,6 @@ import com.freerdp.freerdpcore.presentation.ApplicationSettingsActivity;
 import com.freerdp.freerdpcore.presentation.SessionActivity;
 import com.freerdp.freerdpcore.presentation.SessionInputManager;
 
-import java.util.Collections;
-import java.util.List;
-
 /**
  * The session bar: the fork's controls in a session window, in place of upstream's
  * {@code FloatingToolbar} handle (which stays in the layout but is not shown). One per
@@ -55,10 +52,10 @@ import java.util.List;
  * <ul>
  * <li>Overlay: the bar floats over the remote picture, centred on its edge, with the opacity. The
  * remote desktop keeps its size.</li>
- * <li>Hidden: nothing is drawn until {@link #reveal}: an edge swipe or the mouse resting at the
- * edge ({@link SessionBarGestures}), or a call (package 5.3's key combination). It hides again
- * after a button is used, after a press anywhere else, or {@link #HIDE_AFTER_MS} after it was
- * last touched.</li>
+ * <li>Hidden: nothing is drawn until {@link #reveal}: Back ({@link #onBack}), the mouse resting
+ * at the edge ({@link SessionBarGestures}), or a call (package 5.3's key combination). It hides
+ * again after a button is used, after a press anywhere else, or {@link #HIDE_AFTER_MS} after it
+ * was last touched.</li>
  * <li>Reserved (package 4.2) is stored but not offered; it is shown as overlay until then.</li>
  * </ul>
  *
@@ -68,13 +65,11 @@ import java.util.List;
  * bar, the camera cutout, the on-screen keyboard and upstream's key bar. Those are recomputed at
  * every layout, so rotation, folding, split screen and window resizes are followed.
  *
- * <p><b>The swipe and the system's gestures.</b> The swipe starts in a strip
- * ({@link #SWIPE_STRIP_DP}) just inside the edge, past the system's gesture insets: at the top
- * below the status bar (and below the area that pulls in hidden system bars), at the bottom
- * above the home gesture area. On the left and right the strip lies inside Back's area, so a band
- * of {@link #EXCLUSION_BAND_DP} in the middle of the edge is excluded from Back while the bar is
- * hidden ({@link View#setSystemGestureExclusionRects}); above and below the band Back works as
- * always, and a swipe there that Android takes for Back is given up.
+ * <p><b>Back.</b> Back (the gesture or the button) first does upstream's own things with it (it
+ * hides the on-screen keyboard; it sends Alt+F4 if that setting is on). After that, in hidden mode
+ * with the bar not shown, Back shows the bar; with the bar shown (or in overlay mode), Back asks
+ * whether to leave the session running or disconnect it ({@link SessionWindow#onBack}). There is
+ * no edge swipe: the bar takes nothing from the system's own gestures or from the remote desktop.
  */
 public final class SessionBar
 {
@@ -83,9 +78,7 @@ public final class SessionBar
 	/** How long a revealed bar stays shown after it was last touched. */
 	public static final long HIDE_AFTER_MS = 5000;
 
-	static final int SWIPE_STRIP_DP = 24;
 	static final int MOUSE_BAND_DP = 8;
-	static final int EXCLUSION_BAND_DP = 200;
 	private static final int GAP_DP = 4;
 	private static final int BUTTON_DP = 44;
 	private static final int BUTTON_MIN_DP = 32;
@@ -117,9 +110,6 @@ public final class SessionBar
 	private WindowInsetsCompat insets;
 	/** In the layer's coordinates: what the bar keeps clear of on each side. */
 	private final Rect safe = new Rect();
-	/** In the layer's coordinates: where on each side a swipe may start (past the system's gestures). */
-	private final Rect swipeFrom = new Rect();
-	private final Rect exclusion = new Rect();
 	private int buttonPx = -1;
 	private String lastLayoutLog;
 	private final int[] location = new int[2];
@@ -140,7 +130,7 @@ public final class SessionBar
 	// The public entry points (packages 4.2, 4.3, 5.3)
 
 	/**
-	 * Reveals the bar of a hidden-mode session for {@link #HIDE_AFTER_MS}, as an edge swipe does.
+	 * Reveals the bar of a hidden-mode session for {@link #HIDE_AFTER_MS}, as Back does.
 	 * In overlay mode the bar is shown anyway and nothing changes. For package 5.3's key combination:
 	 * {@code SessionBar.revealInFocusedWindow("Ctrl+Alt+B")}.
 	 *
@@ -233,7 +223,19 @@ public final class SessionBar
 		revealed = false;
 		bar.animate().cancel();
 		bar.setVisibility(View.GONE);
-		updateExclusion();
+	}
+
+	/**
+	 * Back in this window, from {@link SessionWindow#onBack} (after upstream's own uses of Back).
+	 * In hidden mode with the bar not shown, Back reveals it and is used up: true. Otherwise false,
+	 * and Back goes on to the leave-or-disconnect question.
+	 */
+	boolean onBack()
+	{
+		if (host == null || effectiveMode() != SessionBarSettings.Mode.HIDDEN || revealed)
+			return false;
+		reveal("Back");
+		return true;
 	}
 
 	/** From SessionActivity's insets listener: the insets before upstream consumed them. */
@@ -265,8 +267,8 @@ public final class SessionBar
 	// ****************************************************************************
 	// From SessionBarGestures (window coordinates)
 
-	/** True while an edge swipe or the mouse at the edge would reveal the bar. */
-	boolean wantsEdgeGesture()
+	/** True while the mouse at the edge would reveal the bar. */
+	boolean wantsMouseReveal()
 	{
 		return host != null && effectiveMode() == SessionBarSettings.Mode.HIDDEN && !revealed &&
 		    dialog == null && container.isLaidOut();
@@ -292,28 +294,6 @@ public final class SessionBar
 		final float slop = 8 * density;
 		return x >= location[0] - slop && x < location[0] + bar.getWidth() + slop &&
 		    y >= location[1] - slop && y < location[1] + bar.getHeight() + slop;
-	}
-
-	boolean inSwipeZone(float wx, float wy)
-	{
-		container.getLocationInWindow(location);
-		final float x = wx - location[0], y = wy - location[1];
-		final float w = container.getWidth(), h = container.getHeight();
-		final float strip = SWIPE_STRIP_DP * density;
-		switch (edge)
-		{
-			case TOP:
-				return y >= swipeFrom.top && y < swipeFrom.top + strip && x >= safe.left &&
-				    x < w - safe.right;
-			case BOTTOM:
-				return y < h - swipeFrom.bottom && y >= h - swipeFrom.bottom - strip &&
-				    x >= safe.left && x < w - safe.right;
-			case LEFT:
-				return x >= 0 && x < swipeFrom.left + strip && y >= safe.top && y < h - safe.bottom;
-			default:
-				return x < w && x >= w - swipeFrom.right - strip && y >= safe.top &&
-				    y < h - safe.bottom;
-		}
 	}
 
 	boolean atMouseEdge(float wx, float wy)
@@ -617,7 +597,6 @@ public final class SessionBar
 		    .translationY(0)
 		    .setDuration(ANIMATION_MS)
 		    .start();
-		updateExclusion();
 	}
 
 	private void animateOut()
@@ -627,7 +606,6 @@ public final class SessionBar
 			if (!isShown())
 				bar.setVisibility(View.GONE);
 		});
-		updateExclusion();
 	}
 
 	/**
@@ -646,14 +624,12 @@ public final class SessionBar
 		final int cr = Math.max(0, root.getWidth() - cl - cw);
 		final int cb = Math.max(0, root.getHeight() - ct - ch);
 
-		Insets sys = Insets.NONE, ime = Insets.NONE, gest = Insets.NONE, mand = Insets.NONE;
+		Insets sys = Insets.NONE, ime = Insets.NONE;
 		if (insets != null)
 		{
 			sys = insets.getInsets(WindowInsetsCompat.Type.systemBars() |
 			                       WindowInsetsCompat.Type.displayCutout());
 			ime = insets.getInsets(WindowInsetsCompat.Type.ime());
-			gest = insets.getInsets(WindowInsetsCompat.Type.systemGestures());
-			mand = insets.getInsets(WindowInsetsCompat.Type.mandatorySystemGestures());
 		}
 		int bottom = Math.max(0, Math.max(sys.bottom, ime.bottom) - cb);
 		// upstream's key bar sits above the on-screen keyboard (or the navigation bar)
@@ -666,10 +642,6 @@ public final class SessionBar
 		}
 		safe.set(Math.max(0, sys.left - cl), Math.max(0, sys.top - ct),
 		         Math.max(0, sys.right - cr), bottom);
-		swipeFrom.set(safe.left,
-		              Math.max(safe.top, Math.max(gest.top, mand.top) - ct),
-		              safe.right,
-		              Math.max(safe.bottom, Math.max(gest.bottom, mand.bottom) - cb));
 
 		final int gap = Math.round(GAP_DP * density);
 		if (container.getPaddingLeft() != safe.left || container.getPaddingTop() != safe.top ||
@@ -728,47 +700,14 @@ public final class SessionBar
 			}
 		}
 
-		updateExclusion();
-
 		final String log = "layout: " + window.getName() + " edge " + edge.storedName() +
 		                   ", layer " + cw + "x" + ch + " at " + cl + "," + ct + ", keeps clear " +
-		                   rectText(safe) + ", swipe from " + rectText(swipeFrom) + ", buttons " +
-		                   Math.round(size / density) + " dp" +
-		                   (exclusion.isEmpty() ? "" : ", Back excluded " + exclusion.toShortString());
+		                   rectText(safe) + ", buttons " + Math.round(size / density) + " dp";
 		if (host != null && !log.equals(lastLayoutLog))
 		{
 			lastLayoutLog = log;
 			Log.i(TAG, log);
 		}
-	}
-
-	/** Left and right in hidden mode: a band in the middle of the edge where Back gives way. */
-	private void updateExclusion()
-	{
-		final Rect want = new Rect();
-		if (host != null && effectiveMode() == SessionBarSettings.Mode.HIDDEN && !revealed &&
-		    edge.isVertical() && container.isLaidOut())
-		{
-			final int w = container.getWidth(), h = container.getHeight();
-			final int band = Math.min(Math.round(EXCLUSION_BAND_DP * density),
-			                          h - safe.top - safe.bottom);
-			final int centre = safe.top + (h - safe.top - safe.bottom) / 2;
-			final int strip = swipeFrom.left + Math.round(SWIPE_STRIP_DP * density);
-			if (band > 0)
-			{
-				if (edge == SessionBarSettings.Edge.LEFT)
-					want.set(0, centre - band / 2, strip, centre + band / 2);
-				else
-					want.set(w - swipeFrom.right - Math.round(SWIPE_STRIP_DP * density),
-					         centre - band / 2, w, centre + band / 2);
-			}
-		}
-		if (want.equals(exclusion))
-			return;
-		exclusion.set(want);
-		final List<Rect> rects =
-		    want.isEmpty() ? Collections.emptyList() : Collections.singletonList(new Rect(want));
-		container.setSystemGestureExclusionRects(rects);
 	}
 
 	private static String rectText(Rect r)
