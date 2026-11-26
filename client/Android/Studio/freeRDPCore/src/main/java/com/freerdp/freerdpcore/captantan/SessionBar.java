@@ -21,6 +21,7 @@ import android.widget.TextView;
 import androidx.appcompat.app.AlertDialog;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsAnimationCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 import com.google.android.material.button.MaterialButton;
@@ -32,6 +33,8 @@ import com.freerdp.freerdpcore.R;
 import com.freerdp.freerdpcore.presentation.ApplicationSettingsActivity;
 import com.freerdp.freerdpcore.presentation.SessionActivity;
 import com.freerdp.freerdpcore.presentation.SessionInputManager;
+
+import java.util.List;
 
 /**
  * The session bar: the fork's controls in a session window, in place of upstream's
@@ -112,6 +115,7 @@ public final class SessionBar
 	private final Rect safe = new Rect();
 	private int buttonPx = -1;
 	private String lastLayoutLog;
+	private String lastBarsLog;
 	private final int[] location = new int[2];
 
 	SessionBar(SessionWindow window, SessionInputManager input)
@@ -124,6 +128,27 @@ public final class SessionBar
 		inflate();
 		this.gestures = SessionBarGestures.install(activity, this);
 		container.getViewTreeObserver().addOnGlobalLayoutListener(this::layout);
+		ViewCompat.setWindowInsetsAnimationCallback(
+		    container, new WindowInsetsAnimationCompat.Callback(
+		                   WindowInsetsAnimationCompat.Callback.DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
+			    @Override
+			    public WindowInsetsCompat onProgress(WindowInsetsCompat in,
+			                                         List<WindowInsetsAnimationCompat> running)
+			    {
+				    return in;
+			    }
+
+			    @Override
+			    public WindowInsetsAnimationCompat.BoundsCompat
+			    onStart(WindowInsetsAnimationCompat animation,
+			            WindowInsetsAnimationCompat.BoundsCompat bounds)
+			    {
+				    if ((animation.getTypeMask() & WindowInsetsCompat.Type.systemBars()) != 0)
+					    Log.i(TAG, "system bars (animation): " + window.getName() + " types 0x" +
+					                   Integer.toHexString(animation.getTypeMask()) + " start");
+				    return bounds;
+			    }
+		    });
 	}
 
 	// ****************************************************************************
@@ -242,7 +267,29 @@ public final class SessionBar
 	public void onWindowInsets(WindowInsetsCompat windowInsets)
 	{
 		insets = windowInsets;
+		logSystemBars(windowInsets, "insets");
 		layout();
+	}
+
+	/**
+	 * Diagnostic: whether the window is told that the system bars are shown, and their sizes, each
+	 * time that changes; to learn whether bars a swipe pulls in over a full-screen session reach the
+	 * app at all.
+	 */
+	private void logSystemBars(WindowInsetsCompat in, String from)
+	{
+		final int status = WindowInsetsCompat.Type.statusBars();
+		final int nav = WindowInsetsCompat.Type.navigationBars();
+		final String text = "status bar " + (in.isVisible(status) ? "visible" : "hidden") + " " +
+		                    in.getInsets(status).top + "/" +
+		                    in.getInsetsIgnoringVisibility(status).top + " px, navigation bar " +
+		                    (in.isVisible(nav) ? "visible" : "hidden") + " " +
+		                    in.getInsets(nav).bottom + "/" +
+		                    in.getInsetsIgnoringVisibility(nav).bottom + " px";
+		if (text.equals(lastBarsLog))
+			return;
+		lastBarsLog = text;
+		Log.i(TAG, "system bars (" + from + "): " + window.getName() + " " + text);
 	}
 
 	/** Light or dark changed: the bar is built again with the theme's new colours. */
