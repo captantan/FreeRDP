@@ -1693,7 +1693,10 @@ Windows App on the phone, where small remote targets are hard to hit by direct t
   - `SessionView.java`, three places: in `onTouchEvent`, after the mouse branch and before upstream's
     detectors, `if (TrackpadInput.onTouchEvent(this, event)) return true;`; in `onDraw`, after the
     surface is drawn and before `canvas.restore()`, `TrackpadInput.draw(this, canvas);`; in
-    `handleTouchpadScroll`, `down` and `right` are XORed with `getInvertScrolling` (one line reads it).
+    `handleTouchpadScroll`, the direction *sent* (`down`, `right`) is XORed with `getInvertScrolling` (one
+    line reads it). Only what is sent changes: the loop that drains the accumulated distance must keep
+    stepping towards zero by the distance's own sign, or it never ends (the first test build froze the
+    app and flooded the host with wheel events that way).
     `TrackpadInput` is found by a view tag (`R.id.captantan_tag_trackpad`) that `SessionWindow` sets, so
     `SessionView` has no new field.
 

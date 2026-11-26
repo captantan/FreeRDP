@@ -365,17 +365,17 @@ public class SessionView extends View
 		touchpadScrollY += gestureDistance(event, MotionEvent.AXIS_GESTURE_SCROLL_Y_DISTANCE);
 		while (Math.abs(touchpadScrollY) >= notchPxY)
 		{
-			final boolean down = (touchpadScrollY > 0) != invert; // captantan fork
+			final boolean down = touchpadScrollY > 0;
 			touchpadScrollY += down ? -notchPxY : notchPxY;
-			sessionViewListener.onSessionViewScroll(down);
+			sessionViewListener.onSessionViewScroll(down != invert); // captantan fork
 		}
 
 		touchpadScrollX += gestureDistance(event, MotionEvent.AXIS_GESTURE_SCROLL_X_DISTANCE);
 		while (Math.abs(touchpadScrollX) >= notchPxX)
 		{
-			final boolean right = (touchpadScrollX > 0) != invert; // captantan fork
+			final boolean right = touchpadScrollX > 0;
 			touchpadScrollX += right ? -notchPxX : notchPxX;
-			sessionViewListener.onSessionViewHScroll(right);
+			sessionViewListener.onSessionViewHScroll(right != invert); // captantan fork
 		}
 	}
 
