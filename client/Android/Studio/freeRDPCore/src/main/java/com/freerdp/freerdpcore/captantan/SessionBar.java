@@ -725,6 +725,43 @@ public final class SessionBar
 		});
 	}
 
+	/**
+	 * Gives the gap beside the smaller outer group of buttons the width of the buttons it lacks,
+	 * so the buttons between the gaps are centred; 0 (overlay) gives both gaps their minimum.
+	 */
+	private void evenOutGaps(int buttonSize)
+	{
+		final View left = buttons.findViewById(R.id.captantan_bar_gap);
+		final View right = buttons.findViewById(R.id.captantan_bar_gap_right);
+		if (left == null || right == null)
+			return;
+		final int before = buttons.indexOfChild(left);
+		final int after = buttons.getChildCount() - 1 - buttons.indexOfChild(right);
+		setWidth(left, Math.max(0, after - before) * buttonSize);
+		setWidth(right, Math.max(0, before - after) * buttonSize);
+	}
+
+	/** How many buttons more one outer group has than the other (0 without the two gaps). */
+	private int groupDifference()
+	{
+		final View left = buttons.findViewById(R.id.captantan_bar_gap);
+		final View right = buttons.findViewById(R.id.captantan_bar_gap_right);
+		if (left == null || right == null)
+			return 0;
+		return Math.abs(buttons.getChildCount() - 1 - buttons.indexOfChild(right) -
+		                buttons.indexOfChild(left));
+	}
+
+	private static void setWidth(View v, int width)
+	{
+		final ViewGroup.LayoutParams lp = v.getLayoutParams();
+		if (lp.width != width)
+		{
+			lp.width = width;
+			v.setLayoutParams(lp);
+		}
+	}
+
 	/** The bar's background colour (the theme's surface container). */
 	private int barColor()
 	{
@@ -907,7 +944,8 @@ public final class SessionBar
 		for (int i = 0; i < buttons.getChildCount(); i++)
 			if (!(buttons.getChildAt(i) instanceof Space))
 				buttonCount++;
-		final int count = Math.max(1, buttonCount);
+		// docked, the gap beside the smaller outer group takes the width of the buttons it lacks
+		final int count = Math.max(1, buttonCount + (docked ? groupDifference() : 0));
 		final int length = vertical ? ch - safe.top - safe.bottom : cw - safe.left - safe.right;
 		final int avail = length - 2 * gap - buttons.getPaddingLeft() - buttons.getPaddingRight();
 		final int size = Math.max(Math.round(BUTTON_MIN_DP * density),
@@ -921,7 +959,7 @@ public final class SessionBar
 			{
 				final View b = buttons.getChildAt(i);
 				if (b instanceof Space)
-					continue; // the gap between the input buttons and the others
+					continue; // the gaps between the groups of buttons
 				final LinearLayout.LayoutParams blp = (LinearLayout.LayoutParams)b.getLayoutParams();
 				blp.width = size;
 				blp.height = size;
@@ -929,6 +967,10 @@ public final class SessionBar
 				b.setPadding(pad, pad, pad, pad);
 			}
 		}
+
+		// Docked: the middle group sits in the middle of the bar. The gaps share the spare width
+		// equally, so the gap beside the smaller outer group also takes the difference.
+		evenOutGaps(docked ? size : 0);
 
 		// Docked: the strip is the bar's thickness. On the left and right it is also what the bar
 		// keeps clear of there beyond the navigation bar the session view is padded for already
