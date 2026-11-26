@@ -1730,7 +1730,19 @@ Windows App on the phone, where small remote targets are hard to hit by direct t
   `onMouseAt`), `SessionBarGestures.java` (mouse positions to the trackpad), `SessionBarSettings.java`
   (`save` with a `Consumer`), `ConnectionPrefs.java` (four fields and getters),
   `res/xml/captantan_connection_options.xml` (the category), `captantan_ids.xml`, `captantan_strings.xml`.
-- **Not in this package**, written down for later: inertia (a fling after a two-finger scroll), smooth
+- **Device runs** (2026-11-26; the full tables are in PR #25), Windows host, phone and tablet:
+  - **Trackpad mode:** moves, slow aiming at small targets, tap, double tap, two-finger tap,
+    two-finger scroll, tap-then-drag, pinch with the view following the pointer, the mode switch
+    and its save, and a reconnect coming back in trackpad mode all worked. The ¼ s click delay was
+    found acceptable. Precise final approaches ran at about 500 dp/s, gain 1.9, so the curve's
+    middle is in use; fast moves reached the 3.0 top. The numbers were kept.
+  - **Touchpad scroll:** the first build froze the app on the tablet's touchpad scroll (see "Upstream
+    files edited"). Fixed, it follows Android's direction.
+  - **Direct touch:** needing two fingers to scroll felt wrong on the tablet; `touch_drag` came from that
+    and worked on both devices.
+  - **Not run:** the GNOME host, Android's touchpad setting flipped both ways together with the app's
+    "Invert Scrolling".
+- **Not in this package**, written down for later: inertia (a fling after a one- or two-finger scroll), smooth
   (sub-notch) wheel deltas, a server-side pointer move (`Pointer_SetPosition`, which `android_freerdp.c`
   ignores), drag lock (lifting the finger during a drag and going on), three-finger gestures, and RDP
   touch input (the multitouch channel, rdpei), so that the host handles touch gestures itself as
