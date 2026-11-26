@@ -334,7 +334,7 @@ jobs:
           # time, so a missing or misnamed one compiles and then fails at the first pen event.
           unzip -p "$REL" lib/arm64-v8a/libfreerdp-client3.so > "$RUNNER_TEMP/libfreerdp-client3.so"
           strings "$RUNNER_TEMP/libfreerdp-client3.so" > "$RUNNER_TEMP/freerdp-client3-strings.txt"
-          for s in 'Microsoft::Windows::RDS::Input' 'EVENTID_SC_READY'; do
+          for s in 'Microsoft::Windows::RDS::Input' 'Unknown [MS-RDPEI] protocolVersion'; do
             grep -qF "$s" "$RUNNER_TEMP/freerdp-client3-strings.txt" || fail "libfreerdp-client3.so lacks the string '$s' (the rdpei channel is not built in)"
           done
           for c in PenInput PenProbe; do
