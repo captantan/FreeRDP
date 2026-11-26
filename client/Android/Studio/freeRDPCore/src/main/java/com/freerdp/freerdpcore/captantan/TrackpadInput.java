@@ -896,6 +896,12 @@ public final class TrackpadInput
 	// ****************************************************************************
 	// For DirectTouchDrag
 
+	/** The native handle of the window's connected session, else 0 (for PenInput). */
+	long getInstance()
+	{
+		return instance;
+	}
+
 	/** True while the window's session can take input. */
 	boolean connected()
 	{

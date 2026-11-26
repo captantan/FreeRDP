@@ -16,6 +16,7 @@ import android.os.Looper;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -632,6 +633,14 @@ public final class SessionBar
 		b.setContentDescription(
 		    activity.getString(R.string.captantan_bar_touch_mode, activity.getString(mode.label)));
 		b.setTooltipText(b.getContentDescription());
+	}
+
+	/** A motion event at the window's callback (SessionBarGestures), for the pen's log. */
+	void probePen(String stage, MotionEvent ev)
+	{
+		final PenInput pen = window.getPen();
+		if (pen != null)
+			pen.probeWindow(stage, ev);
 	}
 
 	/** A mouse or touchpad event in the window (SessionBarGestures): the trackpad follows it. */

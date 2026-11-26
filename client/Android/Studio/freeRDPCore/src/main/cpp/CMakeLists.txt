@@ -68,6 +68,9 @@ set(${MODULE_PREFIX}_SRCS
     # captantan fork: display control, queued and checked against the server's caps
     captantan_disp.c
     captantan_disp.h
+    # captantan fork: pen input through the input channel
+    captantan_pen.c
+    captantan_pen.h
 )
 
 add_library(${MODULE_NAME} SHARED ${${MODULE_PREFIX}_SRCS})

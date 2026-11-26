@@ -456,6 +456,10 @@ public class LibFreeRDP
 		}
 		args.add("/clipboard");
 		args.add("/disp");
+		// captantan fork: the input channel ([MS-RDPEI]), so that a pen can be sent as a pen
+		// (captantan/PenInput.java)
+		if (com.freerdp.freerdpcore.captantan.PenInput.wantsChannel(context, bookmark))
+			args.add("/multitouch");
 
 		if (advanced.getRedirectPrinter())
 			args.add("/printer:aFreeRDP Print,Microsoft Print to PDF,default");
