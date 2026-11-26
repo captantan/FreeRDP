@@ -163,8 +163,10 @@ public class SessionActivity extends AppCompatActivity
 
 		WindowInsetsControllerCompat controller =
 		    WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
-		controller.setAppearanceLightStatusBars(false);
-		controller.setAppearanceLightNavigationBars(false);
+		// captantan fork: dark icons while the bars have the docked session bar's light colour (4.1)
+		final boolean lightBars = window != null && window.getBar().lightSystemBars();
+		controller.setAppearanceLightStatusBars(lightBars);
+		controller.setAppearanceLightNavigationBars(lightBars);
 
 		getWindow().setStatusBarColor(android.graphics.Color.TRANSPARENT);
 		getWindow().setNavigationBarColor(android.graphics.Color.TRANSPARENT);

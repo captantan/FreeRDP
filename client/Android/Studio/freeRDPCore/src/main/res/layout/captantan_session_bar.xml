@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- captantan fork: the session bar (roadmap 4.1, captantan/SessionBar). SessionBar sets the
-     orientation (vertical on the left and right edges), the place, the opacity and the size of
-     every button in captantan_bar_buttons. A new button: a Button like these inside
-     captantan_bar_buttons, and one bind(...) line in SessionBar.bindButtons. -->
+     place, the opacity and the size of every button in captantan_bar_buttons. Left of the gap:
+     input (keyboard, touch pointer); right of it: the view, the bar, the session and the window
+     (reset zoom, bar settings, sessions, full screen, disconnect). A new button: a Button like
+     these inside captantan_bar_buttons, and one bind(...) line in SessionBar.bindButtons. -->
 <com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     style="?attr/materialCardViewElevatedStyle"
@@ -19,19 +20,6 @@
         android:gravity="center"
         android:orientation="horizontal"
         android:padding="2dp">
-
-        <Button
-            android:id="@+id/captantan_bar_sessions"
-            style="?attr/materialIconButtonStyle"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            android:minWidth="0dp"
-            android:minHeight="0dp"
-            android:padding="10dp"
-            android:contentDescription="@string/captantan_bar_sessions"
-            app:icon="@drawable/captantan_ic_sessions" />
 
         <Button
             android:id="@+id/captantan_bar_keyboard"
@@ -59,6 +47,15 @@
             android:contentDescription="@string/captantan_bar_touch_pointer"
             app:icon="@drawable/ic_touch_pointer" />
 
+        <!-- captantan fork: the gap between the input buttons and the window buttons; it takes
+             the rest of a docked bar's width, and 8 dp in overlay mode -->
+        <Space
+            android:id="@+id/captantan_bar_gap"
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1"
+            android:minWidth="8dp" />
+
         <Button
             android:id="@+id/captantan_bar_zoom_reset"
             style="?attr/materialIconButtonStyle"
@@ -71,19 +68,6 @@
             android:padding="10dp"
             android:contentDescription="@string/captantan_bar_zoom_reset"
             app:icon="@drawable/captantan_ic_zoom_reset" />
-
-        <Button
-            android:id="@+id/captantan_bar_fullscreen"
-            style="?attr/materialIconButtonStyle"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            android:minWidth="0dp"
-            android:minHeight="0dp"
-            android:padding="10dp"
-            android:contentDescription="@string/captantan_bar_fullscreen"
-            app:icon="@drawable/captantan_ic_fullscreen" />
 
         <Button
             android:id="@+id/captantan_bar_settings"
@@ -99,6 +83,32 @@
             app:icon="@drawable/ic_tune" />
 
         <Button
+            android:id="@+id/captantan_bar_sessions"
+            style="?attr/materialIconButtonStyle"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:padding="10dp"
+            android:contentDescription="@string/captantan_bar_sessions"
+            app:icon="@drawable/captantan_ic_sessions" />
+
+        <Button
+            android:id="@+id/captantan_bar_fullscreen"
+            style="?attr/materialIconButtonStyle"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:padding="10dp"
+            android:contentDescription="@string/captantan_bar_fullscreen"
+            app:icon="@drawable/captantan_ic_fullscreen" />
+
+        <Button
             android:id="@+id/captantan_bar_disconnect"
             style="?attr/materialIconButtonStyle"
             android:layout_width="44dp"
@@ -110,6 +120,7 @@
             android:padding="10dp"
             android:contentDescription="@string/captantan_bar_disconnect"
             app:icon="@drawable/captantan_ic_disconnect" />
+
 
     </LinearLayout>
 

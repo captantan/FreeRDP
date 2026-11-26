@@ -46,7 +46,10 @@
                 android:text="@string/captantan_bar_mode_hidden" />
         </com.google.android.material.button.MaterialButtonToggleGroup>
 
+        <!-- captantan fork: the bar sits at the top only for now (4.1 device run); the edge
+             choice is kept, not shown -->
         <TextView
+            android:visibility="gone"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
@@ -54,6 +57,7 @@
             android:textAppearance="?attr/textAppearanceTitleSmall" />
 
         <com.google.android.material.button.MaterialButtonToggleGroup
+            android:visibility="gone"
             android:id="@+id/captantan_bar_settings_edge"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

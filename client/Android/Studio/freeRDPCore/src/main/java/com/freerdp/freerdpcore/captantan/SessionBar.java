@@ -7,7 +7,10 @@
 package com.freerdp.freerdpcore.captantan;
 
 import android.content.SharedPreferences;
+import android.graphics.Color;
 import android.graphics.Rect;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.InsetDrawable;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
@@ -17,12 +20,16 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.Space;
 import android.widget.TextView;
 
 import androidx.appcompat.app.AlertDialog;
+import androidx.core.graphics.ColorUtils;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
@@ -117,6 +124,10 @@ public final class SessionBar
 	private boolean wasFullScreen;
 	private float cardRadius;
 	private float cardElevation;
+	/** What styleSystemBars applied last. */
+	private int rootColor = Color.BLACK;
+	private int[] scrollBackground;
+	private boolean lightBars;
 	/** The window is told a system bar (or a desktop window's caption bar) is on screen. */
 	private boolean barsShown;
 	private AlertDialog dialog;
@@ -147,7 +158,8 @@ public final class SessionBar
 
 	/**
 	 * Shows the bar of a docked-mode session in full screen over the picture for
-	 * {@link #HIDE_AFTER_MS}. Otherwise the bar is shown anyway and nothing changes. For package 5.3's key combination:
+	 * {@link #HIDE_AFTER_MS}. Otherwise the bar is shown anyway and nothing changes. For
+	 * package 5.3's key combination:
 	 * {@code SessionBar.revealInFocusedWindow("Ctrl+Alt+B")}.
 	 *
 	 * @param cause what asked for it, for the log
@@ -341,6 +353,8 @@ public final class SessionBar
 		closeDialog();
 		container.removeView(bar);
 		inflate();
+		rootColor = 0; // the theme's colours changed: apply them again
+		lightBars = !lightSystemBars();
 		buttonPx = -1;
 		lastLayoutLog = null;
 		showForState();
@@ -412,7 +426,10 @@ public final class SessionBar
 	{
 		final ConnectionPrefs p = SessionBarSettings.of(activity, host);
 		mode = p.getBarMode();
-		edge = p.getBarEdge();
+		// The top only for now: in the 4.1 device run the docked bar read as a toolbar, and full
+		// screen covered the wish to move it. The stored edge is kept, and the code still places
+		// the bar at any edge; the choice is hidden (bar settings, "RDP options").
+		edge = SessionBarSettings.Edge.TOP;
 		opacity = p.getBarOpacity();
 	}
 
@@ -450,6 +467,7 @@ public final class SessionBar
 			bar.setVisibility(View.GONE);
 		}
 		updateFullScreenIcon();
+		styleSystemBars();
 	}
 
 	private void openSettings()
@@ -707,6 +725,69 @@ public final class SessionBar
 		});
 	}
 
+	/** The bar's background colour (the theme's surface container). */
+	private int barColor()
+	{
+		return ((MaterialCardView)bar).getCardBackgroundColor().getDefaultColor();
+	}
+
+	/**
+	 * For upstream's {@code hideSystemBars} (a fork edit): dark system bar icons, because the
+	 * bars are drawn in the docked bar's colour and it is light.
+	 */
+	public boolean lightSystemBars()
+	{
+		return bar != null && docked() && ColorUtils.calculateLuminance(barColor()) > 0.5;
+	}
+
+	/**
+	 * Docked, the status bar and the navigation bar get the bar's colour: the session's root
+	 * view (upstream's black) takes it, and the session view keeps black only inside its padding,
+	 * where the remote desktop is. Otherwise both are as upstream has them.
+	 */
+	private void styleSystemBars()
+	{
+		final View root = activity.findViewById(R.id.session_root_view);
+		final View scroll = activity.findViewById(R.id.sessionScrollView);
+		if (root == null || scroll == null || bar == null)
+			return;
+		final boolean docked = docked() && isShown();
+		final int color = docked ? barColor() : Color.BLACK;
+		if (color != rootColor)
+		{
+			rootColor = color;
+			root.setBackgroundColor(color);
+		}
+		if (docked)
+		{
+			final int[] pad = { scroll.getPaddingLeft(), scroll.getPaddingTop(),
+				                scroll.getPaddingRight(), scroll.getPaddingBottom() };
+			if (!java.util.Arrays.equals(pad, scrollBackground))
+			{
+				scrollBackground = pad;
+				scroll.setBackground(new InsetDrawable(new ColorDrawable(Color.BLACK), pad[0],
+				                                       pad[1], pad[2], pad[3]));
+			}
+		}
+		else if (scrollBackground != null)
+		{
+			scrollBackground = null;
+			scroll.setBackground(null);
+		}
+		final boolean light = lightSystemBars();
+		if (light != lightBars)
+		{
+			lightBars = light;
+			final WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(
+			    activity.getWindow(), activity.getWindow().getDecorView());
+			controller.setAppearanceLightStatusBars(light);
+			controller.setAppearanceLightNavigationBars(light);
+			Log.i(TAG, "system bars: " + window.getName() +
+			               (docked ? " in the bar's colour" : " black") + ", " +
+			               (light ? "dark" : "light") + " icons");
+		}
+	}
+
 	/** Docked, the bar is opaque: nothing of the remote desktop lies behind it. */
 	private float alpha()
 	{
@@ -822,7 +903,11 @@ public final class SessionBar
 			card.setCardElevation(elevation);
 
 		// The buttons shrink (down to BUTTON_MIN_DP) when the edge is too short for all of them.
-		final int count = Math.max(1, buttons.getChildCount());
+		int buttonCount = 0;
+		for (int i = 0; i < buttons.getChildCount(); i++)
+			if (!(buttons.getChildAt(i) instanceof Space))
+				buttonCount++;
+		final int count = Math.max(1, buttonCount);
 		final int length = vertical ? ch - safe.top - safe.bottom : cw - safe.left - safe.right;
 		final int avail = length - 2 * gap - buttons.getPaddingLeft() - buttons.getPaddingRight();
 		final int size = Math.max(Math.round(BUTTON_MIN_DP * density),
@@ -835,6 +920,8 @@ public final class SessionBar
 			for (int i = 0; i < buttons.getChildCount(); i++)
 			{
 				final View b = buttons.getChildAt(i);
+				if (b instanceof Space)
+					continue; // the gap between the input buttons and the others
 				final LinearLayout.LayoutParams blp = (LinearLayout.LayoutParams)b.getLayoutParams();
 				blp.width = size;
 				blp.height = size;
@@ -877,6 +964,8 @@ public final class SessionBar
 		{
 			reserve(0, 0, 0, 0);
 		}
+
+		styleSystemBars();
 
 		final String log = "layout: " + window.getName() + " edge " + edge.storedName() +
 		                   (docked ? " (docked)" : "") +
