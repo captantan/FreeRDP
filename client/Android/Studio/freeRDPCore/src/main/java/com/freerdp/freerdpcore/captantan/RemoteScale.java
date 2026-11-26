@@ -111,7 +111,24 @@ public enum RemoteScale implements ConnectionPrefs.Stored
 	{
 		if (bookmark == null)
 			return 0;
-		final ConnectionPrefs prefs = ConnectionPrefs.load(context, bookmark.getId());
+		return percentIn(ConnectionPrefs.load(context, bookmark.getId()), densityDpi);
+	}
+
+	/**
+	 * {@link #desktopPercent(Context, BookmarkBase, int)} for a session that is running: for a
+	 * session without a saved bookmark (quick connect) a scale chosen from its session bar
+	 * (package 4.2, for that session only) counts. 0 for a link.
+	 */
+	public static int desktopPercent(Context context, SessionHost host, int densityDpi)
+	{
+		if (host == null || host.getBookmark() == null)
+			return 0;
+		return percentIn(SessionBarSettings.of(context, host), densityDpi);
+	}
+
+	/** The percent the settings {@code prefs} give at this density. */
+	static int percentIn(ConnectionPrefs prefs, int densityDpi)
+	{
 		final RemoteScale scale = prefs.getRemoteScale();
 		switch (scale)
 		{
@@ -122,6 +139,12 @@ public enum RemoteScale implements ConnectionPrefs.Stored
 			default:
 				return scale.percent;
 		}
+	}
+
+	/** A fixed value's percent (100 to 500); 0 for {@link #AUTO} and {@link #CUSTOM}. */
+	public int percent()
+	{
+		return percent;
 	}
 
 	/**
@@ -173,5 +196,13 @@ public enum RemoteScale implements ConnectionPrefs.Stored
 		return (bookmark == null)
 		    ? "link"
 		    : ConnectionPrefs.load(context, bookmark.getId()).getRemoteScale().storedName;
+	}
+
+	/** For the log: the setting's stored name for a running session (see desktopPercent). */
+	static String describe(Context context, SessionHost host)
+	{
+		return (host == null || host.getBookmark() == null)
+		    ? "link"
+		    : SessionBarSettings.of(context, host).getRemoteScale().storedName;
 	}
 }
