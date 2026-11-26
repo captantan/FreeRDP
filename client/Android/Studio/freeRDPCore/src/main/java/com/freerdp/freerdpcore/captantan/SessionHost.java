@@ -583,6 +583,18 @@ public final class SessionHost implements LibFreeRDP.UIEventListener, GlobalApp.
 			ui.OnPointerSet(p.pixels, p.width, p.height, p.hotX, p.hotY);
 	}
 
+	/** Gives the pointer shape the server last set to trackpad mode's drawn pointer (4.3). */
+	void showPointerOn(TrackpadPointer target)
+	{
+		final Pointer p = pointer;
+		if (p == Pointer.DEFAULT)
+			target.setDefault();
+		else if (p == Pointer.HIDDEN)
+			target.setHidden();
+		else
+			target.set(p.pixels, p.width, p.height, p.hotX, p.hotY);
+	}
+
 	/** Reconnects are held while the app is not visible (android_retry_dialog waits for this). */
 	void setForeground(boolean foreground)
 	{
@@ -787,18 +799,21 @@ public final class SessionHost implements LibFreeRDP.UIEventListener, GlobalApp.
 	{
 		pointer = new Pointer(pixels, width, height, hotX, hotY);
 		toWindowUi(ui -> ui.OnPointerSet(pixels, width, height, hotX, hotY));
+		toWindow(w -> w.onPointerChanged(this));
 	}
 
 	@Override public void OnPointerSetNull()
 	{
 		pointer = Pointer.HIDDEN;
 		toWindowUi(LibFreeRDP.UIEventListener::OnPointerSetNull);
+		toWindow(w -> w.onPointerChanged(this));
 	}
 
 	@Override public void OnPointerSetDefault()
 	{
 		pointer = Pointer.DEFAULT;
 		toWindowUi(LibFreeRDP.UIEventListener::OnPointerSetDefault);
+		toWindow(w -> w.onPointerChanged(this));
 	}
 
 	// Remote-app (RAIL) windows are kept by the window that shows the session (RailWindowManager),

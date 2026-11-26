@@ -1440,8 +1440,9 @@ tries; what was dropped is listed at the end of this block, so it is not tried a
 - `freeRDPCore/.../captantan/SessionBar.java` (new): the bar, one per `SessionWindow`. Its class comment
   says what each mode does and where the bar sits.
 - **Buttons**, in three groups with a gap between each:
-  - left (input): Keyboard (upstream's `toggleKeyboard`: the system keyboard with the key bar), Touch
-    pointer (upstream's `toggleTouchPointer`);
+  - left (input): Keyboard (upstream's `toggleKeyboard`: the system keyboard with the key bar), Input
+    mode (upstream's touch pointer toggle until package 4.3; now a menu: direct touch, touch pointer,
+    trackpad, see "Trackpad mode" below);
   - middle: Reset zoom (zoom 1:1 and scroll to the top left, the touch pointer's own reset), Session bar
     settings;
   - right: Sessions (`SessionSwitcher.open`), Full screen, Disconnect (asks first, as the switcher does).
@@ -1592,6 +1593,160 @@ tries; what was dropped is listed at the end of this block, so it is not tried a
     leaving full screen the window stayed that way for about 7 s on the tablet before restoring, and the
     setting is app-wide;
   - session tabs in a desktop window's caption bar, as a browser has them (6.1, asked for in the device run).
+
+**Trackpad mode** (package 4.3)
+
+A third touch input mode beside upstream's direct touch and touch pointer: the whole session is a
+trackpad that moves the remote pointer relatively, as on a laptop (asked for after using Microsoft's
+Windows App on the phone, where small remote targets are hard to hit by direct touch).
+
+- **Gestures** (`freeRDPCore/.../captantan/TrackpadInput.java`, new; its class comment is the
+  reference):
+  - one finger moving moves the pointer by the finger's movement times a speed-dependent gain, divided
+    by the session view's zoom (so the pointer moves the same on screen at any zoom); it never jumps to
+    the finger;
+  - tap: a left click at the pointer, sent 250 ms after the finger lifts (`TAP_WAIT_MS`) unless a second
+    touch follows;
+  - tap, then tap again within that time: a double click;
+  - tap, then touch again and move (or hold still for 300 ms, `HOLD_TO_DRAG_MS`): the left button is held
+    until the finger lifts (drag and drop, selecting text). The drag starts where the pointer was; the
+    first touch-slop of movement is the threshold, not applied;
+  - two-finger tap: a right click at the pointer;
+  - two fingers moving together: the mouse wheel, vertically and horizontally, one notch (120) per 40 dp
+    of finger travel (`SCROLL_DP_PER_NOTCH`), sent at the pointer. Locked to one axis unless the start is
+    clearly diagonal. Natural by default (the content follows the fingers);
+  - two fingers moving apart or together: upstream's pinch zoom (`SessionInputManager`'s
+    `PinchZoomListener`, fed by a `ScaleGestureDetector` of the gesture's own). Scroll or pinch is decided
+    once per gesture, by whichever passes its threshold first (centre moved by the touch slop, or the span
+    changed by twice the touch slop and more than the centre moved);
+  - a third finger ends the gesture; a drag goes on with its own finger.
+
+  A touch that does not travel beyond the touch slop within 250 ms (`TAP_MAX_MS`) is a tap, and the
+  pointer goes back to where it was at the touch. So small movements are applied at once (nudging the
+  pointer by a pixel works) and a tap still clicks exactly where the pointer was.
+- **Speed.** Gain 0.6 below 60 dp/s finger speed (precise), rising smoothly (smoothstep) to 3.0 at
+  900 dp/s and above (`TrackpadInput.gain`), times the per-connection pointer speed in percent. The speed
+  is an average over the last samples (each event's history is used, so 120 Hz touch screens give every
+  sample). The move log line gives the finger distance and peak speed of every move, to tune the curve.
+- **The pointer has to be drawn.** Both hosts send the pointer as RDP pointer updates (shape, hot spot)
+  and do not draw it into the picture. `android_freerdp.c` passes the shape to Java
+  (`OnPointerSet` / `OnPointerSetNull` / `OnPointerSetDefault`; `Pointer_SetPosition` from the server is
+  ignored), and upstream makes it the session view's `PointerIcon`, which Android shows only for a mouse
+  or touchpad. A finger shows nothing. So `captantan/TrackpadPointer.java` (new) draws the host's
+  current shape at the tracked position, in `SessionView.onDraw` in the view's scaled coordinates (it
+  scales with the zoom as upstream's icon does). "Default" draws an arrow of the fork's own; "hidden"
+  draws nothing, as the host asked. `SessionHost` keeps the last shape (2.1) and now also tells the
+  window when it changes (`SessionWindow.onPointerChanged`).
+- **Where the pointer is.** Tracked in `TrackpadInput` in remote desktop pixels, clamped to the desktop,
+  per session (a switch and back finds it where it was). It starts at the last place a finger touched in
+  direct touch or a mouse pointed, else at the centre, and is sent to the session when the mode is
+  turned on or the session connects. When the remote desktop is resized it is clamped again. On a zoomed
+  session the view scrolls to keep the pointer 32 dp inside it (`keepInView`); a one-finger drag never
+  pans in this mode (the gesture tells the scroll view not to intercept it).
+- **Direct touch: a one-finger drag scrolls** (`captantan/DirectTouchDrag.java`, new; asked for in the
+  tablet run: on a Windows touchscreen one finger scrolls, and upstream needed two). Upstream's direct
+  touch does nothing with a quick one-finger drag when the session fits the window; a finger held still
+  for 200 ms (upstream's long press) and then dragged is a mouse drag. With `touch_drag` = `scroll`
+  (the default) a finger that travels beyond the touch slop before that long press scrolls what is under
+  it instead: the remote pointer moves to where the finger went down (Windows scrolls the window under the
+  pointer), the travel becomes wheel notches as in trackpad mode's two-finger scroll (40 dp each, axis
+  lock, `touch_scroll` direction), and upstream's detectors get a cancel so no tap or long press follows.
+  Everything else stays upstream's: taps, hold-then-drag, two fingers (vertical wheel, pinch zoom), and a
+  zoomed-in session, whose drags pan the view (ScrollView2D intercepts them; `DirectTouchDrag` leaves a
+  session larger than its window alone). A second finger landing during the scroll ends it and the rest
+  of that gesture does nothing. It is reached through `TrackpadInput`'s hook while trackpad mode is off,
+  so it needs no upstream edit of its own, and it acts only while the mode in force is direct touch.
+- **A mouse, a touchpad, a stylus** are not affected. Mouse and touchpad events leave `SessionView`'s
+  touch handling before the hook (upstream's mouse branch). A stylus is left to upstream's handling (only
+  `TOOL_TYPE_FINGER` gestures are taken). `SessionBarGestures` gives `TrackpadInput` every mouse and
+  touchpad position outside the bar: while a mouse is in use, Android shows its own pointer with the
+  remote shape, the drawn one is hidden, and the trackpad goes on from the mouse's place at the next
+  touch.
+- **The mode switch** (`captantan/TouchModeSwitch.java`, new): the session bar's touch pointer button
+  is now the input mode button. It opens a small menu (AppCompat `PopupMenu`, themed by Material) with
+  Direct touch / Touch pointer / Trackpad, the current one ticked, and its icon shows the current mode
+  (`captantan_ic_touch_direct`, upstream's `ic_touch_pointer`, `captantan_ic_trackpad`; the two new ones
+  are the fork's own drawings). A menu rather than a cycling button, so going from direct touch to
+  trackpad never passes through the touch pointer; rather than an eighth button, so the bar keeps its
+  size and one control stands for one either-or choice. A choice from the menu is saved under the
+  session's bookmark; a session without a saved bookmark keeps it for that session only
+  (`SessionBarSettings.save` with a `Consumer`, the same per-session store the bar's settings use). The
+  touch pointer is upstream's puck (`SessionInputManager.toggleTouchPointer`): its own close button turns
+  it off for the moment, the menu then shows direct touch, and the stored mode is unchanged.
+- **Settings** (`ConnectionPrefs`, on "RDP options" in a "Touch input" category):
+
+  | Key | Values (stored names) | Default | Notes |
+  |---|---|---|---|
+  | `touch_mode` | `direct`, `touch_pointer`, `trackpad` | `direct` | also from the bar's input mode menu |
+  | `pointer_speed` | 25 to 300 (percent) | 100 | trackpad mode; multiplies the gain curve |
+  | `touch_scroll` | `natural`, `traditional` | `natural` | trackpad's two-finger and direct touch's one-finger scroll |
+  | `touch_drag` | `scroll`, `off` | `scroll` | direct touch: a quick one-finger drag scrolls, or does nothing (upstream) |
+
+  The trackpad's wheel direction is its own setting: upstream's app-wide "Invert Scrolling" (which is on
+  by default and is what makes a mouse wheel's axis come out right) is not applied to it.
+- **The touchpad's two-finger scroll** (a keyboard cover's touchpad, not trackpad mode): it arrives as
+  touch events from a mouse source with `CLASSIFICATION_TWO_FINGER_SWIPE` and the
+  `AXIS_GESTURE_SCROLL_X/Y_DISTANCE` axes, which `SessionView.handleTouchpadScroll` turns into wheel
+  notches. A mouse wheel arrives as `ACTION_SCROLL` with `AXIS_VSCROLL` / `AXIS_HSCROLL`, so the two can
+  be told apart. Android applies its own touchpad scroll direction setting before the app sees the
+  gesture (`TouchpadInputMapper` hands it to the gestures library as "Invert Scrolling"), so the
+  distances already follow the user's choice. Upstream then also applied the app's "Invert Scrolling",
+  which reversed it: with the default settings the touchpad scrolled the "old" way. The fork undoes
+  the app's setting on this path (marked edit), so the touchpad follows Android's setting. Apps cannot
+  read Android's touchpad setting (it is not a public API), and do not need to.
+- **Log** (tag `captantan.trackpad`, INFO), each line naming the window:
+  - `mode <direct|touch_pointer|trackpad>: w<n> s<n> "<title>" (shown | menu; saved for bookmark <id> |
+    menu; this session only): pointer speed <p> %, scroll <natural|traditional>[, pointer at x,y of WxH
+    (default arrow | host shape WxH | hidden by the host)][, one-finger drag <scroll|off>]`;
+  - one line per gesture: `tap: w<n> left click at x,y`, `double tap: ...`, `two-finger tap: w<n> right
+    click at x,y`, `drag (tap, then drag | tap, then hold): w<n> left button down at x,y`, `drag end
+    (lifted | gesture ended): ...`, `scroll: w<n> vertical|horizontal|both axes, natural at x,y`,
+    `pinch zoom: w<n> from <zoom>`, and at the end of a move `move: w<n> to x,y, finger <d> dp, peak <v>
+    dp/s (gain <g>, zoom <z>)`, and in direct touch `drag scroll (direct touch): w<n> s<n> "<title>", <d>
+    dp, notches for the finger down <n> right <n> (<natural|traditional>), <finger up | a second finger |
+    cancelled>`. No line per move event.
+- **Upstream files edited** (each marked `captantan fork`):
+  - `SessionView.java`, three places: in `onTouchEvent`, after the mouse branch and before upstream's
+    detectors, `if (TrackpadInput.onTouchEvent(this, event)) return true;`; in `onDraw`, after the
+    surface is drawn and before `canvas.restore()`, `TrackpadInput.draw(this, canvas);`; in
+    `handleTouchpadScroll`, the direction *sent* (`down`, `right`) is XORed with `getInvertScrolling` (one
+    line reads it). Only what is sent changes: the loop that drains the accumulated distance must keep
+    stepping towards zero by the distance's own sign, or it never ends (the first test build froze the
+    app and flooded the host with wheel events that way).
+    `TrackpadInput` is found by a view tag (`R.id.captantan_tag_trackpad`) that `SessionWindow` sets, so
+    `SessionView` has no new field.
+
+  **Merging:** keep the touch hook after every branch that handles mouse or touchpad events and before
+  anything that handles fingers; if upstream adds a finger path in front of its detectors (or in
+  `dispatchTouchEvent`), the hook goes in front of it. Keep the draw hook inside the scaled canvas,
+  after the picture. If upstream starts drawing the remote pointer for touch itself, or moves pointer
+  drawing elsewhere, drop `TrackpadPointer` and use upstream's. If upstream reworks
+  `handleTouchpadScroll` or the meaning of "Invert Scrolling", check the touchpad's direction against
+  Android's setting again (both settings, both directions) and keep the touchpad independent of the
+  app's setting.
+- Ours, changed: `SessionWindow.java` (`getTrackpad`, `getTouchModes`, the hooks in `show`, `release`,
+  `bind`, `unbind`, `onSurfaceChanged`, `onPointerChanged`), `SessionHost.java` (`showPointerOn`, and the
+  window told of each pointer change), `SessionBar.java` (the button's binding, `showTouchMode`,
+  `onMouseAt`), `SessionBarGestures.java` (mouse positions to the trackpad), `SessionBarSettings.java`
+  (`save` with a `Consumer`), `ConnectionPrefs.java` (four fields and getters),
+  `res/xml/captantan_connection_options.xml` (the category), `captantan_ids.xml`, `captantan_strings.xml`.
+- **Device runs** (2026-11-26; the full tables are in PR #25), Windows host, phone and tablet:
+  - **Trackpad mode:** moves, slow aiming at small targets, tap, double tap, two-finger tap,
+    two-finger scroll, tap-then-drag, pinch with the view following the pointer, the mode switch
+    and its save, and a reconnect coming back in trackpad mode all worked. The ¼ s click delay was
+    found acceptable. Precise final approaches ran at about 500 dp/s, gain 1.9, so the curve's
+    middle is in use; fast moves reached the 3.0 top. The numbers were kept.
+  - **Touchpad scroll:** the first build froze the app on the tablet's touchpad scroll (see "Upstream
+    files edited"). Fixed, it follows Android's direction.
+  - **Direct touch:** needing two fingers to scroll felt wrong on the tablet; `touch_drag` came from that
+    and worked on both devices.
+  - **Not run:** the GNOME host, Android's touchpad setting flipped both ways together with the app's
+    "Invert Scrolling".
+- **Not in this package**, written down for later: inertia (a fling after a one- or two-finger scroll), smooth
+  (sub-notch) wheel deltas, a server-side pointer move (`Pointer_SetPosition`, which `android_freerdp.c`
+  ignores), drag lock (lifting the finger during a drag and going on), three-finger gestures, and RDP
+  touch input (the multitouch channel, rdpei), so that the host handles touch gestures itself as
+  Windows App does.
 
 ## Package and version scheme
 
@@ -1840,6 +1995,13 @@ compile check runs on the merge.
        (`SessionBar.styleSystemBars` sets both).
      - If upstream changes the meaning of "Hide Status Bar" / "Hide Navigation Bar" or their keys, check
        the full screen button and Back in `SessionBar.setFullScreen` / `leaveFullScreen`.
+   - Trackpad mode (package 4.3):
+     - `SessionView.java`: keep `TrackpadInput.onTouchEvent` in `onTouchEvent` after the mouse branch and
+       before upstream's detectors, `TrackpadInput.draw` in `onDraw` inside the scaled canvas after the
+       picture, and the `invert` lines in `handleTouchpadScroll` (see "Trackpad mode" above for why).
+     - `SessionInputManager.getPinchZoomListener()` and `toggleTouchPointer()` are used as they are: if
+       upstream changes pinch zoom or the touch pointer's toggle, check the trackpad's pinch and the input
+       mode menu on a device.
    - `ApplicationSettingsActivity.java` (`clearCertificateCache`) and `settings_app_security.xml`: keep the
      call to `CertificateStore.clear` and the removed "Accept all certificates". If upstream moves its
      certificate store again, update `CertificateStore`.

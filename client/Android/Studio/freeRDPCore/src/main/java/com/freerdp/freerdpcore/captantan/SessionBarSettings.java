@@ -12,6 +12,7 @@ import com.freerdp.freerdpcore.domain.BookmarkBase;
 
 import java.util.Map;
 import java.util.WeakHashMap;
+import java.util.function.Consumer;
 
 /**
  * Mode, edge and opacity of the session bar ({@link SessionBar}), per connection. They are fields of
@@ -112,11 +113,22 @@ public final class SessionBarSettings
 	 */
 	public static boolean save(Context context, SessionHost host, Mode mode, Edge edge, int opacity)
 	{
+		return save(context, host, p -> {
+			p.set(ConnectionPrefs.BAR_MODE, mode);
+			p.set(ConnectionPrefs.BAR_EDGE, edge);
+			p.set(ConnectionPrefs.BAR_OPACITY, opacity);
+		});
+	}
+
+	/**
+	 * Changes settings of a session as {@link #save(Context, SessionHost, Mode, Edge, int)} does,
+	 * for any field (package 4.3's touch mode). Returns true if they were saved with a bookmark.
+	 */
+	public static boolean save(Context context, SessionHost host, Consumer<ConnectionPrefs> change)
+	{
 		final long id = bookmarkIdOf(host);
 		final ConnectionPrefs p = (id > 0) ? ConnectionPrefs.load(context, id) : of(context, host);
-		p.set(ConnectionPrefs.BAR_MODE, mode);
-		p.set(ConnectionPrefs.BAR_EDGE, edge);
-		p.set(ConnectionPrefs.BAR_OPACITY, opacity);
+		change.accept(p);
 		if (id > 0)
 		{
 			p.saveAs(context, id);

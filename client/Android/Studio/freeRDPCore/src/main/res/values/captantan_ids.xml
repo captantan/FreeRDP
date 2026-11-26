@@ -5,4 +5,6 @@
 <resources>
     <item name="captantan_tag_default_text_colors" type="id" />
     <item name="captantan_tag_row_session" type="id" />
+    <!-- roadmap 4.3: the session view's TrackpadInput (captantan/TrackpadInput.java) -->
+    <item name="captantan_tag_trackpad" type="id" />
 </resources>

@@ -210,4 +210,48 @@
         <item>left</item>
         <item>right</item>
     </string-array>
+    <!-- Touch input modes and trackpad mode (roadmap 4.3, captantan/TouchMode.java) -->
+    <string name="captantan_touch_mode_direct">Direct touch</string>
+    <string name="captantan_touch_mode_touch_pointer">Touch pointer</string>
+    <string name="captantan_touch_mode_trackpad">Trackpad</string>
+    <string name="captantan_bar_touch_mode">Input mode: %1$s</string>
+    <string name="captantan_options_cat_touch">Touch input</string>
+    <string name="captantan_touch_mode">Input mode</string>
+    <string name="captantan_pointer_speed">Trackpad pointer speed (%)</string>
+    <string name="captantan_touch_scroll">Touch scrolling</string>
+    <string name="captantan_touch_scroll_natural">Natural: the content follows the fingers</string>
+    <string name="captantan_touch_scroll_traditional">Traditional: the fingers move the scroll bar</string>
+    <string name="captantan_touch_drag">One-finger drag in direct touch</string>
+    <string name="captantan_touch_drag_scroll">Scrolls, as on a Windows touchscreen</string>
+    <string name="captantan_touch_drag_off">Does nothing (upstream)</string>
+    <string name="captantan_touch_note">Direct touch: tap to click, hold a moment and then drag to select or move a window. Zoomed in, a one-finger drag moves the view. Trackpad: move one finger anywhere to move the pointer. Tap to click, tap with two fingers to right-click, drag two fingers to scroll and pinch to zoom. To drag or select, tap and then touch again and move. A mouse, a touchpad and a stylus work as always. The session bar\'s input mode button switches modes during a session.</string>
+    <string-array name="captantan_touch_mode_entries">
+        <item>@string/captantan_touch_mode_direct</item>
+        <item>@string/captantan_touch_mode_touch_pointer</item>
+        <item>@string/captantan_touch_mode_trackpad</item>
+    </string-array>
+    <!-- Stored names of TouchMode, in the same order. Never change them. -->
+    <string-array name="captantan_touch_mode_values" translatable="false">
+        <item>direct</item>
+        <item>touch_pointer</item>
+        <item>trackpad</item>
+    </string-array>
+    <string-array name="captantan_touch_scroll_entries">
+        <item>@string/captantan_touch_scroll_natural</item>
+        <item>@string/captantan_touch_scroll_traditional</item>
+    </string-array>
+    <!-- Stored names of TouchMode.Scroll, in the same order. Never change them. -->
+    <string-array name="captantan_touch_scroll_values" translatable="false">
+        <item>natural</item>
+        <item>traditional</item>
+    </string-array>
+    <string-array name="captantan_touch_drag_entries">
+        <item>@string/captantan_touch_drag_scroll</item>
+        <item>@string/captantan_touch_drag_off</item>
+    </string-array>
+    <!-- Stored names of TouchMode.Drag, in the same order. Never change them. -->
+    <string-array name="captantan_touch_drag_values" translatable="false">
+        <item>scroll</item>
+        <item>off</item>
+    </string-array>
 </resources>
