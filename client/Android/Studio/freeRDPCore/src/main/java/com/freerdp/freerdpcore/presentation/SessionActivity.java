@@ -477,8 +477,11 @@ public class SessionActivity extends AppCompatActivity
 		// above it must not pad for the nav bar again
 		boolean kbdVisible = extKeyboard != null && extKeyboard.getVisibility() == View.VISIBLE;
 		int scrollBottom = kbdVisible ? 0 : Math.max(safeBottom, navInsets.bottom);
-		scrollView.setPadding(Math.max(safeLeft, navInsets.left), safeTop,
-		                      Math.max(safeRight, navInsets.right), scrollBottom);
+		// captantan fork: plus the strip of the docked session bar (roadmap 4.1)
+		final int[] docked = window != null ? window.getResizer().getReservedInsets() : new int[4];
+		scrollView.setPadding(Math.max(safeLeft, navInsets.left) + docked[0], safeTop + docked[1],
+		                      Math.max(safeRight, navInsets.right) + docked[2],
+		                      scrollBottom + docked[3]);
 		// captantan fork: the viewport's insets, the same without the keyboards (not the IME)
 		if (window != null)
 			window.getResizer().setSystemInsets(

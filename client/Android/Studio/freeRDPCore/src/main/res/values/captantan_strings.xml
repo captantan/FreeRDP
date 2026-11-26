@@ -177,7 +177,7 @@
     <string name="captantan_bar_settings_unsaved">This session has no saved connection: the change lasts until the session ends.</string>
     <string name="captantan_bar_mode">Mode</string>
     <string name="captantan_bar_mode_overlay">Overlay</string>
-    <string name="captantan_bar_mode_hidden">Hidden in full screen</string>
+    <string name="captantan_bar_mode_hidden">Docked</string>
     <string name="captantan_bar_edge">Edge</string>
     <string name="captantan_bar_edge_top">Top</string>
     <string name="captantan_bar_edge_bottom">Bottom</string>
@@ -186,7 +186,7 @@
     <string name="captantan_bar_opacity">Opacity</string>
     <string name="captantan_options_cat_bar">Session bar</string>
     <string name="captantan_bar_opacity_percent">Opacity (%)</string>
-    <string name="captantan_bar_note">Overlay: the bar floats over the remote desktop at its edge. Hidden in full screen: the bar goes with the system bars. Outside full screen it is always there; in full screen, swipe the status or navigation bar in (or rest the mouse pointer at the edge) and the bar comes along. It hides again, with the system bars, after use, a tap elsewhere or a few seconds.</string>
+    <string name="captantan_bar_note">Docked: the bar is a toolbar across its edge, and the remote desktop ends where it begins. In full screen it is gone; Back leaves full screen and brings it back (rest the mouse pointer at the edge to see it for a moment). Overlay: the bar floats over the remote desktop at its edge, in full screen too. Opacity is for overlay only.</string>
     <string-array name="captantan_bar_mode_entries">
         <item>@string/captantan_bar_mode_overlay</item>
         <item>@string/captantan_bar_mode_hidden</item>

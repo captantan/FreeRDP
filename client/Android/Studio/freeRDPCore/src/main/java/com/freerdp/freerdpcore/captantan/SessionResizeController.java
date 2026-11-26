@@ -38,8 +38,8 @@ import java.util.Set;
  * bar is hidden by the setting) and a desktop window's caption bar (always); on the sides and at
  * the bottom the navigation bar (unless hidden by the setting) and, with "fit rounded corners",
  * the screen's rounded corners;</li>
- * <li>the extra insets of {@link #setReservedInsets}, which the session bar's reserved mode
- * (package 4.2) uses for its strip.</li>
+ * <li>the extra insets of {@link #setReservedInsets}, which the docked session bar (4.1)
+ * uses for its strip.</li>
  * </ul>
  * Not subtracted: the on-screen keyboard (IME) and the app's own key bar above it, the floating
  * toolbar, the touch pointer, a system bar shown for a moment by a swipe, dialogs and sheets. Those
@@ -184,10 +184,10 @@ public final class SessionResizeController implements DisplayControl.Listener
 	}
 
 	/**
-	 * For the session bar's reserved mode (package 4.2): a strip of the window, in pixels per
-	 * edge, that the remote desktop must not cover. It is subtracted from the viewport; a change
-	 * resizes the session like any other change of the viewport. The caller lays its strip out
-	 * itself and keeps the session view out of it; this only decides the size.
+	 * For the docked session bar (4.1): a strip of the window, in pixels per edge, that the
+	 * remote desktop must not cover. It is subtracted from the viewport; a change resizes the
+	 * session like any other change of the viewport. The caller lays its strip out itself; the
+	 * session activity pads the session view by it ({@link #getReservedInsets}).
 	 */
 	public void setReservedInsets(int left, int top, int right, int bottom)
 	{
@@ -198,6 +198,12 @@ public final class SessionResizeController implements DisplayControl.Listener
 		System.arraycopy(now, 0, reservedInsets, 0, 4);
 		viewportMaybeChanged("reserved strip " + now[0] + "/" + now[1] + "/" + now[2] + "/" +
 		                     now[3]);
+	}
+
+	/** The strip of {@link #setReservedInsets}: left, top, right, bottom in pixels (a copy). */
+	public int[] getReservedInsets()
+	{
+		return reservedInsets.clone();
 	}
 
 	/** The viewport's width in pixels as of now, or 0 if the window has not been laid out. */

@@ -29,7 +29,10 @@ public final class SessionBarSettings
 	{
 		/** The bar floats over the remote desktop at its edge; the desktop keeps its size. */
 		OVERLAY("overlay"),
-		/** Nothing is drawn until Back (or the mouse at the edge, or a call) reveals it. */
+		/**
+		 * Docked (the stored name is from an earlier try): outside full screen a toolbar across
+		 * its edge, in a strip the remote desktop keeps clear of; in full screen not shown.
+		 */
 		HIDDEN("hidden"),
 		/**
 		 * Roadmap 4.2: a strip at the edge is reserved for the bar and the remote desktop is made

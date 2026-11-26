@@ -14,6 +14,7 @@ import android.util.Log;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -21,11 +22,11 @@ import android.widget.TextView;
 import androidx.appcompat.app.AlertDialog;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
-import androidx.core.view.WindowInsetsAnimationCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
+import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.slider.Slider;
 
@@ -33,8 +34,6 @@ import com.freerdp.freerdpcore.R;
 import com.freerdp.freerdpcore.presentation.ApplicationSettingsActivity;
 import com.freerdp.freerdpcore.presentation.SessionActivity;
 import com.freerdp.freerdpcore.presentation.SessionInputManager;
-
-import java.util.List;
 
 /**
  * The session bar: the fork's controls in a session window, in place of upstream's
@@ -55,12 +54,13 @@ import java.util.List;
  * <ul>
  * <li>Overlay: the bar floats over the remote picture, centred on its edge, with the opacity. The
  * remote desktop keeps its size.</li>
- * <li>Hidden (hidden in full screen): the bar goes with the system bars ({@link #onSystemBars}).
- * Outside full screen they are always there, and so is the bar. In full screen it is hidden; a
- * swipe that pulls the system bars in brings it along, and so do the mouse resting at the edge
- * ({@link SessionBarGestures}) and a call ({@link #reveal}, package 5.3's key combination). It
- * hides again, and puts pulled-in system bars away with it, after a button is used, after a press
- * anywhere else, or {@link #HIDE_AFTER_MS} after it was last touched.</li>
+ * <li>Docked (stored as "hidden"; {@link #docked}): outside full screen the bar is a toolbar
+ * across its edge, like a browser's, in a strip the remote desktop does not cover
+ * ({@link SessionResizeController#setReservedInsets}; the session activity pads the session view
+ * by it). In full screen it is gone and the strip with it. There, the mouse resting at the edge
+ * ({@link SessionBarGestures}) or a call ({@link #reveal}, package 5.3's key combination) brings
+ * it over the picture for a moment: it hides again after a button is used, after a press anywhere
+ * else, or {@link #HIDE_AFTER_MS} after it was last touched.</li>
  * <li>Reserved (package 4.2) is stored but not offered; it is shown as overlay until then.</li>
  * </ul>
  *
@@ -70,9 +70,12 @@ import java.util.List;
  * bar, the camera cutout, the on-screen keyboard and upstream's key bar. Those are recomputed at
  * every layout, so rotation, folding, split screen and window resizes are followed.
  *
- * <p><b>Back</b> is not the bar's: it asks whether to leave the session running or disconnect
- * it ({@link SessionWindow#onBack}). The bar has no gesture of its own and takes nothing from the
- * system's gestures or from the remote desktop.
+ * <p><b>Back</b> in full screen leaves full screen ({@link #leaveFullScreen}); otherwise it asks
+ * whether to leave the session running or disconnect it ({@link SessionWindow#onBack}). The bar
+ * has no gesture of its own and takes nothing from the system's gestures. System bars pulled in
+ * over a full-screen session are put away again after {@link #HIDE_AFTER_MS} (upstream's
+ * {@code hideSystemBars} uses Android's default behaviour from Android 12, a fork edit, so a swipe
+ * brings them back for real, and Home and the shade work at the first swipe).
  */
 public final class SessionBar
 {
@@ -108,8 +111,12 @@ public final class SessionBar
 	private SessionBarSettings.Mode mode = SessionBarSettings.DEFAULT_MODE;
 	private SessionBarSettings.Edge edge = SessionBarSettings.DEFAULT_EDGE;
 	private int opacity = SessionBarSettings.DEFAULT_OPACITY;
-	/** Hidden mode: the bar is shown now. */
+	/** Docked mode in full screen: the bar is shown over the picture for a moment. */
 	private boolean revealed;
+	/** Full screen as of the last insets, to notice a change made in another window. */
+	private boolean wasFullScreen;
+	private float cardRadius;
+	private float cardElevation;
 	/** The window is told a system bar (or a desktop window's caption bar) is on screen. */
 	private boolean barsShown;
 	private AlertDialog dialog;
@@ -132,35 +139,15 @@ public final class SessionBar
 		inflate();
 		this.gestures = SessionBarGestures.install(activity, this);
 		container.getViewTreeObserver().addOnGlobalLayoutListener(this::layout);
-		ViewCompat.setWindowInsetsAnimationCallback(
-		    container, new WindowInsetsAnimationCompat.Callback(
-		                   WindowInsetsAnimationCompat.Callback.DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
-			    @Override
-			    public WindowInsetsCompat onProgress(WindowInsetsCompat in,
-			                                         List<WindowInsetsAnimationCompat> running)
-			    {
-				    return in;
-			    }
-
-			    @Override
-			    public WindowInsetsAnimationCompat.BoundsCompat
-			    onStart(WindowInsetsAnimationCompat animation,
-			            WindowInsetsAnimationCompat.BoundsCompat bounds)
-			    {
-				    if ((animation.getTypeMask() & WindowInsetsCompat.Type.systemBars()) != 0)
-					    Log.i(TAG, "system bars (animation): " + window.getName() + " types 0x" +
-					                   Integer.toHexString(animation.getTypeMask()) + " start");
-				    return bounds;
-			    }
-		    });
+		wasFullScreen = isFullScreen();
 	}
 
 	// ****************************************************************************
 	// The public entry points (packages 4.2, 4.3, 5.3)
 
 	/**
-	 * Reveals the bar of a hidden-mode session for {@link #HIDE_AFTER_MS}, as Back does.
-	 * In overlay mode the bar is shown anyway and nothing changes. For package 5.3's key combination:
+	 * Shows the bar of a docked-mode session in full screen over the picture for
+	 * {@link #HIDE_AFTER_MS}. Otherwise the bar is shown anyway and nothing changes. For package 5.3's key combination:
 	 * {@code SessionBar.revealInFocusedWindow("Ctrl+Alt+B")}.
 	 *
 	 * @param cause what asked for it, for the log
@@ -172,10 +159,10 @@ public final class SessionBar
 			Log.i(TAG, "reveal asked in " + window.getName() + " (" + cause + "): no session shown");
 			return;
 		}
-		if (effectiveMode() != SessionBarSettings.Mode.HIDDEN || pinned())
+		if (effectiveMode() != SessionBarSettings.Mode.HIDDEN || docked())
 		{
 			Log.i(TAG, "reveal asked in " + window.getName() + " (" + cause + "): mode " +
-			               mode.storedName() + (pinned() ? ", not full screen" : "") +
+			               mode.storedName() + (docked() ? ", docked" : "") +
 			               ", the bar is shown already");
 			return;
 		}
@@ -199,9 +186,8 @@ public final class SessionBar
 	}
 
 	/**
-	 * Hides a revealed bar (hidden mode), and puts system bars pulled in over a full-screen session
-	 * away with it. Does nothing in overlay mode, or while the bar stays with the system bars (not
-	 * full screen).
+	 * Hides a revealed bar (docked mode, full screen), and puts system bars pulled in over the
+	 * session away with it. Does nothing while the bar is shown for good (overlay, docked).
 	 */
 	public void hide(String cause)
 	{
@@ -219,21 +205,29 @@ public final class SessionBar
 		putSystemBarsAway(cause);
 	}
 
-	/** Whether the bar is on screen (overlay mode, with the system bars, or revealed). */
+	/** Whether the bar is on screen (overlay, docked, or revealed in full screen). */
 	public boolean isShown()
 	{
 		return host != null &&
-		    (effectiveMode() != SessionBarSettings.Mode.HIDDEN || revealed || pinned());
+		    (effectiveMode() != SessionBarSettings.Mode.HIDDEN || revealed || docked());
+	}
+
+	/** Docked mode outside full screen: the bar is a toolbar in its own strip of the window. */
+	private boolean docked()
+	{
+		return host != null && effectiveMode() == SessionBarSettings.Mode.HIDDEN && !isFullScreen();
 	}
 
 	/**
-	 * Hidden mode outside full screen: the system bars are on screen for good, and the bar stays
-	 * with them (no timeout, a tap elsewhere goes to the session).
+	 * Back in full screen: full screen off, as the bar's button does (upstream's two settings,
+	 * app-wide). False, and nothing done, when not in full screen or no session is shown.
 	 */
-	private boolean pinned()
+	public boolean leaveFullScreen(String cause)
 	{
-		return host != null && effectiveMode() == SessionBarSettings.Mode.HIDDEN && barsShown &&
-		    !isFullScreen();
+		if (host == null || !isFullScreen())
+			return false;
+		setFullScreen(false, cause);
+		return true;
 	}
 
 	/** The mode in force; {@code RESERVED} is shown as overlay until package 4.2. */
@@ -274,6 +268,7 @@ public final class SessionBar
 		revealed = false;
 		bar.animate().cancel();
 		bar.setVisibility(View.GONE);
+		reserve(0, 0, 0, 0);
 	}
 
 	/** From SessionActivity's insets listener: the insets before upstream consumed them. */
@@ -285,19 +280,23 @@ public final class SessionBar
 		final boolean shownNow = windowInsets.isVisible(WindowInsetsCompat.Type.statusBars()) ||
 		                         windowInsets.isVisible(WindowInsetsCompat.Type.navigationBars()) ||
 		                         caption > 0;
+		if (isFullScreen() != wasFullScreen)
+		{
+			// full screen is app-wide: another window, or the settings screen, may have changed it
+			wasFullScreen = isFullScreen();
+			revealed = false;
+			handler.removeCallbacks(hideOnTimeout);
+			showForState();
+		}
 		layout();
 		if (shownNow != barsShown)
 			onSystemBars(shownNow);
 	}
 
 	/**
-	 * The system bars came or went. Hidden mode follows them: outside full screen the bar is with
-	 * them for good; in full screen, bars a swipe pulls in bring the bar along, and both go away
-	 * again after {@link #HIDE_AFTER_MS}, a tap elsewhere or a button. In overlay mode only the
-	 * pulled-in system bars are put away again after the timeout. Full screen keeps the system bars
-	 * hidden with Android's default behaviour (upstream's {@code hideSystemBars}, a fork edit): a
-	 * swipe brings them back for real and the window is told, which the transient bars of
-	 * {@code BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE} never did (measured in the 4.1 device run).
+	 * The system bars came or went. In full screen, bars a swipe pulled in are put away again
+	 * after {@link #HIDE_AFTER_MS}: with Android's default behaviour (upstream's
+	 * {@code hideSystemBars}, a fork edit) they would otherwise stay. The bar does not follow them.
 	 */
 	private void onSystemBars(boolean shownNow)
 	{
@@ -305,41 +304,8 @@ public final class SessionBar
 		handler.removeCallbacks(putAwayOnTimeout);
 		Log.i(TAG, "system bars " + (shownNow ? "shown" : "hidden") + " in " + window.getName() +
 		               (isFullScreen() ? " (full screen)" : ""));
-		if (host == null)
-			return;
-		if (effectiveMode() != SessionBarSettings.Mode.HIDDEN)
-		{
-			if (shownNow && isFullScreen())
-				handler.postDelayed(putAwayOnTimeout, HIDE_AFTER_MS);
-			return;
-		}
-		if (pinned())
-		{
-			revealed = false;
-			handler.removeCallbacks(hideOnTimeout);
-			if (bar.getVisibility() != View.VISIBLE || bar.getAlpha() == 0f)
-			{
-				animateIn();
-				Log.i(TAG, "shown with the system bars: " + window.getName() + " " + host +
-				               " (not full screen)");
-			}
-			return;
-		}
-		if (shownNow)
-		{
-			// the keyboard brings the navigation bar back by itself (upstream's hideSystemBars)
-			if (insets == null || !insets.isVisible(WindowInsetsCompat.Type.ime()))
-				reveal("system bars pulled in");
-		}
-		else if (revealed)
-		{
-			hide("system bars hidden");
-		}
-		else if (bar.getVisibility() == View.VISIBLE)
-		{
-			animateOut();
-			Log.i(TAG, "hide: " + window.getName() + " (system bars hidden, full screen)");
-		}
+		if (host != null && shownNow && isFullScreen())
+			handler.postDelayed(putAwayOnTimeout, HIDE_AFTER_MS);
 	}
 
 	/** Full screen: system bars pulled in over the session are hidden again. */
@@ -476,7 +442,7 @@ public final class SessionBar
 		bar.setTranslationY(0);
 		if (isShown())
 		{
-			bar.setAlpha(opacity / 100f);
+			bar.setAlpha(alpha());
 			bar.setVisibility(View.VISIBLE);
 		}
 		else
@@ -528,7 +494,7 @@ public final class SessionBar
 		slider.addOnChangeListener((s, value, fromUser) -> {
 			opacity = Math.round(value);
 			if (bar.getVisibility() == View.VISIBLE)
-				bar.setAlpha(opacity / 100f);
+				bar.setAlpha(alpha());
 		});
 
 		handler.removeCallbacks(hideOnTimeout);
@@ -607,6 +573,8 @@ public final class SessionBar
 		                                            false);
 		buttons = bar.findViewById(R.id.captantan_bar_buttons);
 		fullScreenButton = bar.findViewById(R.id.captantan_bar_fullscreen);
+		cardRadius = ((MaterialCardView)bar).getRadius();
+		cardElevation = ((MaterialCardView)bar).getCardElevation();
 		bar.setVisibility(View.GONE);
 		container.addView(bar);
 		bindButtons();
@@ -668,17 +636,24 @@ public final class SessionBar
 
 	private void toggleFullScreen()
 	{
-		final boolean full = !isFullScreen();
+		setFullScreen(!isFullScreen(), "button");
+	}
+
+	private void setFullScreen(boolean full, String cause)
+	{
 		final SharedPreferences prefs = ApplicationSettingsActivity.get(activity);
 		prefs.edit()
 		    .putBoolean(activity.getString(R.string.preference_key_ui_hide_status_bar), full)
 		    .putBoolean(activity.getString(R.string.preference_key_ui_hide_navigation_bar), full)
 		    .apply();
-		Log.i(TAG, "full screen " + (full ? "on" : "off") + " in " + window.getName() +
-		               " (Hide Status Bar and Hide Navigation Bar, app-wide)");
+		Log.i(TAG, "full screen " + (full ? "on" : "off") + " in " + window.getName() + " (" +
+		               cause + "; Hide Status Bar and Hide Navigation Bar, app-wide)");
 		activity.hideSystemBars(); // upstream's, made public for this (captantan fork)
+		wasFullScreen = full;
+		revealed = false;
+		handler.removeCallbacks(hideOnTimeout);
+		showForState();
 		ViewCompat.requestApplyInsets(activity.getWindow().getDecorView());
-		updateFullScreenIcon();
 	}
 
 	private void updateFullScreenIcon()
@@ -716,7 +691,7 @@ public final class SessionBar
 		                    : edge == SessionBarSettings.Edge.BOTTOM ? slide
 		                                                             : 0);
 		bar.animate()
-		    .alpha(opacity / 100f)
+		    .alpha(alpha())
 		    .translationX(0)
 		    .translationY(0)
 		    .setDuration(ANIMATION_MS)
@@ -732,10 +707,31 @@ public final class SessionBar
 		});
 	}
 
+	/** Docked, the bar is opaque: nothing of the remote desktop lies behind it. */
+	private float alpha()
+	{
+		return docked() ? 1f : opacity / 100f;
+	}
+
+	/** The docked strip, for the resize controller and the session view's padding. */
+	private void reserve(int left, int top, int right, int bottom)
+	{
+		final SessionResizeController resizer = window.getResizer();
+		final int[] was = resizer.getReservedInsets();
+		if (was[0] == left && was[1] == top && was[2] == right && was[3] == bottom)
+			return;
+		resizer.setReservedInsets(left, top, right, bottom);
+		Log.i(TAG, "docked strip: " + window.getName() + " l" + left + " t" + top + " r" + right +
+		               " b" + bottom);
+		// upstream's insets listener pads the session view by the strip (captantan fork edit)
+		handler.post(() -> ViewCompat.requestApplyInsets(activity.getWindow().getDecorView()));
+	}
+
 	/**
 	 * Places the bar: the layer's padding keeps it clear of the insets, its gravity puts it at the
-	 * middle of its edge, its buttons get smaller if the edge is short. Runs at every layout of
-	 * the window and changes only what differs.
+	 * middle of its edge (docked: across it), its buttons get smaller if the edge is short. Docked,
+	 * it also sets the strip the remote desktop keeps clear of. Runs at every layout of the window
+	 * and changes only what differs.
 	 */
 	private void layout()
 	{
@@ -795,12 +791,35 @@ public final class SessionBar
 				gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
 				break;
 		}
-		if (lp.gravity != gravity || lp.leftMargin != gap || lp.topMargin != gap)
+		final boolean docked = docked();
+		final int margin = docked ? 0 : gap;
+		final int across = ViewGroup.LayoutParams.MATCH_PARENT;
+		final int wrap = ViewGroup.LayoutParams.WRAP_CONTENT;
+		final int width = docked && !vertical ? across : wrap;
+		final int height = docked && vertical ? across : wrap;
+		if (lp.gravity != gravity || lp.leftMargin != margin || lp.topMargin != margin ||
+		    lp.width != width || lp.height != height)
 		{
 			lp.gravity = gravity;
-			lp.setMargins(gap, gap, gap, gap);
+			lp.setMargins(margin, margin, margin, margin);
+			lp.width = width;
+			lp.height = height;
 			bar.setLayoutParams(lp);
 		}
+		final ViewGroup.LayoutParams blp0 = buttons.getLayoutParams();
+		if (blp0.width != width || blp0.height != height)
+		{
+			blp0.width = width;
+			blp0.height = height;
+			buttons.setLayoutParams(blp0);
+		}
+		final MaterialCardView card = (MaterialCardView)bar;
+		final float radius = docked ? 0f : cardRadius;
+		final float elevation = docked ? 0f : cardElevation;
+		if (card.getRadius() != radius)
+			card.setRadius(radius);
+		if (card.getCardElevation() != elevation)
+			card.setCardElevation(elevation);
 
 		// The buttons shrink (down to BUTTON_MIN_DP) when the edge is too short for all of them.
 		final int count = Math.max(1, buttons.getChildCount());
@@ -824,7 +843,42 @@ public final class SessionBar
 			}
 		}
 
+		// Docked: the strip is the bar's thickness, plus whatever the bar keeps clear of on its
+		// edge beyond what the session view is padded for already (a camera cutout, say).
+		if (docked && isShown())
+		{
+			final int thick = size + (vertical ? buttons.getPaddingLeft() + buttons.getPaddingRight()
+			                                   : buttons.getPaddingTop() + buttons.getPaddingBottom());
+			final View scroll = activity.findViewById(R.id.sessionScrollView);
+			final int[] r = window.getResizer().getReservedInsets();
+			final int padL = scroll != null ? scroll.getPaddingLeft() - r[0] : 0;
+			final int padT = scroll != null ? scroll.getPaddingTop() - r[1] : 0;
+			final int padR = scroll != null ? scroll.getPaddingRight() - r[2] : 0;
+			switch (edge)
+			{
+				case BOTTOM:
+					// the session view is padded for the navigation bar already; the keyboards
+					// lie over the picture and do not resize it (the bar is lifted above them)
+					reserve(0, 0, 0, thick);
+					break;
+				case LEFT:
+					reserve(thick + Math.max(0, safe.left - padL), 0, 0, 0);
+					break;
+				case RIGHT:
+					reserve(0, 0, thick + Math.max(0, safe.right - padR), 0);
+					break;
+				default:
+					reserve(0, thick + Math.max(0, safe.top - padT), 0, 0);
+					break;
+			}
+		}
+		else
+		{
+			reserve(0, 0, 0, 0);
+		}
+
 		final String log = "layout: " + window.getName() + " edge " + edge.storedName() +
+		                   (docked ? " (docked)" : "") +
 		                   ", layer " + cw + "x" + ch + " at " + cl + "," + ct + ", keeps clear " +
 		                   rectText(safe) + ", buttons " + Math.round(size / density) + " dp";
 		if (host != null && !log.equals(lastLayoutLog))
