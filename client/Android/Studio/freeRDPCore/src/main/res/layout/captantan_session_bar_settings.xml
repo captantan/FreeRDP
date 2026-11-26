@@ -46,10 +46,10 @@
                 android:text="@string/captantan_bar_mode_docked" />
         </com.google.android.material.button.MaterialButtonToggleGroup>
 
-        <!-- captantan fork: the bar sits at the top only for now (4.1 device run); the edge
-             choice is kept, not shown -->
+        <!-- the edge is overlay's (SessionBar shows these two for overlay only): docked is always
+             at the top -->
         <TextView
-            android:visibility="gone"
+            android:id="@+id/captantan_bar_settings_edge_label"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
@@ -57,7 +57,6 @@
             android:textAppearance="?attr/textAppearanceTitleSmall" />
 
         <com.google.android.material.button.MaterialButtonToggleGroup
-            android:visibility="gone"
             android:id="@+id/captantan_bar_settings_edge"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

@@ -49,13 +49,14 @@
 
         <!-- captantan fork: the two gaps share the rest of a docked bar's width, so reset zoom and
              bar settings sit in the middle (SessionBar evens out the groups' sizes); 8 dp each in
-             overlay mode -->
+             overlay mode, across or down the bar -->
         <Space
             android:id="@+id/captantan_bar_gap"
             android:layout_width="0dp"
             android:layout_height="1dp"
             android:layout_weight="1"
-            android:minWidth="8dp" />
+            android:minWidth="8dp"
+            android:minHeight="8dp" />
 
         <Button
             android:id="@+id/captantan_bar_zoom_reset"
@@ -88,7 +89,8 @@
             android:layout_width="0dp"
             android:layout_height="1dp"
             android:layout_weight="1"
-            android:minWidth="8dp" />
+            android:minWidth="8dp"
+            android:minHeight="8dp" />
 
         <Button
             android:id="@+id/captantan_bar_sessions"

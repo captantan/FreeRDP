@@ -179,6 +179,7 @@
     <string name="captantan_bar_mode_overlay">Overlay</string>
     <string name="captantan_bar_mode_docked">Docked</string>
     <string name="captantan_bar_edge">Edge</string>
+    <string name="captantan_bar_edge_overlay">Edge (overlay)</string>
     <string name="captantan_bar_edge_top">Top</string>
     <string name="captantan_bar_edge_bottom">Bottom</string>
     <string name="captantan_bar_edge_left">Left</string>
@@ -186,7 +187,7 @@
     <string name="captantan_bar_opacity">Opacity</string>
     <string name="captantan_options_cat_bar">Session bar</string>
     <string name="captantan_bar_opacity_percent">Opacity (%)</string>
-    <string name="captantan_bar_note">Docked: the bar is a toolbar across its edge, and the remote desktop ends where it begins. In full screen it is gone; Back leaves full screen and brings it back (rest the mouse pointer at the edge to see it for a moment). Overlay: the bar floats over the remote desktop at its edge, in full screen too. Opacity is for overlay only.</string>
+    <string name="captantan_bar_note">Docked: the bar is a toolbar across the top, and the remote desktop ends where it begins. In full screen it is gone; Back leaves full screen and brings it back (rest the mouse pointer at the edge to see it for a moment). Overlay: the bar floats over the remote desktop at the edge you choose, in full screen too. Edge and opacity are for overlay only.</string>
     <string-array name="captantan_bar_mode_entries">
         <item>@string/captantan_bar_mode_overlay</item>
         <item>@string/captantan_bar_mode_docked</item>

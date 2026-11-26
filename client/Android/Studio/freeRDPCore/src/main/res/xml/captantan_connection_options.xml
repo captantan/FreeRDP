@@ -56,14 +56,13 @@
             android:entryValues="@array/captantan_bar_mode_values"
             android:defaultValue="docked"
             app:useSimpleSummaryProvider="true" />
-        <!-- the bar sits at the top only for now (4.1 device run); bar_edge is kept, not shown -->
+        <!-- the edge is overlay's: docked is always at the top (4.1 device run) -->
         <ListPreference
             android:key="bar_edge"
-            android:title="@string/captantan_bar_edge"
+            android:title="@string/captantan_bar_edge_overlay"
             android:entries="@array/captantan_bar_edge_entries"
             android:entryValues="@array/captantan_bar_edge_values"
             android:defaultValue="top"
-            app:isPreferenceVisible="false"
             app:useSimpleSummaryProvider="true" />
         <SeekBarPreference
             android:key="bar_opacity"

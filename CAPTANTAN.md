@@ -1459,8 +1459,9 @@ tries; what was dropped is listed at the end of this block, so it is not tried a
   same strip. The status bar and the navigation bar take the bar's colour: the session's root view takes
   it, and the session view keeps black only inside its padding. Their icons turn dark when that colour is
   light. In full screen the bar and its strip are gone, and the remote desktop gets the whole screen.
-- **Overlay mode:** the bar floats centred at the top, at the opacity, over the remote picture, in full
-  screen too. The remote desktop keeps its size, and the system bars stay black.
+- **Overlay mode:** the bar floats centred at its edge (top, bottom, left or right; left and right make
+  it a column), at the opacity, over the remote picture, in full screen too. The remote desktop keeps its
+  size, and the system bars stay black.
 - **Full screen** flips upstream's two app-wide settings, "Hide Status Bar" and "Hide Navigation Bar"
   (Settings, User interface), together: on if either is off, off if both are on. Upstream's own code then
   hides the system bars, and the remote desktop is resized (3.2). With the status bar hidden the session
@@ -1489,18 +1490,18 @@ tries; what was dropped is listed at the end of this block, so it is not tried a
   | Key | Values (stored names) | Default | Notes |
   |---|---|---|---|
   | `bar_mode` | `docked`, `overlay` | `docked` | docked: the remote screen is never covered |
-  | `bar_edge` | `top`, `bottom`, `left`, `right` | `top` | not shown, and the bar uses the top whatever is stored |
+  | `bar_edge` | `top`, `bottom`, `left`, `right` | `top` | overlay only (shown for it); docked is always at the top |
   | `bar_opacity` | 30 to 100 (percent) | 85 | overlay only; docked is opaque |
 
   Test builds before the first release stored `hidden` for docked; an unknown name reads as the default,
-  which is docked. The edge is pinned to the top in `SessionBar.load`: in the device run the docked bar
-  read as a toolbar, and full screen covered the wish to move it. The code still places the bar at any
-  edge (strip, orientation, mouse band); showing the choice again brings it back. A stored edge is kept:
-  the bar's settings dialog saves it unchanged. A session without a saved bookmark (quick connect, a
-  `freerdp://` link) gets the defaults. A change made from its bar lasts for that session only (kept in
-  `SessionBarSettings`, keyed by the session). A change from a bookmarked session's bar is saved under its
-  bookmark, with its other settings kept. Changing the mode in the dialog applies at once, so the remote
-  desktop may resize while it is open.
+  which is docked. Docked uses the top whatever edge is stored (`SessionBar.pickEdge`): in the device run
+  the docked bar read as a toolbar, and full screen covered the wish to move it. The code still docks at
+  any edge (strip, orientation, mouse band), untested on the device, if that is offered again. The bar's
+  dialog shows the edge choice only while overlay is selected; "RDP options" shows it as "Edge (overlay)".
+  A session without a saved bookmark (quick connect, a `freerdp://` link) gets the defaults. A change made
+  from its bar lasts for that session only (kept in `SessionBarSettings`, keyed by the session). A change
+  from a bookmarked session's bar is saved under its bookmark, with its other settings kept. Changing the
+  mode in the dialog applies at once, so the remote desktop may resize while it is open.
 - `freeRDPCore/.../captantan/SessionBarGestures.java` (new): sees every touch and mouse event of the
   window before its views do, by wrapping the window's `Window.Callback` (in front of AppCompat's own
   wrapper; installed once, in `onCreate` after `setContentView`). Everything is passed on unchanged
@@ -1521,7 +1522,7 @@ tries; what was dropped is listed at the end of this block, so it is not tried a
 - **Log** (tag `captantan.bar`, INFO), each line naming the window and the session:
   - `applied (shown|settings changed): w<n> s<n> "<title>": mode <m>, edge <e>, opacity <o> % (bookmark
     <id> | no saved bookmark)`;
-  - `layout: w<n> edge top [(docked)], layer WxH at x,y, keeps clear l t r b, buttons <n> dp` (when it
+  - `layout: w<n> edge <e> [(docked)], layer WxH at x,y, keeps clear l t r b, buttons <n> dp` (when it
     changes);
   - `docked strip: w<n> l t r b`;
   - `system bars: w<n> in the bar's colour|black, dark|light icons`;
@@ -1551,7 +1552,7 @@ tries; what was dropped is listed at the end of this block, so it is not tried a
   and `onSessionEnded`, rebuild on a night-mode change, `onDestroy`, and Back leaving full screen first in
   `onBack`), `SessionResizeController.java` (`getReservedInsets()`; `setReservedInsets` now used),
   `ConnectionPrefs.java` (three fields and getters), `res/xml/captantan_connection_options.xml` (the
-  category; `bar_edge` there is not shown).
+  category).
 - New resources: `res/layout/captantan_session_bar{,_settings}.xml`,
   `res/drawable/captantan_ic_{fullscreen,fullscreen_exit,zoom_reset}.xml` (the first two are Material
   icons, Apache-2.0; the zoom one is the fork's own drawing), strings in `captantan_strings.xml` (English

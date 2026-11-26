@@ -59,8 +59,8 @@ import com.freerdp.freerdpcore.presentation.SessionInputManager;
  * opacity, applied when the window shows a session ({@link #onShown}), so a switch to another
  * session in the same window takes that session's.
  * <ul>
- * <li>Overlay: the bar floats over the remote picture, centred on its edge, with the opacity. The
- * remote desktop keeps its size.</li>
+ * <li>Overlay: the bar floats over the remote picture, centred on its edge (any of the four),
+ * with the opacity. The remote desktop keeps its size.</li>
  * <li>Docked ({@link #docked}): outside full screen the bar is a toolbar
  * across its edge, like a browser's, in a strip the remote desktop does not cover
  * ({@link SessionResizeController#setReservedInsets}; the session activity pads the session view
@@ -116,7 +116,7 @@ public final class SessionBar
 	private SessionHost host;
 	private SessionBarSettings.Mode mode = SessionBarSettings.DEFAULT_MODE;
 	private SessionBarSettings.Edge edge = SessionBarSettings.DEFAULT_EDGE;
-	/** The edge as stored; saved unchanged while the bar is pinned to the top ({@link #load}). */
+	/** The edge as stored: overlay's. Docked always uses the top ({@link #pickEdge}). */
 	private SessionBarSettings.Edge storedEdge = SessionBarSettings.DEFAULT_EDGE;
 	private int opacity = SessionBarSettings.DEFAULT_OPACITY;
 	/** Docked mode in full screen: the bar is shown over the picture for a moment. */
@@ -426,13 +426,25 @@ public final class SessionBar
 	{
 		final ConnectionPrefs p = SessionBarSettings.of(activity, host);
 		mode = p.getBarMode();
-		// The top only for now: in the 4.1 device run the docked bar read as a toolbar, and full
-		// screen covered the wish to move it. The stored edge is kept (storedEdge, saved
-		// unchanged), and the code still places the bar at any edge; the choice is hidden (bar
-		// settings, "RDP options").
 		storedEdge = p.getBarEdge();
-		edge = SessionBarSettings.Edge.TOP;
+		pickEdge();
 		opacity = p.getBarOpacity();
+	}
+
+	/**
+	 * The edge in force: the stored one in overlay mode, the top when docked. In the 4.1 device run
+	 * the docked bar read as a toolbar and full screen covered the wish to move it; the code still
+	 * docks at any edge (strip, orientation, mouse band) if that is offered again.
+	 */
+	private void pickEdge()
+	{
+		final SessionBarSettings.Edge now =
+		    (mode == SessionBarSettings.Mode.DOCKED) ? SessionBarSettings.Edge.TOP : storedEdge;
+		if (now != edge)
+		{
+			edge = now;
+			buttonPx = -1;
+		}
 	}
 
 	private void apply(String why)
@@ -478,13 +490,18 @@ public final class SessionBar
 		                                                     null);
 		final MaterialButtonToggleGroup modes = v.findViewById(R.id.captantan_bar_settings_mode);
 		final MaterialButtonToggleGroup edges = v.findViewById(R.id.captantan_bar_settings_edge);
+		final View edgeLabel = v.findViewById(R.id.captantan_bar_settings_edge_label);
 		final Slider slider = v.findViewById(R.id.captantan_bar_settings_opacity);
 		final TextView note = v.findViewById(R.id.captantan_bar_settings_note);
 
 		modes.check(mode == SessionBarSettings.Mode.DOCKED
 		                ? R.id.captantan_bar_mode_docked
 		                : R.id.captantan_bar_mode_overlay);
-		edges.check(edgeButton(edge));
+		edges.check(edgeButton(storedEdge));
+		// the edge is overlay's: docked is always at the top
+		final int edgeShown = (mode == SessionBarSettings.Mode.OVERLAY) ? View.VISIBLE : View.GONE;
+		edges.setVisibility(edgeShown);
+		edgeLabel.setVisibility(edgeShown);
 		slider.setValue(Math.round(opacity / 5f) * 5f);
 		note.setText(SessionBarSettings.bookmarkIdOf(forHost) > 0
 		                 ? R.string.captantan_bar_settings_saved
@@ -497,6 +514,10 @@ public final class SessionBar
 			                                               : SessionBarSettings.Mode.OVERLAY;
 			// While the dialog is open the bar stays shown, so its place can be seen.
 			revealed = (mode == SessionBarSettings.Mode.DOCKED);
+			final int shown = (mode == SessionBarSettings.Mode.OVERLAY) ? View.VISIBLE : View.GONE;
+			edges.setVisibility(shown);
+			edgeLabel.setVisibility(shown);
+			pickEdge();
 			handler.removeCallbacks(hideOnTimeout);
 			showForState();
 			layout();
@@ -504,9 +525,8 @@ public final class SessionBar
 		edges.addOnButtonCheckedListener((group, id, checked) -> {
 			if (!checked)
 				return;
-			edge = edgeFor(id);
-			storedEdge = edge;
-			buttonPx = -1;
+			storedEdge = edgeFor(id);
+			pickEdge();
 			layout();
 		});
 		slider.addOnChangeListener((s, value, fromUser) -> {
