@@ -1148,8 +1148,8 @@ shown in another window all take the same path. No reconnect, and the window is 
   - left, right, bottom: the navigation bar (none while it is hidden by the setting) and, with "fit rounded
     corners", the screen's rounded corners;
   - the reserved strip: `SessionResizeController.setReservedInsets(left, top, right, bottom)`, pixels per
-    edge. The docked session bar (4.1) sets it to its strip outside full screen; a change resizes the
-    session like any other change of the viewport. The controller only decides the size: the bar lays
+    edge. The docked session bar (4.1) sets it to its strip outside full screen, and in full screen
+    when it is kept there (4.2); a change resizes the session like any other change of the viewport. The controller only decides the size: the bar lays
     itself out, and the session activity pads the session view by the strip (`getReservedInsets()`).
     `getViewportWidth()` / `getViewportHeight()` say what the viewport is now.
     `SessionWindow.getResizer()` reaches it.
@@ -1401,10 +1401,10 @@ hidden and overwritten at connect.
 - **For later packages.** Read the scale with `RemoteScale.desktopPercent(context, bookmark, densityDpi)`
   (0 for a link) and `RemoteScale.deviceFor(desktop)`; the setting with
   `ConnectionPrefs.load(context, id).getRemoteScale()`. To add a value: a new enum constant with a new,
-  permanent stored name, and the same in `captantan_remote_scale_entries` / `_values`. A quick scale
-  switch in the session bar (4.1/4.2) changes `REMOTE_SCALE` and then needs the window to ask again:
-  `SessionResizeController` asks on its own only at a size or density change, attach or start, so 4.x
-  adds a public "ask again" (its `restartWait`). Per-window scale or a different scale per display (6.x)
+  permanent stored name, and the same in `captantan_remote_scale_entries` / `_values` (the session
+  bar's scale menu, 4.2, lists them from there). The quick scale switch (4.2) changes `REMOTE_SCALE`
+  and then calls `SessionResizeController.askAgain`, since the controller asks on its own only at a
+  size or density change, attach or start. Per-window scale or a different scale per display (6.x)
   would go into `desktopPercent`, which already takes the density.
 
 **Bookmark editor: masked passwords, Save keeps changes** (found while testing 3.3, 2026-11-25)
@@ -1443,8 +1443,8 @@ tries; what was dropped is listed at the end of this block, so it is not tried a
   - left (input): Keyboard (upstream's `toggleKeyboard`: the system keyboard with the key bar), Input
     mode (upstream's touch pointer toggle until package 4.3; now a menu: direct touch, touch pointer,
     trackpad, see "Trackpad mode" below);
-  - middle: Reset zoom (zoom 1:1 and scroll to the top left, the touch pointer's own reset), Session bar
-    settings;
+  - middle: Reset zoom (zoom 1:1 and scroll to the top left, the touch pointer's own reset), Remote
+    scale (a menu, package 4.2 below), Session bar settings;
   - right: Sessions (`SessionSwitcher.open`), Full screen, Disconnect (asks first, as the switcher does).
 
   Upstream's toolbar had two actions (touch pointer, keyboard) and 2.2 had added the switcher to it; all
@@ -1452,14 +1452,15 @@ tries; what was dropped is listed at the end of this block, so it is not tried a
   `colorSurfaceContainerHigh`, no fixed colours. Docked, the two gaps (`Space`s) share the spare width,
   and the gap beside the smaller outer group also takes the width of the buttons it lacks, so the middle
   group is centred (`SessionBar.evenOutGaps`). Buttons shrink from 44 dp to 32 dp when the bar is too
-  short for all seven (a small desktop window, split screen).
+  short for all of them (a small desktop window, split screen).
 - **Docked mode** (the default). Outside full screen the bar is
   a toolbar across the top of the window, like a browser's: full width, flat, opaque. The remote desktop
   never lies under it. The bar's strip is passed to `SessionResizeController.setReservedInsets`, so the
   remote desktop is resized to the space below it. Upstream's insets listener pads the session view by the
   same strip. The status bar and the navigation bar take the bar's colour: the session's root view takes
   it, and the session view keeps black only inside its padding. Their icons turn dark when that colour is
-  light. In full screen the bar and its strip are gone, and the remote desktop gets the whole screen.
+  light. In full screen the bar and its strip are gone, and the remote desktop gets the whole screen,
+  unless "Keep the bar in full screen" is on (package 4.2 below).
 - **Overlay mode:** the bar floats centred at its edge (top, bottom, left or right; left and right make
   it a column), at the opacity, over the remote picture, in full screen too. The remote desktop keeps its
   size, and the system bars stay black.
@@ -1485,8 +1486,8 @@ tries; what was dropped is listed at the end of this block, so it is not tried a
   kept from the session, so hiding the bar never clicks on the remote side), or 5 s after it was last
   touched or hovered.
 - `freeRDPCore/.../captantan/SessionBarSettings.java` (new): the enums and the per-connection values.
-  Three `ConnectionPrefs` fields, on the "RDP options" screen in a "Session bar" category and in the
-  bar's own settings dialog:
+  Three `ConnectionPrefs` fields (a fourth, `bar_in_fullscreen`, came with 4.2), on the "RDP options"
+  screen in a "Session bar" category and in the bar's own settings dialog:
 
   | Key | Values (stored names) | Default | Notes |
   |---|---|---|---|
@@ -1521,18 +1522,18 @@ tries; what was dropped is listed at the end of this block, so it is not tried a
   Letting go of a session hides the bar, clears its strip and closes its dialog. Light or dark changing
   rebuilds the bar with the theme's colours, and the system bars follow (`SessionWindow.onUiModeChanged`).
 - **Log** (tag `captantan.bar`, INFO), each line naming the window and the session:
-  - `applied (shown|settings changed): w<n> s<n> "<title>": mode <m>, edge <e>, opacity <o> % (bookmark
-    <id> | no saved bookmark)`;
+  - `applied (shown|settings changed): w<n> s<n> "<title>": mode <m>, edge <e>, opacity <o> %, in full
+    screen kept|hidden (bookmark <id> | no saved bookmark)`;
   - `layout: w<n> edge <e> [(docked)], layer WxH at x,y, keeps clear l t r b, buttons <n> dp` (when it
     changes);
   - `docked strip: w<n> l t r b`;
-  - `system bars: w<n> in the bar's colour|black, dark|light icons`;
+  - `system bars: w<n> in the bar's colour|black, dark|light icons[ (navigation bar dark|light)]`;
   - `system bars (insets): w<n> status bar visible|hidden <now>/<size> px, navigation bar ...`,
     `system bars shown|hidden in w<n> [(full screen)]`, `system bars put away in w<n> (timeout 5 s | ...)`;
   - `full screen on|off in w<n> (button | Back; ...)`;
   - `reveal: ... (mouse at the top edge | <caller's cause>)`, `hide: ... (after <button> | tap outside |
     click outside | timeout 5 s | after settings | the window let go of ...)`;
-  - `button: ... <name>`, `settings: ...`.
+  - `button: ... <name>`, `settings: ...`, `remote scale: ...` (4.2).
 - Upstream files edited (each marked `captantan fork`):
   - `res/layout/session.xml`: `android:visibility="gone"` on the `floating_toolbar` include, and the
     layer `captantan_session_bar_container` (a `FrameLayout`, `match_parent`) after it, last child, so on
@@ -1580,9 +1581,8 @@ tries; what was dropped is listed at the end of this block, so it is not tried a
   or `window.getBar().reveal(cause)` for a given `SessionWindow`. It shows a docked-mode bar in full
   screen for a moment, does nothing when the bar is shown anyway, and logs the cause. `hide(cause)`,
   `isShown()` and `leaveFullScreen(cause)` are public too.
-- **4.2** has less left: the docked strip is in. What remains is whether to offer "docked in full screen
-  too" (a new stored name of its own), and the quick remote-scale switch (needs a public "ask
-  again" on `SessionResizeController`, see the 3.3 block).
+- **4.2** is done: "Keep the bar in full screen" and the remote scale menu, see "Session bar: kept in
+  full screen, quick remote scale" below.
 - **Not in this package**, written down for later:
   - zooming out below the fit (7.x);
   - a key combination (5.3);
@@ -1668,7 +1668,7 @@ Windows App on the phone, where small remote targets are hard to hit by direct t
   (`captantan_ic_touch_direct`, upstream's `ic_touch_pointer`, `captantan_ic_trackpad`; the two new ones
   are the fork's own drawings). A menu rather than a cycling button, so going from direct touch to
   trackpad never passes through the touch pointer; rather than an eighth button, so the bar keeps its
-  size and one control stands for one either-or choice. A choice from the menu is saved under the
+  size and one control stands for one either-or choice (4.2's remote scale menu became the eighth). A choice from the menu is saved under the
   session's bookmark; a session without a saved bookmark keeps it for that session only
   (`SessionBarSettings.save` with a `Consumer`, the same per-session store the bar's settings use). The
   touch pointer is upstream's puck (`SessionInputManager.toggleTouchPointer`): its own close button turns
@@ -1747,6 +1747,111 @@ Windows App on the phone, where small remote targets are hard to hit by direct t
   ignores), drag lock (lifting the finger during a drag and going on), three-finger gestures, and RDP
   touch input (the multitouch channel, rdpei), so that the host handles touch gestures itself as
   Windows App does.
+
+**Session bar: kept in full screen, quick remote scale** (package 4.2)
+
+The two things left over from the session bar's docked mode (4.1): a docked bar that stays in full
+screen, and a button that changes the remote scale (3.3) during a session.
+
+- **Keep the bar in full screen** (`bar_in_fullscreen`, off by default; docked mode only). On, full
+  screen hides the system bars only: the docked strip stays at the top, opaque, and the remote desktop
+  is sized to the rest, exactly as outside full screen (`SessionBar.docked()` is true in full screen
+  too). Off, full screen is 4.1's. In detail:
+  - **Cutout and corners.** The bar's buttons keep clear of the camera cutout and of the screen's
+    rounded top corners; the strip paints behind both in the bar's colour. In portrait the bar sits
+    below the cutout, and the strip passed to `setReservedInsets` is the bar's thickness plus the
+    cutout (the session view is not padded for the cutout in full screen), so the picture starts
+    below the bar. In landscape the cutout is beside the bar, which starts after it. The corners are
+    read from `WindowInsets.getRoundedCorner` (Android 12 and later): where a top corner reaches down
+    to the bar's top row, that end of the bar is pushed in (`SessionBar.keepClearOfTopCorners`). The
+    remote desktop still draws under a cutout beside it, as in 4.1's full screen: the "safe area or
+    true full screen" setting is still for later.
+  - **System bars a swipe pulls in** lie over the bar (and the picture) until they are put away after
+    5 s, as in 4.1; the bar does not move for them, so the remote desktop is not resized twice per
+    swipe. For a bar kept in full screen the bar places itself from the cutout and caption insets
+    only. The status bar then lies over the strip and gets dark icons when the bar's colour is light;
+    the navigation bar lies over the picture and keeps light icons (`SessionBar.lightNavigationBar`).
+  - **Back** still leaves full screen first. A bar kept in full screen is never "revealed": no 5 s
+    timeout, no hide after a button, no mouse dwell (it is shown already).
+  - **Changing it during a session** (the bar's settings dialog, a switch under the mode, shown for
+    docked) takes effect at once: in full screen the strip comes or goes and the remote desktop gets
+    one layout request for the new size after the usual 400 ms. On "RDP options" it is a switch in
+    the "Session bar" category, enabled only while the mode is docked.
+  - **Also fixed by it** (with the option off too): with only "Hide Status Bar" on (not full screen),
+    the docked bar sat below the cutout but its strip did not include the cutout, so it covered that
+    many pixels of the picture. The strip now always reaches down to the bar's bottom
+    (`thick + max(0, bar top - what the session view is padded for at the top)`, the latter from
+    `SessionResizeController.getSystemInsets()`), which is the bar's thickness whenever the bar sits
+    right below what the session view is padded for, so nothing changes in the usual cases.
+- **Remote scale menu** (`freeRDPCore/.../captantan/RemoteScaleSwitch.java`, new): a bar button in the
+  middle group (reset zoom, remote scale, bar settings) with a Material icon ("format_size",
+  Apache-2.0, `captantan_ic_remote_scale`). It opens an AppCompat `PopupMenu`, like the input mode
+  menu: "Automatic (175 %)" with what Automatic gives in this window, then the steps 100 % to 500 % from
+  `captantan_remote_scale_entries` / `_values`, and "Custom (160 %)" only while the setting is Custom
+  (its percentage is set in "RDP options"). The value in force is ticked; the button's tooltip and
+  content description say the percent in force.
+  - A choice is saved as the bookmark's `remote_scale` (its other settings kept), so it is there after
+    a reconnect and in the bookmark editor, and the window asks the server again at once:
+    `SessionResizeController.askAgain(cause)` (new, public) restarts the usual 400 ms settle wait,
+    then one request goes out with the viewport's size and the new scale. Nothing is skipped as "same
+    size": every request carries the scale, and the native side skips a layout only when its size
+    *and* scale equal the last one sent (or the session's own). Both hosts apply a scale-only layout
+    without a reconnect (3.3).
+  - **Quick connect** (no saved bookmark): the choice applies to that session only, kept in
+    `SessionBarSettings`' per-session store like the bar's other settings and the input mode. For
+    that, the controller reads the scale for the session, not the bookmark
+    (`RemoteScale.desktopPercent(context, SessionHost, dpi)`, new). The native side keeps the scale
+    in the session's settings (3.3), so the session's own reconnects keep it too.
+  - **A `freerdp://` link** has the scale of its own arguments: the button is shown but disabled, so
+    the bar does not change shape between sessions in one window.
+- **The bar is fuller.** Eight buttons now. Docked, the gaps give the smaller outer group (input, two
+  buttons) the width of the button it lacks against the right group (three), so a full-size bar needs
+  9 x 44 dp + 2 x 4 dp + 2 x 2 dp = 408 dp (7 buttons: 364 dp). The phone's narrowest screen, the
+  cover screen in portrait, is 1080 px at 390 dpi = 443 dp, so the buttons stay at 44 dp there. Below
+  408 dp (split screen, a small desktop window) they shrink towards 4.1's 32 dp floor as before, only
+  sooner. If that is too small in use, the proposal is to fold reset zoom and remote scale into one
+  "view" menu (7 buttons again, 364 dp) rather than shrink further.
+- **Settings** (`ConnectionPrefs`, new key):
+
+  | Key | Values | Default | Notes |
+  |---|---|---|---|
+  | `bar_in_fullscreen` | boolean | `false` | docked only; in the bar's dialog and on "RDP options" |
+
+  `ConnectionPrefs` got a `BoolField` for it (stored with `putBoolean`; a value of another type reads
+  as the default), and the "RDP options" data store (`ConnectionOptions.Draft`) reads and writes
+  booleans, so a `SwitchPreferenceCompat` edits any `BoolField` by its key. The remote scale menu writes
+  the existing `remote_scale`.
+- **Log** (tag `captantan.bar`): `applied` and `settings` lines say `in full screen kept|hidden`;
+  `remote scale: w<n> s<n> "<title>": <stored name> (<percent> % in this window; saved for bookmark
+  <id> | this session only)`; the `system bars` line names the navigation bar when its icons differ.
+  Tag `captantan.resize`: `ask again w<n>: s<n> "<title>" (remote scale <name> (<percent> %) from the
+  session bar)`, then the usual `request #n` line with `scale <desktop>/<device> (<name>)`.
+- **Upstream files edited** (each marked `captantan fork`):
+  - `SessionActivity.java`, in `hideSystemBars`: the navigation bar's icon appearance comes from
+    `window.getBar().lightNavigationBar()` (was `lightSystemBars()` for both bars; an edit of 4.1's
+    marked line).
+- Ours, changed: `SessionBar.java` (`docked()`, the setting, the dialog switch, the scale button,
+  `showScale`, the layout's insets and corners and the strip's height, `lightNavigationBar`),
+  `SessionBarSettings.java` (`save` takes the new setting), `SessionResizeController.java`
+  (`askAgain`, `getSystemInsets`, the scale read for the session), `RemoteScale.java` (the
+  `SessionHost` overloads, `percent()`), `ConnectionPrefs.java` (`BoolField`, the field and its getter),
+  `ConnectionOptions.java` (booleans in the data store), `ConnectionOptionsFragment.java` (the switch
+  enabled for docked), `TouchModeSwitch.java` (a comment), `res/layout/captantan_session_bar{,_settings}.xml`,
+  `res/xml/captantan_connection_options.xml`, `captantan_strings.xml` (the remote scale and bar notes say
+  what the new controls do).
+- **Device runs:** not run yet.
+- **For later packages.**
+  - **A bar button with a menu:** copy `RemoteScaleSwitch` or `TouchModeSwitch` (a `PopupMenu`
+    anchored on the button, closed by the bar in `onShown`/`onReleased`/`rebuild`/`onDestroy`, the
+    choice saved with `SessionBarSettings.save(context, host, Consumer)`, then `hide("after ...")`).
+  - **Asking the server again** for anything that changes what a request carries but not the
+    viewport: `window.getResizer().askAgain(cause)`.
+  - **Safe area / true full screen** (deferred): the bar already keeps clear of the cutout; the
+    setting would subtract the cutout from the viewport (`setSystemInsets`) and pad the session view
+    by it, and then a kept bar's strip needs no cutout of its own (the formula above gives that by
+    itself, since the session view would be padded for it).
+  - **A bar kept in full screen at another edge** (the code docks at any edge, untested): the corner
+    and cutout handling here is for the top only.
 
 ## Package and version scheme
 
@@ -1988,7 +2093,8 @@ compile check runs on the merge.
        `windowInsets`). If upstream starts using `Window.setCallback` or overrides `dispatchTouchEvent` /
        `dispatchGenericMotionEvent` in the activity, check that `SessionBarGestures` still sees events
        first (it wraps whatever callback is set when the window is built). In `hideSystemBars`, keep the
-       icon appearance from `window.getBar().lightSystemBars()` and `BEHAVIOR_DEFAULT` from Android 12.
+       icon appearance from `window.getBar().lightSystemBars()` (status bar) and `lightNavigationBar()`
+       (navigation bar, package 4.2) and `BEHAVIOR_DEFAULT` from Android 12.
        In `onWindowInsetsChanged`, keep adding the reserved strip (`getReservedInsets()`) to the scroll
        view's padding: without it the docked bar covers the top of the picture. If upstream gives the
        root view or the scroll view a background of its own, check the docked colours
@@ -2079,7 +2185,10 @@ The workflow `.github/workflows/captantan-android.yml` runs on pull requests int
   `FOREGROUND_SERVICE_CAMERA`, `POST_NOTIFICATIONS`, `RECORD_AUDIO` and `CAMERA`, and
   `SessionOpenActivity`; the package 4.1 classes (`SessionBar`, `SessionBarGestures`, `SessionBarSettings`
   and its `Mode` and `Edge`), the bar's layer id in the session layout, its two layouts and new icons, and
-  the strings `bar_mode`, `bar_edge`, `bar_opacity` and `captantan.bar` in the dex;
+  the strings `bar_mode`, `bar_edge`, `bar_opacity` and `captantan.bar` in the dex; package 4.2's
+  `RemoteScaleSwitch` and `ConnectionPrefs$BoolField`, the scale button's and the settings switch's ids,
+  the scale icon, its strings and the scale values, and the strings `bar_in_fullscreen`, `askAgain`,
+  `ask again`, `remote scale: ` and `in full screen ` in the dex;
 - test build: package `dev.captantan.freerdp.debug`, label `RDP debug`, the same version, signed with the
   committed public key, and byte-identical native libraries to the release APK.
 

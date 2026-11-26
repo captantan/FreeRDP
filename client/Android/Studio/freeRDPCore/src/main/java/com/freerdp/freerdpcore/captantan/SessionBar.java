@@ -26,6 +26,7 @@ import android.widget.LinearLayout;
 import android.widget.Space;
 import android.widget.TextView;
 
+import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AlertDialog;
 import androidx.core.graphics.ColorUtils;
 import androidx.core.graphics.Insets;
@@ -1195,6 +1196,7 @@ public final class SessionBar
 	 * (window coordinates): 0 keeps clear of the whole corner; -1 if the corner does not reach down
 	 * to that row.
 	 */
+	@RequiresApi(Build.VERSION_CODES.S)
 	private static int cornerReach(RoundedCorner corner, int y)
 	{
 		final int r = corner.getRadius();

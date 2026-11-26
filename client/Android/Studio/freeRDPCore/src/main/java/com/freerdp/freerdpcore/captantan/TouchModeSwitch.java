@@ -24,8 +24,8 @@ import com.freerdp.freerdpcore.presentation.TouchPointerView;
  * <p>The session bar's input mode button (it was upstream's touch pointer toggle) opens a small
  * menu with the three modes, the current one ticked; its icon shows the current mode. A menu and
  * not a cycling button, so that going from direct touch to trackpad never passes through the
- * touch pointer, and not a third button, so the bar keeps its seven buttons and one button stands
- * for one either-or choice.
+ * touch pointer, and not a third button, so the bar keeps its size and one button stands for one
+ * either-or choice.
  *
  * <p>The mode is a per-connection setting ({@code touch_mode}), also on the "RDP options" screen.
  * A choice from the menu is saved under the session's bookmark; a session without a saved bookmark
