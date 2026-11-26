@@ -197,13 +197,18 @@ public final class ConnectionPrefs
 	    new IntField("pointer_speed", TouchMode.DEFAULT_POINTER_SPEED, TouchMode.MIN_POINTER_SPEED,
 	                 TouchMode.MAX_POINTER_SPEED);
 
-	/** Which way two fingers scroll in trackpad mode (roadmap 4.3). */
+	/** Which way touch scrolls: two fingers in trackpad mode, one in direct touch (roadmap 4.3). */
 	public static final EnumField<TouchMode.Scroll> TOUCH_SCROLL =
 	    new EnumField<>("touch_scroll", TouchMode.Scroll.DEFAULT, TouchMode.Scroll.values());
 
+	/** What a quick one-finger drag does in direct touch (roadmap 4.3). See DirectTouchDrag. */
+	public static final EnumField<TouchMode.Drag> TOUCH_DRAG =
+	    new EnumField<>("touch_drag", TouchMode.Drag.DEFAULT, TouchMode.Drag.values());
+
 	private static final Field<?>[] FIELDS = { GRAPHICS_MODE, REMOTE_SCALE, REMOTE_SCALE_CUSTOM,
 		                                       BAR_MODE,      BAR_EDGE,     BAR_OPACITY,
-		                                       TOUCH_MODE,    POINTER_SPEED, TOUCH_SCROLL };
+		                                       TOUCH_MODE,    POINTER_SPEED, TOUCH_SCROLL,
+		                                       TOUCH_DRAG };
 
 	// ---------------------------------------------------------------------------------------------
 
@@ -324,6 +329,11 @@ public final class ConnectionPrefs
 	public TouchMode.Scroll getTouchScroll()
 	{
 		return get(TOUCH_SCROLL);
+	}
+
+	public TouchMode.Drag getTouchDrag()
+	{
+		return get(TOUCH_DRAG);
 	}
 
 	// ---------------------------------------------------------------------------------------------

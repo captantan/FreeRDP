@@ -77,7 +77,7 @@ final class TouchModeSwitch
 		host = shown;
 		trackpad.onShown(shown);
 		final ConnectionPrefs p = SessionBarSettings.of(activity, shown);
-		trackpad.setSettings(p.getPointerSpeed(), p.getTouchScroll());
+		trackpad.setSettings(p.getPointerSpeed(), p.getTouchScroll(), p.getTouchDrag());
 		apply(p.getTouchMode(), "shown");
 	}
 
@@ -138,7 +138,10 @@ final class TouchModeSwitch
 		                             trackpad.getSpeedPercent() + " %, scroll " +
 		                             trackpad.getScroll().storedName() +
 		                             (mode == TouchMode.TRACKPAD ? ", " + trackpad.describePointer()
-		                                                         : ""));
+		                                                         : "") +
+		                             (mode == TouchMode.DIRECT ? ", one-finger drag " +
+		                                                             trackpad.getDrag().storedName()
+		                                                       : ""));
 	}
 
 	private void refreshIcon()

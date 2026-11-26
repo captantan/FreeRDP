@@ -317,15 +317,15 @@ jobs:
           done
           echo "session bar: classes, layer, layouts, icons and per-connection keys present"
           # Trackpad mode (roadmap 4.3): the gestures, the drawn pointer, the mode switch, the
-          # modes, the view tag SessionView finds it by, the icons, and the per-connection keys
+          # modes, direct touch's one-finger drag scroll, the view tag SessionView finds it by, the icons, and the per-connection keys
           # and stored names the "RDP options" screen edits by name (permanent once released).
-          for c in TrackpadInput TrackpadPointer TouchModeSwitch TouchMode 'TouchMode$Scroll'; do
+          for c in TrackpadInput TrackpadPointer TouchModeSwitch TouchMode 'TouchMode$Scroll' 'TouchMode$Drag' DirectTouchDrag; do
             grep -qaF "Lcom/freerdp/freerdpcore/captantan/$c;" "$RUNNER_TEMP/classes.dex.all" || fail "the APK lacks the class captantan/$c"
           done
-          for r in id/captantan_tag_trackpad drawable/captantan_ic_trackpad drawable/captantan_ic_touch_direct drawable/ic_touch_pointer array/captantan_touch_mode_values array/captantan_touch_scroll_values; do
+          for r in id/captantan_tag_trackpad drawable/captantan_ic_trackpad drawable/captantan_ic_touch_direct drawable/ic_touch_pointer array/captantan_touch_mode_values array/captantan_touch_scroll_values array/captantan_touch_drag_values; do
             grep -qF "$r" "$RUNNER_TEMP/resources.txt" || fail "the APK lacks the resource $r"
           done
-          for k in touch_mode pointer_speed touch_scroll touch_pointer trackpad natural traditional captantan.trackpad; do
+          for k in touch_mode pointer_speed touch_scroll touch_drag touch_pointer trackpad natural traditional captantan.trackpad; do
             grep -qaF "$k" "$RUNNER_TEMP/classes.dex.all" || fail "the APK lacks the string '$k' of trackpad mode"
           done
           echo "trackpad mode: classes, view tag, icons, per-connection keys and stored names present"

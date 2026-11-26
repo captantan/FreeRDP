@@ -1643,6 +1643,19 @@ Windows App on the phone, where small remote targets are hard to hit by direct t
   turned on or the session connects. When the remote desktop is resized it is clamped again. On a zoomed
   session the view scrolls to keep the pointer 32 dp inside it (`keepInView`); a one-finger drag never
   pans in this mode (the gesture tells the scroll view not to intercept it).
+- **Direct touch: a one-finger drag scrolls** (`captantan/DirectTouchDrag.java`, new; asked for in the
+  tablet run: on a Windows touchscreen one finger scrolls, and upstream needed two). Upstream's direct
+  touch does nothing with a quick one-finger drag when the session fits the window; a finger held still
+  for 200 ms (upstream's long press) and then dragged is a mouse drag. With `touch_drag` = `scroll`
+  (the default) a finger that travels beyond the touch slop before that long press scrolls what is under
+  it instead: the remote pointer moves to where the finger went down (Windows scrolls the window under the
+  pointer), the travel becomes wheel notches as in trackpad mode's two-finger scroll (40 dp each, axis
+  lock, `touch_scroll` direction), and upstream's detectors get a cancel so no tap or long press follows.
+  Everything else stays upstream's: taps, hold-then-drag, two fingers (vertical wheel, pinch zoom), and a
+  zoomed-in session, whose drags pan the view (ScrollView2D intercepts them; `DirectTouchDrag` leaves a
+  session larger than its window alone). A second finger landing during the scroll ends it and the rest
+  of that gesture does nothing. It is reached through `TrackpadInput`'s hook while trackpad mode is off,
+  so it needs no upstream edit of its own, and it acts only while the mode in force is direct touch.
 - **A mouse, a touchpad, a stylus** are not affected. Mouse and touchpad events leave `SessionView`'s
   touch handling before the hook (upstream's mouse branch). A stylus is left to upstream's handling (only
   `TOOL_TYPE_FINGER` gestures are taken). `SessionBarGestures` gives `TrackpadInput` every mouse and
@@ -1666,7 +1679,8 @@ Windows App on the phone, where small remote targets are hard to hit by direct t
   |---|---|---|---|
   | `touch_mode` | `direct`, `touch_pointer`, `trackpad` | `direct` | also from the bar's input mode menu |
   | `pointer_speed` | 25 to 300 (percent) | 100 | trackpad mode; multiplies the gain curve |
-  | `touch_scroll` | `natural`, `traditional` | `natural` | trackpad mode's two-finger scroll |
+  | `touch_scroll` | `natural`, `traditional` | `natural` | trackpad's two-finger and direct touch's one-finger scroll |
+  | `touch_drag` | `scroll`, `off` | `scroll` | direct touch: a quick one-finger drag scrolls, or does nothing (upstream) |
 
   The trackpad's wheel direction is its own setting: upstream's app-wide "Invert Scrolling" (which is on
   by default and is what makes a mouse wheel's axis come out right) is not applied to it.
@@ -1683,12 +1697,14 @@ Windows App on the phone, where small remote targets are hard to hit by direct t
 - **Log** (tag `captantan.trackpad`, INFO), each line naming the window:
   - `mode <direct|touch_pointer|trackpad>: w<n> s<n> "<title>" (shown | menu; saved for bookmark <id> |
     menu; this session only): pointer speed <p> %, scroll <natural|traditional>[, pointer at x,y of WxH
-    (default arrow | host shape WxH | hidden by the host)]`;
+    (default arrow | host shape WxH | hidden by the host)][, one-finger drag <scroll|off>]`;
   - one line per gesture: `tap: w<n> left click at x,y`, `double tap: ...`, `two-finger tap: w<n> right
     click at x,y`, `drag (tap, then drag | tap, then hold): w<n> left button down at x,y`, `drag end
     (lifted | gesture ended): ...`, `scroll: w<n> vertical|horizontal|both axes, natural at x,y`,
     `pinch zoom: w<n> from <zoom>`, and at the end of a move `move: w<n> to x,y, finger <d> dp, peak <v>
-    dp/s (gain <g>, zoom <z>)`. No line per move event.
+    dp/s (gain <g>, zoom <z>)`, and in direct touch `drag scroll (direct touch): w<n> s<n> "<title>", <d>
+    dp, notches for the finger down <n> right <n> (<natural|traditional>), <finger up | a second finger |
+    cancelled>`. No line per move event.
 - **Upstream files edited** (each marked `captantan fork`):
   - `SessionView.java`, three places: in `onTouchEvent`, after the mouse branch and before upstream's
     detectors, `if (TrackpadInput.onTouchEvent(this, event)) return true;`; in `onDraw`, after the
@@ -1712,7 +1728,7 @@ Windows App on the phone, where small remote targets are hard to hit by direct t
   `bind`, `unbind`, `onSurfaceChanged`, `onPointerChanged`), `SessionHost.java` (`showPointerOn`, and the
   window told of each pointer change), `SessionBar.java` (the button's binding, `showTouchMode`,
   `onMouseAt`), `SessionBarGestures.java` (mouse positions to the trackpad), `SessionBarSettings.java`
-  (`save` with a `Consumer`), `ConnectionPrefs.java` (three fields and getters),
+  (`save` with a `Consumer`), `ConnectionPrefs.java` (four fields and getters),
   `res/xml/captantan_connection_options.xml` (the category), `captantan_ids.xml`, `captantan_strings.xml`.
 - **Not in this package**, written down for later: inertia (a fling after a two-finger scroll), smooth
   (sub-notch) wheel deltas, a server-side pointer move (`Pointer_SetPosition`, which `android_freerdp.c`

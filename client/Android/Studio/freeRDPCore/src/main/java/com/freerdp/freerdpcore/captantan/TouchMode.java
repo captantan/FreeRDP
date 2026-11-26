@@ -66,6 +66,33 @@ public enum TouchMode implements ConnectionPrefs.Stored
 		}
 	}
 
+	/**
+	 * What a quick one-finger drag does in direct touch (key {@code touch_drag}). Holding the finger
+	 * still for a moment and then dragging is a mouse drag (select, move a window) either way, and a
+	 * zoomed-in session pans either way. Stored names are permanent.
+	 */
+	public enum Drag implements ConnectionPrefs.Stored
+	{
+		/** Scrolls what is under the finger (mouse wheel), as on a Windows touchscreen. */
+		SCROLL("scroll"),
+		/** Nothing, as upstream. */
+		OFF("off");
+
+		public static final Drag DEFAULT = SCROLL;
+
+		private final String stored;
+
+		Drag(String stored)
+		{
+			this.stored = stored;
+		}
+
+		@Override public String storedName()
+		{
+			return stored;
+		}
+	}
+
 	/** The pointer speed in percent of the default curve's (key {@code pointer_speed}). */
 	public static final int DEFAULT_POINTER_SPEED = 100;
 	public static final int MIN_POINTER_SPEED = 25;

@@ -105,6 +105,13 @@
             android:entryValues="@array/captantan_touch_scroll_values"
             android:defaultValue="natural"
             app:useSimpleSummaryProvider="true" />
+        <ListPreference
+            android:key="touch_drag"
+            android:title="@string/captantan_touch_drag"
+            android:entries="@array/captantan_touch_drag_entries"
+            android:entryValues="@array/captantan_touch_drag_values"
+            android:defaultValue="scroll"
+            app:useSimpleSummaryProvider="true" />
         <Preference
             android:selectable="false"
             android:persistent="false"

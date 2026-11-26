@@ -121,6 +121,7 @@ public final class TrackpadInput
 	private final int slop;
 	private final Handler handler = new Handler(Looper.getMainLooper());
 	private final TrackpadPointer pointer;
+	private final DirectTouchDrag directDrag;
 	private final Map<SessionHost, float[]> positions = new WeakHashMap<>();
 	private final int[] location = new int[2];
 	private final Rect visible = new Rect();
@@ -173,13 +174,18 @@ public final class TrackpadInput
 		this.density = context.getResources().getDisplayMetrics().density;
 		this.slop = ViewConfiguration.get(context).getScaledTouchSlop();
 		this.pointer = new TrackpadPointer(density);
+		this.directDrag = new DirectTouchDrag(this, view, scrollView, density, slop);
 		view.setTag(R.id.captantan_tag_trackpad, this);
 	}
 
 	// ****************************************************************************
 	// The two hooks in SessionView (each one marked line)
 
-	/** From SessionView.onTouchEvent, for every event that is not a mouse's. True if taken. */
+	/**
+	 * From SessionView.onTouchEvent, for every event that is not a mouse's. True if taken. While
+	 * trackpad mode is off, direct touch's one-finger drag scroll ({@link DirectTouchDrag}) is
+	 * reached through here too.
+	 */
 	public static boolean onTouchEvent(View sessionView, MotionEvent ev)
 	{
 		final Object t = sessionView.getTag(R.id.captantan_tag_trackpad);
@@ -202,6 +208,7 @@ public final class TrackpadInput
 		if (this.on == on)
 			return;
 		endGesture();
+		directDrag.reset();
 		this.on = on;
 		if (on)
 		{
@@ -217,10 +224,11 @@ public final class TrackpadInput
 		return on;
 	}
 
-	void setSettings(int speedPercent, TouchMode.Scroll scroll)
+	void setSettings(int speedPercent, TouchMode.Scroll scroll, TouchMode.Drag drag)
 	{
 		this.speedPercent = speedPercent;
 		this.scroll = scroll;
+		directDrag.setSetting(drag);
 	}
 
 	int getSpeedPercent()
@@ -231,6 +239,11 @@ public final class TrackpadInput
 	TouchMode.Scroll getScroll()
 	{
 		return scroll;
+	}
+
+	TouchMode.Drag getDrag()
+	{
+		return directDrag.getSetting();
 	}
 
 	/** Where the pointer is, for the log. */
@@ -247,6 +260,7 @@ public final class TrackpadInput
 	void onShown(SessionHost shown)
 	{
 		endGesture();
+		directDrag.reset();
 		keepPosition();
 		host = shown;
 		instance = 0;
@@ -343,7 +357,8 @@ public final class TrackpadInput
 			// the pointer starts where the user last touched (direct touch clicks there)
 			if (action == MotionEvent.ACTION_UP && ev.getToolType(0) == MotionEvent.TOOL_TYPE_FINGER)
 				noteTouch(ev.getX(), ev.getY());
-			return false;
+			final TouchModeSwitch modes = window.getTouchModes();
+			return directDrag.onTouch(ev, modes != null && modes.current() == TouchMode.DIRECT);
 		}
 		if (state == State.IDLE && action != MotionEvent.ACTION_DOWN)
 			return false; // not a gesture this class took (begun before the mode changed)
@@ -734,20 +749,17 @@ public final class TrackpadInput
 		lastCx = cx;
 		lastCy = cy;
 		final float notch = SCROLL_DP_PER_NOTCH * density;
-		final int natural = (scroll == TouchMode.Scroll.NATURAL) ? 1 : -1;
 		while (Math.abs(accY) >= notch)
 		{
 			final int sign = accY > 0 ? 1 : -1;
 			accY -= sign * notch;
-			// natural: fingers down, the content follows down, which is a wheel turn up (positive)
-			sendWheel(PTRFLAGS_WHEEL, natural * sign * Mouse.WHEEL_DELTA);
+			wheel(false, sign);
 		}
 		while (Math.abs(accX) >= notch)
 		{
 			final int sign = accX > 0 ? 1 : -1;
 			accX -= sign * notch;
-			// natural: fingers right, the content follows right: scrolling left (negative)
-			sendWheel(PTRFLAGS_HWHEEL, -natural * sign * Mouse.WHEEL_DELTA);
+			wheel(true, sign);
 		}
 	}
 
@@ -879,6 +891,40 @@ public final class TrackpadInput
 	private void send(int flags)
 	{
 		LibFreeRDP.sendCursorEvent(instance, (int)px, (int)py, flags);
+	}
+
+	// ****************************************************************************
+	// For DirectTouchDrag
+
+	/** True while the window's session can take input. */
+	boolean connected()
+	{
+		return instance != 0 && host != null && host.getWidth() > 0;
+	}
+
+	/** Moves the remote pointer to a point of the session view (view pixels). */
+	void pointAt(float viewX, float viewY)
+	{
+		noteTouch(viewX, viewY);
+		sendMove(true);
+	}
+
+	/**
+	 * One wheel notch for fingers that moved one notch's distance: {@code fingerSign} is +1 for
+	 * down (or right), -1 for up (or left). The direction is the {@code touch_scroll} setting's.
+	 */
+	void wheel(boolean horizontal, int fingerSign)
+	{
+		final int natural = (scroll == TouchMode.Scroll.NATURAL) ? 1 : -1;
+		if (horizontal) // natural: fingers right, the content follows right: scrolling left (negative)
+			sendWheel(PTRFLAGS_HWHEEL, -natural * fingerSign * Mouse.WHEEL_DELTA);
+		else // natural: fingers down, the content follows down, which is a wheel turn up (positive)
+			sendWheel(PTRFLAGS_WHEEL, natural * fingerSign * Mouse.WHEEL_DELTA);
+	}
+
+	String windowName()
+	{
+		return window.getName() + " " + host;
 	}
 
 	/**
