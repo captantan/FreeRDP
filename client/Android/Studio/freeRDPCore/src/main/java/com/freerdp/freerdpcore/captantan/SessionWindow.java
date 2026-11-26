@@ -130,8 +130,22 @@ public final class SessionWindow
 	private final SessionResizeController resizer;
 	/** The session bar (package 4.1), set up for each session this window shows. */
 	private final SessionBar bar;
+	private final TrackpadInput trackpad;
+	private final TouchModeSwitch touchModes;
 	/** The configuration's night bits the views were built with. */
 	private int night;
+
+	/** The window's trackpad mode (package 4.3). */
+	public TrackpadInput getTrackpad()
+	{
+		return trackpad;
+	}
+
+	/** The window's touch mode: direct touch, touch pointer or trackpad (package 4.3). */
+	TouchModeSwitch getTouchModes()
+	{
+		return touchModes;
+	}
 
 	/** The session this window shows, or null. */
 	private SessionHost host;
@@ -161,6 +175,8 @@ public final class SessionWindow
 		this.touchPointerView = activity.findViewById(R.id.touchPointerView);
 		this.resizer = new SessionResizeController(activity, name);
 		this.bar = new SessionBar(this, input);
+		this.trackpad = new TrackpadInput(this, sessionView, scrollView, input);
+		this.touchModes = new TouchModeSwitch(this, input, touchPointerView, trackpad);
 		this.night = activity.getResources().getConfiguration().uiMode &
 		             Configuration.UI_MODE_NIGHT_MASK;
 
@@ -426,6 +442,8 @@ public final class SessionWindow
 		target.setPainting(started);
 		// The bar takes the mode, edge and opacity of the session it now shows.
 		bar.onShown(target);
+		// And its touch mode (package 4.3).
+		touchModes.onShown(target);
 
 		if (connected)
 			bind();
@@ -465,6 +483,7 @@ public final class SessionWindow
 		unbind(true);
 		host = null;
 		bar.onReleased();
+		touchModes.onReleased();
 		ports.setSession(null);
 		was.detach(this, reason);
 	}
@@ -490,6 +509,7 @@ public final class SessionWindow
 		bound = true;
 		ports.connected();
 		host.replayPointer(activity);
+		trackpad.onBound(host);
 		sessionView.invalidate();
 		// The session is resized to this window's viewport if it differs (package 3.2).
 		resizer.onBound(host);
@@ -527,6 +547,8 @@ public final class SessionWindow
 		}
 		// Also makes PhysicalKeyboard forget its keys: from here on it has nothing it could send
 		// to this instance, which may be freed once its session has ended.
+		// A button the trackpad holds is released while the session can still be told (4.3).
+		trackpad.onUnbound(sessionGoesOn);
 		input.cancelPendingEvents();
 		input.attachSession(0, null);
 
@@ -574,6 +596,7 @@ public final class SessionWindow
 		input.setBitmap(from.getBitmap());
 		sessionView.onSurfaceChange(from.getState());
 		resizer.onSurfaceChanged(from);
+		trackpad.onSurfaceChanged();
 		scrollView.requestLayout();
 		sessionView.invalidate();
 	}
@@ -585,6 +608,13 @@ public final class SessionWindow
 			return;
 		sessionView.addInvalidRegion(area);
 		sessionView.invalidateRegion();
+	}
+
+	/** The server set another pointer shape: the trackpad draws it (package 4.3). */
+	void onPointerChanged(SessionHost from)
+	{
+		if (!destroyed)
+			trackpad.onPointerChanged(from);
 	}
 
 	/** Pointer, clipboard, remote-app and "reconnecting" callbacks: upstream's handling of them. */

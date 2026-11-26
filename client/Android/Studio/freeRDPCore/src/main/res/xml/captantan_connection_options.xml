@@ -79,4 +79,36 @@
             android:summary="@string/captantan_bar_note" />
     </PreferenceCategory>
 
+    <!-- captantan fork (roadmap 4.3): captantan/TouchMode, captantan/TrackpadInput -->
+    <PreferenceCategory
+        android:title="@string/captantan_options_cat_touch">
+        <ListPreference
+            android:key="touch_mode"
+            android:title="@string/captantan_touch_mode"
+            android:entries="@array/captantan_touch_mode_entries"
+            android:entryValues="@array/captantan_touch_mode_values"
+            android:defaultValue="direct"
+            app:useSimpleSummaryProvider="true" />
+        <SeekBarPreference
+            android:key="pointer_speed"
+            android:title="@string/captantan_pointer_speed"
+            android:defaultValue="100"
+            app:min="25"
+            android:max="300"
+            app:seekBarIncrement="5"
+            app:showSeekBarValue="true"
+            app:updatesContinuously="true" />
+        <ListPreference
+            android:key="touch_scroll"
+            android:title="@string/captantan_touch_scroll"
+            android:entries="@array/captantan_touch_scroll_entries"
+            android:entryValues="@array/captantan_touch_scroll_values"
+            android:defaultValue="natural"
+            app:useSimpleSummaryProvider="true" />
+        <Preference
+            android:selectable="false"
+            android:persistent="false"
+            android:summary="@string/captantan_touch_note" />
+    </PreferenceCategory>
+
 </PreferenceScreen>

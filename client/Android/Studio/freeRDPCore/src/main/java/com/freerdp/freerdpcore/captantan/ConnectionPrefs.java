@@ -188,8 +188,22 @@ public final class ConnectionPrefs
 	    new IntField("bar_opacity", SessionBarSettings.DEFAULT_OPACITY,
 	                 SessionBarSettings.MIN_OPACITY, SessionBarSettings.MAX_OPACITY);
 
+	/** What a finger on the session does (roadmap 4.3). See TouchMode and TrackpadInput. */
+	public static final EnumField<TouchMode> TOUCH_MODE =
+	    new EnumField<>("touch_mode", TouchMode.DEFAULT, TouchMode.values());
+
+	/** The trackpad's pointer speed in percent of the default curve (roadmap 4.3). */
+	public static final IntField POINTER_SPEED =
+	    new IntField("pointer_speed", TouchMode.DEFAULT_POINTER_SPEED, TouchMode.MIN_POINTER_SPEED,
+	                 TouchMode.MAX_POINTER_SPEED);
+
+	/** Which way two fingers scroll in trackpad mode (roadmap 4.3). */
+	public static final EnumField<TouchMode.Scroll> TOUCH_SCROLL =
+	    new EnumField<>("touch_scroll", TouchMode.Scroll.DEFAULT, TouchMode.Scroll.values());
+
 	private static final Field<?>[] FIELDS = { GRAPHICS_MODE, REMOTE_SCALE, REMOTE_SCALE_CUSTOM,
-		                                       BAR_MODE, BAR_EDGE, BAR_OPACITY };
+		                                       BAR_MODE,      BAR_EDGE,     BAR_OPACITY,
+		                                       TOUCH_MODE,    POINTER_SPEED, TOUCH_SCROLL };
 
 	// ---------------------------------------------------------------------------------------------
 
@@ -295,6 +309,21 @@ public final class ConnectionPrefs
 	public int getBarOpacity()
 	{
 		return get(BAR_OPACITY);
+	}
+
+	public TouchMode getTouchMode()
+	{
+		return get(TOUCH_MODE);
+	}
+
+	public int getPointerSpeed()
+	{
+		return get(POINTER_SPEED);
+	}
+
+	public TouchMode.Scroll getTouchScroll()
+	{
+		return get(TOUCH_SCROLL);
 	}
 
 	// ---------------------------------------------------------------------------------------------

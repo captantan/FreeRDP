@@ -36,6 +36,7 @@ import androidx.annotation.NonNull;
 import androidx.core.view.ViewConfigurationCompat;
 
 import com.freerdp.freerdpcore.application.SessionState;
+import com.freerdp.freerdpcore.captantan.TrackpadInput; // captantan fork
 import com.freerdp.freerdpcore.utils.DoubleGestureDetector;
 import com.freerdp.freerdpcore.utils.GestureDetector;
 
@@ -286,6 +287,7 @@ public class SessionView extends View
 		{
 			surface.draw(canvas);
 		}
+		TrackpadInput.draw(this, canvas); // captantan fork: trackpad mode's pointer (roadmap 4.3)
 		canvas.restore();
 	}
 
@@ -337,6 +339,10 @@ public class SessionView extends View
 			return true;
 		}
 
+		// captantan fork: trackpad mode (roadmap 4.3) takes finger touches while it is on
+		if (TrackpadInput.onTouchEvent(this, event))
+			return true;
+
 		boolean res = gestureDetector.onTouchEvent(event);
 		res |= doubleGestureDetector.onTouchEvent(event);
 		return res;
@@ -352,10 +358,14 @@ public class SessionView extends View
 			return;
 		}
 
+		// captantan fork: the touchpad follows Android's own scroll direction setting, which the
+		// gesture distances already carry; the app's "Invert Scrolling" (on by default, for the
+		// mouse wheel's axis) is undone here instead of reversing it (roadmap 4.3)
+		final boolean invert = ApplicationSettingsActivity.getInvertScrolling(getContext());
 		touchpadScrollY += gestureDistance(event, MotionEvent.AXIS_GESTURE_SCROLL_Y_DISTANCE);
 		while (Math.abs(touchpadScrollY) >= notchPxY)
 		{
-			final boolean down = touchpadScrollY > 0;
+			final boolean down = (touchpadScrollY > 0) != invert; // captantan fork
 			touchpadScrollY += down ? -notchPxY : notchPxY;
 			sessionViewListener.onSessionViewScroll(down);
 		}
@@ -363,7 +373,7 @@ public class SessionView extends View
 		touchpadScrollX += gestureDistance(event, MotionEvent.AXIS_GESTURE_SCROLL_X_DISTANCE);
 		while (Math.abs(touchpadScrollX) >= notchPxX)
 		{
-			final boolean right = touchpadScrollX > 0;
+			final boolean right = (touchpadScrollX > 0) != invert; // captantan fork
 			touchpadScrollX += right ? -notchPxX : notchPxX;
 			sessionViewListener.onSessionViewHScroll(right);
 		}

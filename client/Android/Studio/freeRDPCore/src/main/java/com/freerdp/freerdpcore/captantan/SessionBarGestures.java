@@ -36,6 +36,10 @@ import java.util.List;
  * all reach the session (the remote pointer follows as before).</li>
  * <li><b>Tap outside.</b> While a revealed bar is shown, a press anywhere else hides it, and that
  * whole gesture is kept from the session (so hiding the bar never clicks on the remote side).</li>
+ * <li><b>Where the mouse is</b> (package 4.3): mouse and touchpad positions outside the bar go to
+ * {@link TrackpadInput#onMouse}, so trackpad mode goes on from the mouse's place and hides its own
+ * drawn pointer while the mouse's is shown. Touchpad gestures (two-finger scroll, pinch) are not
+ * positions and are left out. The events themselves are passed on unchanged.</li>
  * </ul>
  *
  * The bar's other way in is the system bars being pulled in ({@link SessionBar}); there is no edge
@@ -100,6 +104,10 @@ final class SessionBarGestures implements Window.Callback
 			return true;
 		}
 
+		if (isMouse(ev) && ev.getClassification() == MotionEvent.CLASSIFICATION_NONE &&
+		    !bar.barContains(ev.getX(), ev.getY()))
+			bar.onMouseAt(ev.getX(), ev.getY()); // package 4.3: the trackpad follows a mouse
+
 		if (action == MotionEvent.ACTION_DOWN && bar.isRevealed())
 		{
 			if (bar.barContains(ev.getX(), ev.getY()))
@@ -135,6 +143,8 @@ final class SessionBarGestures implements Window.Callback
 				case MotionEvent.ACTION_HOVER_MOVE:
 				{
 					final float x = ev.getX(), y = ev.getY();
+					if (!bar.barContains(x, y))
+						bar.onMouseAt(x, y); // package 4.3: the trackpad follows a mouse
 					if (bar.isRevealed())
 					{
 						if (bar.barContains(x, y) || bar.atMouseEdge(x, y))

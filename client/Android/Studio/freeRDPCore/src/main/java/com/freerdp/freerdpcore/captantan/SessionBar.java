@@ -140,6 +140,7 @@ public final class SessionBar
 	private String lastLayoutLog;
 	private String lastBarsLog;
 	private final int[] location = new int[2];
+	private TouchMode touchMode = TouchMode.DEFAULT;
 
 	SessionBar(SessionWindow window, SessionInputManager input)
 	{
@@ -617,6 +618,26 @@ public final class SessionBar
 		bar.setVisibility(View.GONE);
 		container.addView(bar);
 		bindButtons();
+		showTouchMode(touchMode);
+	}
+
+	/** The input mode button shows the touch mode in force (package 4.3, TouchModeSwitch). */
+	void showTouchMode(TouchMode mode)
+	{
+		touchMode = mode;
+		final View b = bar.findViewById(R.id.captantan_bar_touch_pointer);
+		if (!(b instanceof MaterialButton))
+			return;
+		((MaterialButton)b).setIconResource(mode.icon);
+		b.setContentDescription(
+		    activity.getString(R.string.captantan_bar_touch_mode, activity.getString(mode.label)));
+		b.setTooltipText(b.getContentDescription());
+	}
+
+	/** A mouse or touchpad event in the window (SessionBarGestures): the trackpad follows it. */
+	void onMouseAt(float x, float y)
+	{
+		window.getTrackpad().onMouse(x, y);
 	}
 
 	/**
@@ -629,7 +650,10 @@ public final class SessionBar
 	{
 		bind(R.id.captantan_bar_sessions, "sessions", true, () -> SessionSwitcher.open(window));
 		bind(R.id.captantan_bar_keyboard, "keyboard", true, input::toggleKeyboard);
-		bind(R.id.captantan_bar_touch_pointer, "touch pointer", true, input::toggleTouchPointer);
+		// package 4.3: the input mode menu (direct touch, touch pointer, trackpad); it hides the
+		// bar after a choice (TouchModeSwitch)
+		bind(R.id.captantan_bar_touch_pointer, "input mode", false,
+		     () -> window.getTouchModes().openMenu(bar.findViewById(R.id.captantan_bar_touch_pointer)));
 		bind(R.id.captantan_bar_zoom_reset, "reset zoom", true,
 		     input::onTouchPointerResetScrollZoom);
 		bind(R.id.captantan_bar_fullscreen, "full screen", true, this::toggleFullScreen);
