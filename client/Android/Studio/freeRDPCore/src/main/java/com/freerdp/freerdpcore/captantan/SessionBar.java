@@ -55,10 +55,12 @@ import java.util.List;
  * <ul>
  * <li>Overlay: the bar floats over the remote picture, centred on its edge, with the opacity. The
  * remote desktop keeps its size.</li>
- * <li>Hidden: nothing is drawn until {@link #reveal}: Back ({@link #onBack}), the mouse resting
- * at the edge ({@link SessionBarGestures}), or a call (package 5.3's key combination). It hides
- * again after a button is used, after a press anywhere else, or {@link #HIDE_AFTER_MS} after it
- * was last touched.</li>
+ * <li>Hidden (hidden in full screen): the bar goes with the system bars ({@link #onSystemBars}).
+ * Outside full screen they are always there, and so is the bar. In full screen it is hidden; a
+ * swipe that pulls the system bars in brings it along, and so do the mouse resting at the edge
+ * ({@link SessionBarGestures}) and a call ({@link #reveal}, package 5.3's key combination). It
+ * hides again, and puts pulled-in system bars away with it, after a button is used, after a press
+ * anywhere else, or {@link #HIDE_AFTER_MS} after it was last touched.</li>
  * <li>Reserved (package 4.2) is stored but not offered; it is shown as overlay until then.</li>
  * </ul>
  *
@@ -68,11 +70,9 @@ import java.util.List;
  * bar, the camera cutout, the on-screen keyboard and upstream's key bar. Those are recomputed at
  * every layout, so rotation, folding, split screen and window resizes are followed.
  *
- * <p><b>Back.</b> Back (the gesture or the button) first does upstream's own things with it (it
- * hides the on-screen keyboard; it sends Alt+F4 if that setting is on). After that, in hidden mode
- * with the bar not shown, Back shows the bar; with the bar shown (or in overlay mode), Back asks
- * whether to leave the session running or disconnect it ({@link SessionWindow#onBack}). There is
- * no edge swipe: the bar takes nothing from the system's own gestures or from the remote desktop.
+ * <p><b>Back</b> is not the bar's: it asks whether to leave the session running or disconnect
+ * it ({@link SessionWindow#onBack}). The bar has no gesture of its own and takes nothing from the
+ * system's gestures or from the remote desktop.
  */
 public final class SessionBar
 {
@@ -96,6 +96,8 @@ public final class SessionBar
 	private final SessionBarGestures gestures;
 	private final Handler handler = new Handler(Looper.getMainLooper());
 	private final Runnable hideOnTimeout = () -> hide("timeout " + (HIDE_AFTER_MS / 1000) + " s");
+	private final Runnable putAwayOnTimeout =
+	    () -> putSystemBarsAway("timeout " + (HIDE_AFTER_MS / 1000) + " s");
 	private final float density;
 
 	private View bar;
@@ -108,6 +110,8 @@ public final class SessionBar
 	private int opacity = SessionBarSettings.DEFAULT_OPACITY;
 	/** Hidden mode: the bar is shown now. */
 	private boolean revealed;
+	/** The window is told a system bar (or a desktop window's caption bar) is on screen. */
+	private boolean barsShown;
 	private AlertDialog dialog;
 
 	private WindowInsetsCompat insets;
@@ -168,10 +172,11 @@ public final class SessionBar
 			Log.i(TAG, "reveal asked in " + window.getName() + " (" + cause + "): no session shown");
 			return;
 		}
-		if (effectiveMode() != SessionBarSettings.Mode.HIDDEN)
+		if (effectiveMode() != SessionBarSettings.Mode.HIDDEN || pinned())
 		{
 			Log.i(TAG, "reveal asked in " + window.getName() + " (" + cause + "): mode " +
-			               mode.storedName() + ", the bar is shown already");
+			               mode.storedName() + (pinned() ? ", not full screen" : "") +
+			               ", the bar is shown already");
 			return;
 		}
 		if (!revealed)
@@ -193,21 +198,42 @@ public final class SessionBar
 		return true;
 	}
 
-	/** Hides a revealed bar (hidden mode). Does nothing in overlay mode. */
+	/**
+	 * Hides a revealed bar (hidden mode), and puts system bars pulled in over a full-screen session
+	 * away with it. Does nothing in overlay mode, or while the bar stays with the system bars (not
+	 * full screen).
+	 */
 	public void hide(String cause)
 	{
 		if (!revealed)
 			return;
 		revealed = false;
 		handler.removeCallbacks(hideOnTimeout);
+		if (isShown())
+		{
+			showForState();
+			return;
+		}
 		animateOut();
 		Log.i(TAG, "hide: " + window.getName() + " (" + cause + ")");
+		putSystemBarsAway(cause);
 	}
 
-	/** Whether the bar is on screen (overlay mode, or revealed). */
+	/** Whether the bar is on screen (overlay mode, with the system bars, or revealed). */
 	public boolean isShown()
 	{
-		return host != null && (effectiveMode() != SessionBarSettings.Mode.HIDDEN || revealed);
+		return host != null &&
+		    (effectiveMode() != SessionBarSettings.Mode.HIDDEN || revealed || pinned());
+	}
+
+	/**
+	 * Hidden mode outside full screen: the system bars are on screen for good, and the bar stays
+	 * with them (no timeout, a tap elsewhere goes to the session).
+	 */
+	private boolean pinned()
+	{
+		return host != null && effectiveMode() == SessionBarSettings.Mode.HIDDEN && barsShown &&
+		    !isFullScreen();
 	}
 
 	/** The mode in force; {@code RESERVED} is shown as overlay until package 4.2. */
@@ -250,32 +276,83 @@ public final class SessionBar
 		bar.setVisibility(View.GONE);
 	}
 
-	/**
-	 * Back in this window, from {@link SessionWindow#onBack} (after upstream's own uses of Back).
-	 * In hidden mode with the bar not shown, Back reveals it and is used up: true. Otherwise false,
-	 * and Back goes on to the leave-or-disconnect question.
-	 */
-	boolean onBack()
-	{
-		if (host == null || effectiveMode() != SessionBarSettings.Mode.HIDDEN || revealed)
-			return false;
-		reveal("Back");
-		return true;
-	}
-
 	/** From SessionActivity's insets listener: the insets before upstream consumed them. */
 	public void onWindowInsets(WindowInsetsCompat windowInsets)
 	{
 		insets = windowInsets;
 		logSystemBars(windowInsets, "insets");
+		final int caption = windowInsets.getInsets(WindowInsetsCompat.Type.captionBar()).top;
+		final boolean shownNow = windowInsets.isVisible(WindowInsetsCompat.Type.statusBars()) ||
+		                         windowInsets.isVisible(WindowInsetsCompat.Type.navigationBars()) ||
+		                         caption > 0;
 		layout();
+		if (shownNow != barsShown)
+			onSystemBars(shownNow);
 	}
 
 	/**
-	 * Diagnostic: whether the window is told that the system bars are shown, and their sizes, each
-	 * time that changes; to learn whether bars a swipe pulls in over a full-screen session reach the
-	 * app at all.
+	 * The system bars came or went. Hidden mode follows them: outside full screen the bar is with
+	 * them for good; in full screen, bars a swipe pulls in bring the bar along, and both go away
+	 * again after {@link #HIDE_AFTER_MS}, a tap elsewhere or a button. In overlay mode only the
+	 * pulled-in system bars are put away again after the timeout. Full screen keeps the system bars
+	 * hidden with Android's default behaviour (upstream's {@code hideSystemBars}, a fork edit): a
+	 * swipe brings them back for real and the window is told, which the transient bars of
+	 * {@code BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE} never did (measured in the 4.1 device run).
 	 */
+	private void onSystemBars(boolean shownNow)
+	{
+		barsShown = shownNow;
+		handler.removeCallbacks(putAwayOnTimeout);
+		Log.i(TAG, "system bars " + (shownNow ? "shown" : "hidden") + " in " + window.getName() +
+		               (isFullScreen() ? " (full screen)" : ""));
+		if (host == null)
+			return;
+		if (effectiveMode() != SessionBarSettings.Mode.HIDDEN)
+		{
+			if (shownNow && isFullScreen())
+				handler.postDelayed(putAwayOnTimeout, HIDE_AFTER_MS);
+			return;
+		}
+		if (pinned())
+		{
+			revealed = false;
+			handler.removeCallbacks(hideOnTimeout);
+			if (bar.getVisibility() != View.VISIBLE || bar.getAlpha() == 0f)
+			{
+				animateIn();
+				Log.i(TAG, "shown with the system bars: " + window.getName() + " " + host +
+				               " (not full screen)");
+			}
+			return;
+		}
+		if (shownNow)
+		{
+			// the keyboard brings the navigation bar back by itself (upstream's hideSystemBars)
+			if (insets == null || !insets.isVisible(WindowInsetsCompat.Type.ime()))
+				reveal("system bars pulled in");
+		}
+		else if (revealed)
+		{
+			hide("system bars hidden");
+		}
+		else if (bar.getVisibility() == View.VISIBLE)
+		{
+			animateOut();
+			Log.i(TAG, "hide: " + window.getName() + " (system bars hidden, full screen)");
+		}
+	}
+
+	/** Full screen: system bars pulled in over the session are hidden again. */
+	private void putSystemBarsAway(String cause)
+	{
+		handler.removeCallbacks(putAwayOnTimeout);
+		if (!barsShown || !isFullScreen() || activity.isFinishing())
+			return;
+		Log.i(TAG, "system bars put away in " + window.getName() + " (" + cause + ")");
+		activity.hideSystemBars(); // upstream's, made public for this (captantan fork)
+	}
+
+	/** The system bars' visibility and sizes, each time that changes. */
 	private void logSystemBars(WindowInsetsCompat in, String from)
 	{
 		final int status = WindowInsetsCompat.Type.statusBars();
@@ -317,7 +394,7 @@ public final class SessionBar
 	/** True while the mouse at the edge would reveal the bar. */
 	boolean wantsMouseReveal()
 	{
-		return host != null && effectiveMode() == SessionBarSettings.Mode.HIDDEN && !revealed &&
+		return host != null && effectiveMode() == SessionBarSettings.Mode.HIDDEN && !isShown() &&
 		    dialog == null && container.isLaidOut();
 	}
 

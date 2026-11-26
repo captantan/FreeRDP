@@ -38,8 +38,9 @@ import java.util.List;
  * whole gesture is kept from the session (so hiding the bar never clicks on the remote side).</li>
  * </ul>
  *
- * Back, the other way to reveal the bar, comes through {@link SessionBar#onBack}; there is no edge
- * swipe, so touches at the edges all reach the session and the system's gestures are untouched.
+ * The bar's other way in is the system bars being pulled in ({@link SessionBar}); there is no edge
+ * swipe of its own, so touches at the edges all reach the session and the system's gestures are
+ * untouched.
  * Events on the bar itself pass through to it, and keep it shown ({@link SessionBar#touched}).
  * Coordinates are the window's (the decor view's), as {@link View#getLocationInWindow} gives.
  */

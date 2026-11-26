@@ -699,9 +699,8 @@ public final class SessionWindow
 
 	/**
 	 * Hook in handleBackPressed(), after upstream's own uses of Back (hide the keyboards, Alt+F4).
-	 * Back never ends a session by itself: with a hidden session bar not shown, it shows the bar
-	 * (package 4.1, {@link SessionBar#onBack}); otherwise it asks whether to leave the session
-	 * running and go to the connection list, or to disconnect it. Always true (handled).
+	 * Back never ends a session by itself: it asks whether to leave it running and go to the
+	 * connection list, or to disconnect it. Always true (handled).
 	 */
 	public boolean onBack()
 	{
@@ -711,8 +710,6 @@ public final class SessionWindow
 			activity.finish();
 			return true;
 		}
-		if (bar.onBack())
-			return true;
 		if (backDialog != null && backDialog.isShowing())
 			return true;
 		backDialog =

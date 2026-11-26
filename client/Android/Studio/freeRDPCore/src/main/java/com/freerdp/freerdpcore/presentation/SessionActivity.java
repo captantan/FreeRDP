@@ -189,8 +189,12 @@ public class SessionActivity extends AppCompatActivity
 			{
 				// whatever stays hidden keeps immersive behaviour; BEHAVIOR_DEFAULT would let any
 				// tap on the session pull the bar back in
+				// captantan fork: from Android 12 BEHAVIOR_DEFAULT brings the bars back by a swipe
+				// only, for real, and tells the window, so the session bar can follow them (4.1)
 				controller.setSystemBarsBehavior(
-				    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+				    Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+				        ? WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
+				        : WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
 				controller.hide(toHide);
 			}
 
