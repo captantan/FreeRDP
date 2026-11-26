@@ -25,7 +25,7 @@ import android.view.accessibility.AccessibilityEvent;
 import java.util.List;
 
 /**
- * Sees every touch and mouse event of a session window before its views do, for the hidden mode
+ * Sees every touch and mouse event of a session window before its views do, for the docked mode
  * of the {@link SessionBar}. It wraps the window's {@link Window.Callback} (the activity, behind
  * AppCompat's own wrapper), so no upstream view or activity is edited for it; every call is passed
  * on unchanged except these:

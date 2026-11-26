@@ -177,7 +177,7 @@
     <string name="captantan_bar_settings_unsaved">This session has no saved connection: the change lasts until the session ends.</string>
     <string name="captantan_bar_mode">Mode</string>
     <string name="captantan_bar_mode_overlay">Overlay</string>
-    <string name="captantan_bar_mode_hidden">Docked</string>
+    <string name="captantan_bar_mode_docked">Docked</string>
     <string name="captantan_bar_edge">Edge</string>
     <string name="captantan_bar_edge_top">Top</string>
     <string name="captantan_bar_edge_bottom">Bottom</string>
@@ -189,13 +189,12 @@
     <string name="captantan_bar_note">Docked: the bar is a toolbar across its edge, and the remote desktop ends where it begins. In full screen it is gone; Back leaves full screen and brings it back (rest the mouse pointer at the edge to see it for a moment). Overlay: the bar floats over the remote desktop at its edge, in full screen too. Opacity is for overlay only.</string>
     <string-array name="captantan_bar_mode_entries">
         <item>@string/captantan_bar_mode_overlay</item>
-        <item>@string/captantan_bar_mode_hidden</item>
+        <item>@string/captantan_bar_mode_docked</item>
     </string-array>
-    <!-- Stored names of SessionBarSettings.Mode, in the same order. Never change them. "reserved"
-         (package 4.2) is not offered yet. -->
+    <!-- Stored names of SessionBarSettings.Mode, in the same order. Never change them. -->
     <string-array name="captantan_bar_mode_values" translatable="false">
         <item>overlay</item>
-        <item>hidden</item>
+        <item>docked</item>
     </string-array>
     <string-array name="captantan_bar_edge_entries">
         <item>@string/captantan_bar_edge_top</item>

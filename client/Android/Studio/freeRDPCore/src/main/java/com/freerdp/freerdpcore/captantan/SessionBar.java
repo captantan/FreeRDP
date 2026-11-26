@@ -61,14 +61,13 @@ import com.freerdp.freerdpcore.presentation.SessionInputManager;
  * <ul>
  * <li>Overlay: the bar floats over the remote picture, centred on its edge, with the opacity. The
  * remote desktop keeps its size.</li>
- * <li>Docked (stored as "hidden"; {@link #docked}): outside full screen the bar is a toolbar
+ * <li>Docked ({@link #docked}): outside full screen the bar is a toolbar
  * across its edge, like a browser's, in a strip the remote desktop does not cover
  * ({@link SessionResizeController#setReservedInsets}; the session activity pads the session view
  * by it). In full screen it is gone and the strip with it. There, the mouse resting at the edge
  * ({@link SessionBarGestures}) or a call ({@link #reveal}, package 5.3's key combination) brings
  * it over the picture for a moment: it hides again after a button is used, after a press anywhere
  * else, or {@link #HIDE_AFTER_MS} after it was last touched.</li>
- * <li>Reserved (package 4.2) is stored but not offered; it is shown as overlay until then.</li>
  * </ul>
  *
  * <p><b>Where it sits.</b> In {@code captantan_session_bar_container}, a full-size layer on top
@@ -117,6 +116,8 @@ public final class SessionBar
 	private SessionHost host;
 	private SessionBarSettings.Mode mode = SessionBarSettings.DEFAULT_MODE;
 	private SessionBarSettings.Edge edge = SessionBarSettings.DEFAULT_EDGE;
+	/** The edge as stored; saved unchanged while the bar is pinned to the top ({@link #load}). */
+	private SessionBarSettings.Edge storedEdge = SessionBarSettings.DEFAULT_EDGE;
 	private int opacity = SessionBarSettings.DEFAULT_OPACITY;
 	/** Docked mode in full screen: the bar is shown over the picture for a moment. */
 	private boolean revealed;
@@ -171,7 +172,7 @@ public final class SessionBar
 			Log.i(TAG, "reveal asked in " + window.getName() + " (" + cause + "): no session shown");
 			return;
 		}
-		if (effectiveMode() != SessionBarSettings.Mode.HIDDEN || docked())
+		if (mode != SessionBarSettings.Mode.DOCKED || docked())
 		{
 			Log.i(TAG, "reveal asked in " + window.getName() + " (" + cause + "): mode " +
 			               mode.storedName() + (docked() ? ", docked" : "") +
@@ -221,13 +222,13 @@ public final class SessionBar
 	public boolean isShown()
 	{
 		return host != null &&
-		    (effectiveMode() != SessionBarSettings.Mode.HIDDEN || revealed || docked());
+		    (mode != SessionBarSettings.Mode.DOCKED || revealed || docked());
 	}
 
 	/** Docked mode outside full screen: the bar is a toolbar in its own strip of the window. */
 	private boolean docked()
 	{
-		return host != null && effectiveMode() == SessionBarSettings.Mode.HIDDEN && !isFullScreen();
+		return host != null && mode == SessionBarSettings.Mode.DOCKED && !isFullScreen();
 	}
 
 	/**
@@ -242,10 +243,9 @@ public final class SessionBar
 		return true;
 	}
 
-	/** The mode in force; {@code RESERVED} is shown as overlay until package 4.2. */
-	public SessionBarSettings.Mode effectiveMode()
+	public SessionBarSettings.Mode getMode()
 	{
-		return (mode == SessionBarSettings.Mode.RESERVED) ? SessionBarSettings.Mode.OVERLAY : mode;
+		return mode;
 	}
 
 	public SessionBarSettings.Edge getEdge()
@@ -374,7 +374,7 @@ public final class SessionBar
 	/** True while the mouse at the edge would reveal the bar. */
 	boolean wantsMouseReveal()
 	{
-		return host != null && effectiveMode() == SessionBarSettings.Mode.HIDDEN && !isShown() &&
+		return host != null && mode == SessionBarSettings.Mode.DOCKED && !isShown() &&
 		    dialog == null && container.isLaidOut();
 	}
 
@@ -427,8 +427,10 @@ public final class SessionBar
 		final ConnectionPrefs p = SessionBarSettings.of(activity, host);
 		mode = p.getBarMode();
 		// The top only for now: in the 4.1 device run the docked bar read as a toolbar, and full
-		// screen covered the wish to move it. The stored edge is kept, and the code still places
-		// the bar at any edge; the choice is hidden (bar settings, "RDP options").
+		// screen covered the wish to move it. The stored edge is kept (storedEdge, saved
+		// unchanged), and the code still places the bar at any edge; the choice is hidden (bar
+		// settings, "RDP options").
+		storedEdge = p.getBarEdge();
 		edge = SessionBarSettings.Edge.TOP;
 		opacity = p.getBarOpacity();
 	}
@@ -443,11 +445,8 @@ public final class SessionBar
 			return;
 		final long id = SessionBarSettings.bookmarkIdOf(host);
 		Log.i(TAG, "applied (" + why + "): " + window.getName() + " " + host + ": mode " +
-		               mode.storedName() +
-		               (mode != effectiveMode() ? " (shown as " + effectiveMode().storedName() +
-		                                              " until package 4.2)"
-		                                        : "") +
-		               ", edge " + edge.storedName() + ", opacity " + opacity + " % (" +
+		               mode.storedName() + ", edge " + edge.storedName() + ", opacity " + opacity +
+		               " % (" +
 		               (id > 0 ? "bookmark " + id : "no saved bookmark") + ")");
 	}
 
@@ -482,8 +481,8 @@ public final class SessionBar
 		final Slider slider = v.findViewById(R.id.captantan_bar_settings_opacity);
 		final TextView note = v.findViewById(R.id.captantan_bar_settings_note);
 
-		modes.check(effectiveMode() == SessionBarSettings.Mode.HIDDEN
-		                ? R.id.captantan_bar_mode_hidden
+		modes.check(mode == SessionBarSettings.Mode.DOCKED
+		                ? R.id.captantan_bar_mode_docked
 		                : R.id.captantan_bar_mode_overlay);
 		edges.check(edgeButton(edge));
 		slider.setValue(Math.round(opacity / 5f) * 5f);
@@ -494,10 +493,10 @@ public final class SessionBar
 		modes.addOnButtonCheckedListener((group, id, checked) -> {
 			if (!checked)
 				return;
-			mode = (id == R.id.captantan_bar_mode_hidden) ? SessionBarSettings.Mode.HIDDEN
+			mode = (id == R.id.captantan_bar_mode_docked) ? SessionBarSettings.Mode.DOCKED
 			                                               : SessionBarSettings.Mode.OVERLAY;
 			// While the dialog is open the bar stays shown, so its place can be seen.
-			revealed = (mode == SessionBarSettings.Mode.HIDDEN);
+			revealed = (mode == SessionBarSettings.Mode.DOCKED);
 			handler.removeCallbacks(hideOnTimeout);
 			showForState();
 			layout();
@@ -506,6 +505,7 @@ public final class SessionBar
 			if (!checked)
 				return;
 			edge = edgeFor(id);
+			storedEdge = edge;
 			buttonPx = -1;
 			layout();
 		});
@@ -526,15 +526,16 @@ public final class SessionBar
 			if (host != forHost)
 				return;
 			final boolean saved =
-			    SessionBarSettings.save(activity, forHost, mode, edge, opacity);
+			    SessionBarSettings.save(activity, forHost, mode, storedEdge, opacity);
 			Log.i(TAG, "settings: " + window.getName() + " " + forHost + ": mode " +
-			               mode.storedName() + ", edge " + edge.storedName() + ", opacity " +
+			               mode.storedName() + ", stored edge " + storedEdge.storedName() +
+			               ", opacity " +
 			               opacity + " % (" +
 			               (saved ? "saved for bookmark " + SessionBarSettings.bookmarkIdOf(forHost)
 			                      : "for this session only, no saved bookmark") +
 			               ")");
 			apply("settings changed");
-			if (effectiveMode() == SessionBarSettings.Mode.HIDDEN)
+			if (mode == SessionBarSettings.Mode.DOCKED)
 			{
 				// shown for the dialog: hide it again as after any other button
 				revealed = true;

@@ -54,7 +54,7 @@
             android:title="@string/captantan_bar_mode"
             android:entries="@array/captantan_bar_mode_entries"
             android:entryValues="@array/captantan_bar_mode_values"
-            android:defaultValue="hidden"
+            android:defaultValue="docked"
             app:useSimpleSummaryProvider="true" />
         <!-- the bar sits at the top only for now (4.1 device run); bar_edge is kept, not shown -->
         <ListPreference

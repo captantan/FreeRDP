@@ -1434,7 +1434,7 @@ hidden and overwritten at connect.
 
 The fork's controls in the session window, in place of upstream's floating toolbar handle, which could
 not be hidden and covered remote UI. Upstream's `FloatingToolbar` class and `floating_toolbar.xml` stay
-(built and set up as before) but are not shown. The design was settled on the phone with Tanner, in four
+(built and set up as before) but are not shown. The design was settled on the phone, in four
 tries; what was dropped is listed at the end of this block, so it is not tried again.
 
 - `freeRDPCore/.../captantan/SessionBar.java` (new): the bar, one per `SessionWindow`. Its class comment
@@ -1452,7 +1452,7 @@ tries; what was dropped is listed at the end of this block, so it is not tried a
   and the gap beside the smaller outer group also takes the width of the buttons it lacks, so the middle
   group is centred (`SessionBar.evenOutGaps`). Buttons shrink from 44 dp to 32 dp when the bar is too
   short for all seven (a small desktop window, split screen).
-- **Docked mode** (stored name `hidden`, from an earlier try; the default). Outside full screen the bar is
+- **Docked mode** (the default). Outside full screen the bar is
   a toolbar across the top of the window, like a browser's: full width, flat, opaque. The remote desktop
   never lies under it. The bar's strip is passed to `SessionResizeController.setReservedInsets`, so the
   remote desktop is resized to the space below it. Upstream's insets listener pads the session view by the
@@ -1474,7 +1474,8 @@ tries; what was dropped is listed at the end of this block, so it is not tried a
   `BEHAVIOR_DEFAULT` instead of `BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE` (marked edit). A swipe then
   brings the bars back for real: Home and the shade work at the first swipe, and the first Back is not
   eaten by the bars appearing. The bar puts them away again 5 s later (`HIDE_AFTER_MS`). The bar does
-  not come with them.
+  not come with them. With only one of the two settings on, the timer does not run (it needs both), and
+  bars pulled in by a swipe stay until upstream's next `hideSystemBars` call.
 - **Seeing the bar in full screen without leaving it** (docked mode): the mouse pointer resting in an 8 dp
   band at the top for 250 ms (hover events still all reach the session), or a call:
   `SessionBar.reveal(cause)` or `revealInFocusedWindow(cause)` (package 5.3). It then floats over the
@@ -1487,18 +1488,19 @@ tries; what was dropped is listed at the end of this block, so it is not tried a
 
   | Key | Values (stored names) | Default | Notes |
   |---|---|---|---|
-  | `bar_mode` | `hidden` (shown as "Docked"), `overlay`, (`reserved`) | `hidden` | docked: the remote screen is never covered |
+  | `bar_mode` | `docked`, `overlay` | `docked` | docked: the remote screen is never covered |
   | `bar_edge` | `top`, `bottom`, `left`, `right` | `top` | not shown, and the bar uses the top whatever is stored |
   | `bar_opacity` | 30 to 100 (percent) | 85 | overlay only; docked is opaque |
 
-  `reserved` was meant for 4.2's docked mode, which `hidden` now is. It is a valid stored name, is not
-  offered, and is shown as overlay. The edge is pinned to the top in `SessionBar.load`: in the device run
-  the docked bar read as a toolbar, and full screen covered the wish to move it. The code still places
-  the bar at any edge (strip, orientation, mouse band); showing the choice again brings it back. A
-  session without a saved bookmark (quick connect, a `freerdp://` link) gets the defaults. A change made
-  from its bar lasts for that session only (kept in `SessionBarSettings`, keyed by the session). A
-  change from a bookmarked session's bar is saved under its bookmark, with its other settings kept.
-  Changing the mode in the dialog applies at once, so the remote desktop may resize while it is open.
+  Test builds before the first release stored `hidden` for docked; an unknown name reads as the default,
+  which is docked. The edge is pinned to the top in `SessionBar.load`: in the device run the docked bar
+  read as a toolbar, and full screen covered the wish to move it. The code still places the bar at any
+  edge (strip, orientation, mouse band); showing the choice again brings it back. A stored edge is kept:
+  the bar's settings dialog saves it unchanged. A session without a saved bookmark (quick connect, a
+  `freerdp://` link) gets the defaults. A change made from its bar lasts for that session only (kept in
+  `SessionBarSettings`, keyed by the session). A change from a bookmarked session's bar is saved under its
+  bookmark, with its other settings kept. Changing the mode in the dialog applies at once, so the remote
+  desktop may resize while it is open.
 - `freeRDPCore/.../captantan/SessionBarGestures.java` (new): sees every touch and mouse event of the
   window before its views do, by wrapping the window's `Window.Callback` (in front of AppCompat's own
   wrapper; installed once, in `onCreate` after `setContentView`). Everything is passed on unchanged
@@ -1577,7 +1579,7 @@ tries; what was dropped is listed at the end of this block, so it is not tried a
   screen for a moment, does nothing when the bar is shown anyway, and logs the cause. `hide(cause)`,
   `isShown()` and `leaveFullScreen(cause)` are public too.
 - **4.2** has less left: the docked strip is in. What remains is whether to offer "docked in full screen
-  too" (the `reserved` name is free for it), and the quick remote-scale switch (needs a public "ask
+  too" (a new stored name of its own), and the quick remote-scale switch (needs a public "ask
   again" on `SessionResizeController`, see the 3.3 block).
 - **Not in this package**, written down for later:
   - zooming out below the fit (7.x);
@@ -1588,7 +1590,7 @@ tries; what was dropped is listed at the end of this block, so it is not tried a
   - full screen in a desktop window (6.1). Android makes the window whole-screen without its caption. On
     leaving full screen the window stayed that way for about 7 s on the tablet before restoring, and the
     setting is app-wide;
-  - session tabs in a desktop window's caption bar, as a browser has them (6.1, Tanner's idea).
+  - session tabs in a desktop window's caption bar, as a browser has them (6.1, asked for in the device run).
 
 ## Package and version scheme
 

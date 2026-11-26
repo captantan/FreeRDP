@@ -30,15 +30,10 @@ public final class SessionBarSettings
 		/** The bar floats over the remote desktop at its edge; the desktop keeps its size. */
 		OVERLAY("overlay"),
 		/**
-		 * Docked (the stored name is from an earlier try): outside full screen a toolbar across
-		 * its edge, in a strip the remote desktop keeps clear of; in full screen not shown.
+		 * Outside full screen a toolbar across its edge, in a strip the remote desktop keeps clear
+		 * of; in full screen not shown.
 		 */
-		HIDDEN("hidden"),
-		/**
-		 * Roadmap 4.2: a strip at the edge is reserved for the bar and the remote desktop is made
-		 * smaller by it. Not offered yet; until 4.2 a stored "reserved" is shown as {@link #OVERLAY}.
-		 */
-		RESERVED("reserved");
+		DOCKED("docked");
 
 		private final String stored;
 
@@ -80,7 +75,7 @@ public final class SessionBarSettings
 		}
 	}
 
-	public static final Mode DEFAULT_MODE = Mode.HIDDEN;
+	public static final Mode DEFAULT_MODE = Mode.DOCKED;
 	public static final Edge DEFAULT_EDGE = Edge.TOP;
 	public static final int DEFAULT_OPACITY = 85;
 	public static final int MIN_OPACITY = 30;

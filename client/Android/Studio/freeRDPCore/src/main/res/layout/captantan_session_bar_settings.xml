@@ -38,12 +38,12 @@
                 android:text="@string/captantan_bar_mode_overlay" />
 
             <Button
-                android:id="@+id/captantan_bar_mode_hidden"
+                android:id="@+id/captantan_bar_mode_docked"
                 style="?attr/materialButtonOutlinedStyle"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="@string/captantan_bar_mode_hidden" />
+                android:text="@string/captantan_bar_mode_docked" />
         </com.google.android.material.button.MaterialButtonToggleGroup>
 
         <!-- captantan fork: the bar sits at the top only for now (4.1 device run); the edge
