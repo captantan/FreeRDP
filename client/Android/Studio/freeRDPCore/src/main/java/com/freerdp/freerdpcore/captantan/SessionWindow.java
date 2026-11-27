@@ -132,6 +132,7 @@ public final class SessionWindow
 	private final SessionBar bar;
 	private final TrackpadInput trackpad;
 	private final TouchModeSwitch touchModes;
+	private final PenInput pen;
 	/** The configuration's night bits the views were built with. */
 	private int night;
 
@@ -139,6 +140,12 @@ public final class SessionWindow
 	public TrackpadInput getTrackpad()
 	{
 		return trackpad;
+	}
+
+	/** The window's stylus handling (pen input). */
+	PenInput getPen()
+	{
+		return pen;
 	}
 
 	/** The window's touch mode: direct touch, touch pointer or trackpad (package 4.3). */
@@ -177,6 +184,7 @@ public final class SessionWindow
 		this.bar = new SessionBar(this, input);
 		this.trackpad = new TrackpadInput(this, sessionView, scrollView, input);
 		this.touchModes = new TouchModeSwitch(this, input, touchPointerView, trackpad);
+		this.pen = new PenInput(this, sessionView, trackpad);
 		this.night = activity.getResources().getConfiguration().uiMode &
 		             Configuration.UI_MODE_NIGHT_MASK;
 
@@ -444,6 +452,8 @@ public final class SessionWindow
 		bar.onShown(target);
 		// And its touch mode (package 4.3).
 		touchModes.onShown(target);
+		// And what a stylus is to it (pen input).
+		pen.onShown(target);
 
 		if (connected)
 			bind();
@@ -547,6 +557,9 @@ public final class SessionWindow
 		}
 		// Also makes PhysicalKeyboard forget its keys: from here on it has nothing it could send
 		// to this instance, which may be freed once its session has ended.
+		// A pen the session was told about leaves it while the session can still be told (pen
+		// input). Before the trackpad forgets the session's handle.
+		pen.onUnbound(sessionGoesOn);
 		// A button the trackpad holds is released while the session can still be told (4.3).
 		trackpad.onUnbound(sessionGoesOn);
 		input.cancelPendingEvents();

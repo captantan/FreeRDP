@@ -28,7 +28,11 @@ import android.view.View;
  *
  * <p>A second finger landing during the scroll ends it; the rest of that gesture does nothing.
  *
- * <p>Log (tag {@code captantan.trackpad}, INFO): one line at the end of each drag scroll.
+ * <p>A stylus that is not sent as a pen ({@link PenInput}) scrolls the same way with its quick
+ * drag, in every touch mode and whatever {@code touch_drag} says: a pen points at a place.
+ *
+ * <p>Log (tag {@code captantan.trackpad}, INFO; {@code captantan.pen} for a stylus): one line at
+ * the end of each drag scroll.
  */
 final class DirectTouchDrag
 {
@@ -57,6 +61,7 @@ final class DirectTouchDrag
 	private TouchMode.Drag setting = TouchMode.Drag.DEFAULT;
 	private State state = State.IDLE;
 	private boolean cancelling;
+	private boolean pen; // the gesture watched or scrolling is a stylus's
 	private long downTime;
 	private float downRawX, downRawY, downViewX, downViewY, lastX, lastY;
 	private boolean scrollX, scrollY;
@@ -102,9 +107,13 @@ final class DirectTouchDrag
 		{
 			case MotionEvent.ACTION_DOWN:
 				state = State.IDLE;
-				if (direct && setting == TouchMode.Drag.SCROLL &&
-				    ev.getToolType(0) == MotionEvent.TOOL_TYPE_FINGER && !pannable() &&
-				    trackpad.connected())
+				pen = PenInput.isStylus(ev);
+				// a stylus's drag always scrolls (PenInput decides whether it comes here at all);
+				// a finger's by the touch_drag setting
+				if (direct &&
+				    (pen || (setting == TouchMode.Drag.SCROLL &&
+				             ev.getToolType(0) == MotionEvent.TOOL_TYPE_FINGER)) &&
+				    !pannable() && trackpad.connected())
 				{
 					state = State.WATCH;
 					downTime = ev.getEventTime();
@@ -137,7 +146,8 @@ final class DirectTouchDrag
 			{
 				final boolean taken = state == State.SCROLL || state == State.DONE;
 				if (state == State.SCROLL)
-					end(ev.getActionMasked() == MotionEvent.ACTION_UP ? "finger up" : "cancelled");
+					end(ev.getActionMasked() == MotionEvent.ACTION_UP ? (pen ? "pen up" : "finger up")
+					                                                  : "cancelled");
 				state = State.IDLE;
 				return taken;
 			}
@@ -208,10 +218,12 @@ final class DirectTouchDrag
 
 	private void end(String why)
 	{
-		Log.i(TrackpadInput.TAG, "drag scroll (direct touch): " + trackpad.windowName() + ", " +
-		                             (int)(travelled / density) + " dp, notches for the finger down " +
-		                             notchesY + " right " + notchesX + " (" +
-		                             trackpad.getScroll().storedName() + "), " + why);
+		Log.i(pen ? PenInput.TAG : TrackpadInput.TAG,
+		      "drag scroll (" + (pen ? "pen" : "direct touch") + "): " +
+		          (pen ? trackpad.windowNumbers() : trackpad.windowName()) +
+		          ", " + (int)(travelled / density) + " dp, notches for the " +
+		          (pen ? "pen" : "finger") + " down " + notchesY + " right " + notchesX + " (" +
+		          trackpad.getScroll().storedName() + "), " + why);
 	}
 
 	/** True if the session is larger than its window (zoomed in): ScrollView2D pans a drag. */

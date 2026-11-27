@@ -243,11 +243,15 @@ public final class ConnectionPrefs
 	public static final EnumField<TouchMode.Drag> TOUCH_DRAG =
 	    new EnumField<>("touch_drag", TouchMode.Drag.DEFAULT, TouchMode.Drag.values());
 
+	/** What a stylus is to the remote side (pen input). See PenInput. */
+	public static final EnumField<PenInput.Mode> PEN_MODE =
+	    new EnumField<>("pen_mode", PenInput.Mode.DEFAULT, PenInput.Mode.values());
+
 	private static final Field<?>[] FIELDS = { GRAPHICS_MODE, REMOTE_SCALE, REMOTE_SCALE_CUSTOM,
 		                                       BAR_MODE,      BAR_EDGE,     BAR_OPACITY,
 		                                       BAR_IN_FULLSCREEN,
 		                                       TOUCH_MODE,    POINTER_SPEED, TOUCH_SCROLL,
-		                                       TOUCH_DRAG };
+		                                       TOUCH_DRAG,    PEN_MODE };
 
 	// ---------------------------------------------------------------------------------------------
 
@@ -378,6 +382,11 @@ public final class ConnectionPrefs
 	public TouchMode.Drag getTouchDrag()
 	{
 		return get(TOUCH_DRAG);
+	}
+
+	public PenInput.Mode getPenMode()
+	{
+		return get(PEN_MODE);
 	}
 
 	// ---------------------------------------------------------------------------------------------

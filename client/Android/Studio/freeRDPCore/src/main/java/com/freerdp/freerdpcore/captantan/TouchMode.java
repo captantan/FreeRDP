@@ -11,8 +11,8 @@ import com.freerdp.freerdpcore.R;
 /**
  * What a finger on the session does, per connection ({@link ConnectionPrefs#TOUCH_MODE}, key
  * {@code touch_mode}). Chosen from the session bar's input mode button and on the "RDP options"
- * screen. A physical mouse, a touchpad and a stylus are not affected by it. Stored names are
- * permanent.
+ * screen. A physical mouse and a touchpad are not affected by it, and a stylus has its own setting
+ * ({@link PenInput.Mode}). Stored names are permanent.
  */
 public enum TouchMode implements ConnectionPrefs.Stored
 {

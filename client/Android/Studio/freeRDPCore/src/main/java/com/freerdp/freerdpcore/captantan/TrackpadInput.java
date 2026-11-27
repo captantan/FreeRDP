@@ -52,7 +52,8 @@ import java.util.WeakHashMap;
  *
  * <p><b>Where events come from.</b> SessionView.onTouchEvent hands every finger event here first
  * (one marked line, after its mouse branch, so a mouse, a touchpad and the touchpad's two-finger
- * scroll never come here); a stylus is left to upstream. While off, nothing is taken; the last
+ * scroll never come here). A stylus is {@link PenInput}'s: what that does not send as a pen comes
+ * here and is handled as in direct touch, whatever the mode. While off, nothing is taken; the last
  * touch's place is noted, so the pointer starts where the user last touched. A taken gesture
  * stops the scroll view from intercepting it ({@code requestDisallowInterceptTouchEvent}), so a
  * drag on a zoomed session moves the pointer instead of panning; the view follows the pointer
@@ -152,6 +153,7 @@ public final class TrackpadInput
 	private float accX, accY;
 	private ScaleGestureDetector pinch;
 	private boolean tapPending;
+	private boolean stylusGesture; // the touch gesture in progress began with a stylus
 
 	private final Runnable tapTimeout = () -> {
 		tapPending = false;
@@ -346,24 +348,62 @@ public final class TrackpadInput
 		}
 	}
 
+	/**
+	 * A stylus used as a pointer is at (x, y) of the session view (PenInput): as with a mouse,
+	 * the remote pointer is there now, and the trackpad goes on from that place.
+	 */
+	void onPointerAt(float viewX, float viewY)
+	{
+		if (host == null || host.getWidth() <= 0)
+			return;
+		noteTouch(viewX, viewY);
+		if (!mouseInUse)
+		{
+			mouseInUse = true;
+			if (on)
+				view.invalidate();
+		}
+	}
+
+	/** The remote desktop's size in pixels, 0 while there is none. */
+	int desktopWidth()
+	{
+		return host != null ? host.getWidth() : 0;
+	}
+
+	int desktopHeight()
+	{
+		return host != null ? host.getHeight() : 0;
+	}
+
 	// ****************************************************************************
 	// Touch
 
 	private boolean onTouch(MotionEvent ev)
 	{
 		final int action = ev.getActionMasked();
-		if (!on)
+		if (action == MotionEvent.ACTION_DOWN)
+			stylusGesture = PenInput.isStylus(ev);
+		if (!on || stylusGesture)
 		{
+			// A stylus that PenInput did not send as a pen points at a place in every touch mode:
+			// upstream's detectors click and drag where it is, and its quick drag scrolls.
 			// the pointer starts where the user last touched (direct touch clicks there)
-			if (action == MotionEvent.ACTION_UP && ev.getToolType(0) == MotionEvent.TOOL_TYPE_FINGER)
+			if (action == MotionEvent.ACTION_UP &&
+			    (stylusGesture || ev.getToolType(0) == MotionEvent.TOOL_TYPE_FINGER))
+			{
 				noteTouch(ev.getX(), ev.getY());
+				if (on)
+					view.invalidate();
+			}
 			final TouchModeSwitch modes = window.getTouchModes();
-			return directDrag.onTouch(ev, modes != null && modes.current() == TouchMode.DIRECT);
+			return directDrag.onTouch(
+			    ev, stylusGesture || (modes != null && modes.current() == TouchMode.DIRECT));
 		}
 		if (state == State.IDLE && action != MotionEvent.ACTION_DOWN)
 			return false; // not a gesture this class took (begun before the mode changed)
 		if (action == MotionEvent.ACTION_DOWN && ev.getToolType(0) != MotionEvent.TOOL_TYPE_FINGER)
-			return false; // a stylus works as before
+			return false; // neither a finger nor a stylus: upstream's
 
 		switch (action)
 		{
@@ -896,6 +936,12 @@ public final class TrackpadInput
 	// ****************************************************************************
 	// For DirectTouchDrag
 
+	/** The native handle of the window's connected session, else 0 (for PenInput). */
+	long getInstance()
+	{
+		return instance;
+	}
+
 	/** True while the window's session can take input. */
 	boolean connected()
 	{
@@ -925,6 +971,12 @@ public final class TrackpadInput
 	String windowName()
 	{
 		return window.getName() + " " + host;
+	}
+
+	/** The same without the session's title: the pen's log is read off devices in test runs. */
+	String windowNumbers()
+	{
+		return window.getName() + (host != null ? " s" + host.getId() : " (no session)");
 	}
 
 	/**

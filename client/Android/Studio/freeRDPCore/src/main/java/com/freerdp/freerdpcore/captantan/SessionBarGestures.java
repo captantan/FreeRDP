@@ -96,6 +96,7 @@ final class SessionBarGestures implements Window.Callback
 
 	@Override public boolean dispatchTouchEvent(MotionEvent ev)
 	{
+		bar.probePen("window.touch", ev); // pen input: the evidence log
 		final int action = ev.getActionMasked();
 		if (consuming)
 		{
@@ -135,6 +136,7 @@ final class SessionBarGestures implements Window.Callback
 
 	@Override public boolean dispatchGenericMotionEvent(MotionEvent ev)
 	{
+		bar.probePen("window.generic", ev); // pen input: the evidence log
 		if (isMouse(ev))
 		{
 			switch (ev.getActionMasked())

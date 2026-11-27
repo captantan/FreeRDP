@@ -17,6 +17,7 @@ import android.os.Looper;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.RoundedCorner;
 import android.view.View;
 import android.view.ViewGroup;
@@ -695,6 +696,14 @@ public final class SessionBar
 		                                     activity, host,
 		                                     activity.getResources().getConfiguration().densityDpi)));
 		scaleButton.setTooltipText(scaleButton.getContentDescription());
+	}
+
+	/** A motion event at the window's callback (SessionBarGestures), for the pen's log. */
+	void probePen(String stage, MotionEvent ev)
+	{
+		final PenInput pen = window.getPen();
+		if (pen != null)
+			pen.probeWindow(stage, ev);
 	}
 
 	/** A mouse or touchpad event in the window (SessionBarGestures): the trackpad follows it. */

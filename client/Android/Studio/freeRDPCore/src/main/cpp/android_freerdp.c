@@ -52,6 +52,7 @@
 #include "android_cliprdr.h"
 #include "android_disp.h"
 #include "captantan_disp.h" /* captantan fork */
+#include "captantan_pen.h"  /* captantan fork */
 #include "android_rail.h"
 #include "android_freerdp_jni.h"
 
@@ -763,6 +764,11 @@ static BOOL android_client_new(freerdp* instance, rdpContext* context)
 	instance->VerifyChangedCertificateEx = android_verify_changed_certificate_ex;
 	instance->LogonErrorInfo = nullptr;
 
+	/* captantan fork: pen input state; it subscribes to the channel events before anything else
+	 * does (captantan_pen.c) */
+	if (!captantan_pen_new(instance))
+		return FALSE;
+
 	/* captantan fork: display control state; it sets instance->Redirect, so it comes last */
 	if (!captantan_disp_new(instance))
 		return FALSE;
@@ -779,6 +785,7 @@ static void android_client_free(freerdp* instance, rdpContext* context)
 		WLog_WARN(TAG, "CloseHandle failed");
 
 	captantan_disp_free(instance); /* captantan fork */
+	captantan_pen_free(instance);  /* captantan fork */
 	android_event_queue_uninit(instance);
 }
 

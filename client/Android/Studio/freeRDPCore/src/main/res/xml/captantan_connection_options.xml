@@ -118,6 +118,14 @@
             android:entryValues="@array/captantan_touch_drag_values"
             android:defaultValue="scroll"
             app:useSimpleSummaryProvider="true" />
+        <!-- captantan fork (pen input): captantan/PenInput -->
+        <ListPreference
+            android:key="pen_mode"
+            android:title="@string/captantan_pen_mode"
+            android:entries="@array/captantan_pen_mode_entries"
+            android:entryValues="@array/captantan_pen_mode_values"
+            android:defaultValue="pen"
+            app:useSimpleSummaryProvider="true" />
         <Preference
             android:selectable="false"
             android:persistent="false"

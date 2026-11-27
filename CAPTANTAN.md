@@ -1655,10 +1655,12 @@ Windows App on the phone, where small remote targets are hard to hit by direct t
   zoomed-in session, whose drags pan the view (ScrollView2D intercepts them; `DirectTouchDrag` leaves a
   session larger than its window alone). A second finger landing during the scroll ends it and the rest
   of that gesture does nothing. It is reached through `TrackpadInput`'s hook while trackpad mode is off,
-  so it needs no upstream edit of its own, and it acts only while the mode in force is direct touch.
-- **A mouse, a touchpad, a stylus** are not affected. Mouse and touchpad events leave `SessionView`'s
-  touch handling before the hook (upstream's mouse branch). A stylus is left to upstream's handling (only
-  `TOOL_TYPE_FINGER` gestures are taken). `SessionBarGestures` gives `TrackpadInput` every mouse and
+  so it needs no upstream edit of its own, and for a finger it acts only while the mode in force is
+  direct touch (a stylus's quick drag scrolls in every mode: "Pen input" below).
+- **A mouse and a touchpad** are not affected. Mouse and touchpad events leave `SessionView`'s
+  touch handling before the hook (upstream's mouse branch). The gestures above are a finger's only
+  (`TOOL_TYPE_FINGER`). **A stylus** has its own handling in every touch mode since "Pen input" below
+  (it was left to upstream's when this package was built). `SessionBarGestures` gives `TrackpadInput` every mouse and
   touchpad position outside the bar: while a mouse is in use, Android shows its own pointer with the
   remote shape, the drawn one is hidden, and the trackpad goes on from the mouse's place at the next
   touch.
@@ -1746,7 +1748,153 @@ Windows App on the phone, where small remote targets are hard to hit by direct t
   (sub-notch) wheel deltas, a server-side pointer move (`Pointer_SetPosition`, which `android_freerdp.c`
   ignores), drag lock (lifting the finger during a drag and going on), three-finger gestures, and RDP
   touch input (the multitouch channel, rdpei), so that the host handles touch gestures itself as
-  Windows App does.
+  Windows App does. The channel is loaded since "Pen input" below, which sends a pen through it; fingers
+  are still sent as a mouse.
+
+**Pen input**
+
+Asked for after a device run of 4.3: in direct touch the tablet's pen moved the pointer while hovering
+and clicked with a tap, as upstream has it, but a pen drag did nothing, and the question was whether the
+pen can be sent to the host as a pen.
+
+- **What was found.** An evidence build first logged every stylus and mouse motion event at each stage it
+  passes through a session window (`captantan/PenProbe.java`, still there behind a test switch), on the
+  tablet (Android API 37), in a full window and in a desktop window:
+  - A pen event has source `0x5002` (touchscreen and stylus) and tool type `STYLUS`, with pressure 0 to
+    1, tilt, orientation and hover distance. It is never turned into a mouse, in either kind of window.
+  - Hover arrives at the view's hover handler, contact at its touch handler. A touch-down is
+    `HOVER_EXIT` and `ACTION_DOWN` in the same millisecond, a lift `ACTION_UP` and `HOVER_ENTER` in the
+    same millisecond.
+  - The side button is only a bit of the button state (`BUTTON_STYLUS_PRIMARY`) while it is held, in the
+    air and in contact. There is no button press event for it.
+  - Nothing withholds a stroke. Android's stylus handwriting (which, from Android 13, can take a stylus
+    drag over a view that takes text) leaves the session view alone: `isAutoHandwritingEnabled()` is
+    false for it without the fork doing anything, and whole strokes arrive. So nothing is switched off;
+    `PenInput` logs what the platform says once per window, for a device where it differs.
+  - Upstream's `ScrollView2D` takes a pen drag to pan the session view when the view is larger than the
+    window (zoomed in, or the keyboard is up), as it takes a finger's.
+  - Upstream's direct touch did nothing with a quick pen drag for the same reason as with a finger
+    (4.3): its detectors wait for a long press before a drag.
+  - FreeRDP has a pen API (`freerdp_client_handle_pen`, `client/common/client.c`), used by the X11
+    client only. It sends through the input channel ([MS-RDPEI], "rdpei", a dynamic channel), which is
+    built into the Android library but was never loaded by the Android client.
+  - **Both hosts open the input channel** and announce protocol 3.0 with multipen. Windows takes pen
+    events. GNOME Remote Desktop has the channel from version 49, injects touch from it, and its pen
+    callback is a stub that returns success: every pen event is dropped. So "the channel is open" cannot
+    mean "send a pen". The two can be told apart by the system the host names in its general capability
+    set: the Windows host says Windows (1), the GNOME host Unix (4).
+- **Two paths** (`captantan/PenInput.java`, new; its class comment is the reference), chosen per
+  connection by `pen_mode` and by the host:
+  - **A pen** (`pen_mode` = `pen`, the default, and a host that opened the channel, whose protocol version
+    has pen events (2.0 or later) and that says it is Windows): hover, contact, pressure (0 to 1024),
+    tilt along both axes, the side button as the barrel button and the eraser end are sent as pen
+    events, in remote desktop pixels (mapped as `SessionView.mapTouchEvent` does: view pixels divided by
+    the zoom, clamped to the desktop). The host does with them what it does with a pen of its own, in
+    every touch mode. A stroke asks the scroll view not to take it, so a pen never pans. The host is told
+    the pen left 150 ms after a lift, or 60 ms after a hover ends, unless the pen is seen again.
+  - **A pointer whose drag scrolls** (everywhere else, and with `pen_mode` = `scroll`): hovering moves the
+    remote pointer and a tap clicks (upstream's); a quick drag scrolls what is under the pen, as a
+    finger's does in direct touch (`DirectTouchDrag`, same `touch_scroll` direction, whatever `touch_drag`
+    says); a pen held still for upstream's long press and then dragged is upstream's drag with the left
+    button; a tap with the side button held is a right click where the pen is. This is the same in direct
+    touch, touch pointer and trackpad mode: a pen points at a place, so it is not a trackpad finger.
+    `TrackpadInput`'s hook hands a stylus gesture to `DirectTouchDrag` in every mode; the trackpad's
+    pointer goes on from where the pen was.
+- **The native side** (`cpp/captantan_pen.c` and `.h`, new):
+  - It keeps its own note of whether the host has opened the channel (PubSub channel events, subscribed
+    when the client context is created so they run before FreeRDP's common handlers), behind a lock
+    that is also held around every call into the channel. FreeRDP's pen helper asserts that the channel
+    is there, so it is never called without it, and a channel that is closing waits for an event being
+    sent.
+  - `nativeState` gives the Java side the path's conditions at any moment; `nativeDescribe` has the
+    session thread read the channel's version and features and the host's system (libfreerdp keeps the
+    capability sets the host sent in `FreeRDP_ReceivedCapabilityData`) and log them; `nativePen` queues
+    one pen event (`EVENT_TYPE_CAPTANTAN_PEN`, 0x4B03) for the session thread, as the keyboard and
+    display events are queued.
+  - On the session thread an event becomes one call of `freerdp_client_handle_pen`, in the X11 client's
+    order: register once (the tip as pen 1, the eraser end as pen 2 with `FREERDP_PEN_IS_INVERTED`),
+    motion while hovering, press, motion, release, `freerdp_client_pen_cancel_all` when the pen leaves.
+  - **Pacing.** The channel keeps one state per pen and sends it every 20 ms, so a state set twice in
+    that time is sent once: a press followed at once by a motion, or a release by a hover, would never
+    reach the host, which then sees a pen that draws without having been put down or stays down for
+    good. (The channel guards touch contacts against this, not pens.) After a press or a release the
+    next state waits 30 ms (`PEN_FLUSH_MS`): a motion in that time is left out, anything else is held
+    back for the rest of it.
+  - FreeRDP keeps "pressed" and "hovering" per pen across a channel that closes. Both hosts were seen
+    closing the channel and opening it again a few seconds into a session; the pens are started again
+    when a new channel is first used.
+- **Loading the channel.** `/multitouch` is passed when the bookmark's `pen_mode` is `pen`. It loads the
+  rdpei plugin; the host then opens the channel or does not. The client sends nothing through it but pen
+  events, so fingers, mice and touchpads go as before.
+- **Setting** (`ConnectionPrefs`, on "RDP options" in the "Touch input" category):
+
+  | Key | Values (stored names) | Default | Notes |
+  |---|---|---|---|
+  | `pen_mode` | `pen`, `scroll` | `pen` | `pen`: a pen where the host takes one, else as `scroll`. `scroll`: a pointer whose drag scrolls, and the input channel is not asked for |
+
+- **Log** (tag `captantan.pen`, INFO; windows and sessions by number, never by title):
+  - `connect: bookmark <id>, pen mode <pen|scroll>: the input channel is asked for (/multitouch) | is not
+    asked for`;
+  - from the native side `channel: the host opened the input channel (...)`, `channel: the input channel
+    was closed`, `channel: input protocol <v>, features <f>, pen events <yes|no>, host system <name>
+    (<major>/<minor>)`, `channel: the host has not opened the input channel`, and `pen registered: the
+    tip | eraser end, as pen <n>`;
+  - `path: w<n> s<n>: as a pen (...) | a pointer whose drag scrolls (<why>)` whenever a session's path
+    changes; `stylus: ...` once per stylus device; `handwriting: ...` once per window;
+  - one line per stroke (`stroke: ... tip|eraser[ with the side button], <n> events, <d> px in the view,
+    pressure up to <p> of 1024, lifted|cancelled`), per drag scroll (`drag scroll (pen): ...`) and per
+    `side button tap: ... right click at x,y`. No line per move.
+  - `adb shell setprop log.tag.captantan.pen.probe DEBUG` before the window opens turns on `PenProbe`:
+    every stylus and mouse motion event at the window's callback and at the view's listeners, runs of
+    moves as one line. No keys and no text.
+- **Upstream files edited** (each marked `captantan fork`):
+  - `LibFreeRDP.java`, in `setConnectionInfo(Context, long, BookmarkBase)` after `args.add("/disp")`:
+    `if (PenInput.wantsChannel(context, bookmark)) args.add("/multitouch");`.
+  - `android_freerdp.c`: the include, `captantan_pen_new(instance)` in `android_client_new` before
+    `captantan_disp_new`, `captantan_pen_free(instance)` in `android_client_free`. `android_freerdp.h`:
+    the `captantanPen` pointer in `androidContext`.
+  - `android_event.c`: the include, a case in `android_process_event` and one in `android_event_free`.
+    `cpp/CMakeLists.txt`: the two new files.
+  - `SessionView.java` is not edited: `PenInput` sets the session view's touch and hover listeners
+    (which upstream does not use) and passes on what it does not take.
+
+  **Merging:** see the checklist under "Merging a new upstream release".
+- Ours, changed: `TrackpadInput.java` (a stylus gesture goes to `DirectTouchDrag` in every mode,
+  `onPointerAt`, `getInstance`, the desktop's size), `DirectTouchDrag.java` (a stylus's drag always
+  scrolls), `SessionWindow.java` (owns the `PenInput`), `SessionBar.java` and `SessionBarGestures.java`
+  (events to the probe), `ConnectionPrefs.java` (the field and its getter), `TouchMode.java` (a comment),
+  `res/xml/captantan_connection_options.xml`, `captantan_strings.xml`.
+- **What each host does:**
+  - **Windows:** opens the channel (protocol 3.0, multipen) and takes the pen as a pen: a pen cursor
+    while hovering, strokes with pressure in a drawing application, the side button as the pen's barrel
+    button (a right click). With `pen_mode` = `scroll` the pen is a pointer there too.
+  - **GNOME Remote Desktop 49 or later:** opens the channel and would drop pen events, so the pen is a
+    pointer whose drag scrolls, whatever `pen_mode` says. Before 49 there is no channel and the result is
+    the same.
+- **Device runs** (2026-11-26, the tablet; the phone has no pen; the table is in the pull request):
+  - Evidence build: see "What was found".
+  - The build with the behaviour: on the Windows host hover, tap, strokes with pressure in a drawing
+    application, the side button, in each touch mode, in a full window and a desktop window, and both
+    values of `pen_mode`; on the GNOME host hover, tap, the quick drag that scrolls, the held drag and the
+    side button's right click. Fingers and the keyboard cover's touchpad were rechecked with the channel
+    loaded: as before, and Windows showed no touch feedback. All of it was reported as working.
+    The log of the first part of the run agrees (pen registered, about 25 strokes with pressure up to 814
+    of 1024, none cancelled; drag scrolls on the GNOME host; the path following a switch of sessions in
+    one window).
+  - **Not run:** the eraser end and tilt in an application that shows it (the pen has no eraser end;
+    tilt is sent but nothing was looked at that uses it), a host older than GNOME 49, a second pen, a
+    stylus on another device.
+- **Not in this package**, written down for later:
+  - real touch through `freerdp_client_handle_touch`, so that the host handles finger gestures itself.
+    The channel is now loaded and both hosts open it; GNOME Remote Desktop from 49 injects touch from it,
+    so this would work on both. It changes what every finger does, so it wants its own package and its
+    own setting;
+  - a pen on GNOME: its pen callback is a stub until libei can submit pen events. When that changes, the
+    "says it is Windows" test in `captantan_pen.c` (`CAPTANTAN_PEN_STATE_WINDOWS`) is the one place to
+    widen;
+  - rotation (the pen's twist) is not sent: the tablet's pen does not report it;
+  - the flags the client announces to the host (`CS_READY`: touch visuals and so on) are FreeRDP's
+    defaults.
 
 **Session bar: kept in full screen, quick remote scale** (package 4.2)
 
@@ -2131,6 +2279,28 @@ compile check runs on the merge.
      - `SessionInputManager.getPinchZoomListener()` and `toggleTouchPointer()` are used as they are: if
        upstream changes pinch zoom or the touch pointer's toggle, check the trackpad's pinch and the input
        mode menu on a device.
+   - Pen input:
+     - `LibFreeRDP.java` (`setConnectionInfo`): keep the `PenInput.wantsChannel` line that adds
+       `/multitouch`. If upstream starts passing `/multitouch` itself, or sends Android touch through the
+       input channel, drop the line and read "Pen input" above again: a host would then get touch and
+       pen events from two places.
+     - `android_freerdp.c`: keep `captantan_pen_new(instance)` in `android_client_new` (anywhere after
+       the context exists; it must run before the connection starts, since it subscribes to the channel
+       events and has to come before the handlers `android_pre_connect` subscribes) and
+       `captantan_pen_free(instance)` in `android_client_free`. `android_freerdp.h`: keep the
+       `captantanPen` pointer. `android_event.c`: keep the include and the two cases, beside the
+       keyboard's and the display's. `cpp/CMakeLists.txt`: keep the two source lines.
+     - `SessionView.java`: if upstream starts using `setOnTouchListener` or `setOnHoverListener` on the
+       session view, or handles a stylus itself (tool type, button state, pressure), `PenInput` has to
+       give way or be dropped: check what a pen does on a device.
+     - Library code it leans on, to read again if a merge touches it: `client/common/client.c`
+       (`freerdp_client_handle_pen`: the order of its variable arguments, the assert on the channel, that
+       it does nothing while the connection is not active, how it latches the barrel button;
+       `freerdp_client_pen_cancel_all`; the `pens` array in `rdpClientContext`, which `captantan_pen.c`
+       resets), `channels/rdpei/client/rdpei_main.c` (one state per pen, sent every 20 ms: if upstream
+       gives pens the flush that touch contacts have, `PEN_FLUSH_MS` can go), `client/X11/xf_input.c` (the
+       reference caller), and `libfreerdp/core/capabilities.c` (that the host's capability sets are kept
+       in `FreeRDP_ReceivedCapabilityData`).
    - `ApplicationSettingsActivity.java` (`clearCertificateCache`) and `settings_app_security.xml`: keep the
      call to `CertificateStore.clear` and the removed "Accept all certificates". If upstream moves its
      certificate store again, update `CertificateStore`.
@@ -2211,7 +2381,10 @@ The workflow `.github/workflows/captantan-android.yml` runs on pull requests int
   the strings `bar_mode`, `bar_edge`, `bar_opacity` and `captantan.bar` in the dex; package 4.2's
   `RemoteScaleSwitch` and `ConnectionPrefs$BoolField`, the scale button's and the settings switch's ids,
   the scale icon, its strings and the scale values, and the strings `bar_in_fullscreen`, `askAgain`,
-  `ask again`, `remote scale: ` and `in full screen ` in the dex;
+  `ask again`, `remote scale: ` and `in full screen ` in the dex; pen input's rdpei channel in
+  `libfreerdp-client3.so` (two of its strings), `captantan/PenInput`, its `Mode` and `PenProbe`, the three
+  native methods of `PenInput` in the dex and exported from `libfreerdp-android.so`, the strings
+  `/multitouch`, `captantan.pen` and `pen_mode`, and the pen mode's values array;
 - test build: package `dev.captantan.freerdp.debug`, label `RDP debug`, the same version, signed with the
   committed public key, and byte-identical native libraries to the release APK.
 

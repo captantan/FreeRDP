@@ -48,6 +48,7 @@ typedef struct
 	HANDLE foregroundEvent;
 
 	void* captantanDisp; /* captantan fork: display control state (captantan_disp.c) */
+	void* captantanPen;  /* captantan fork: pen input state (captantan_pen.c) */
 } androidContext;
 
 #endif /* FREERDP_CLIENT_ANDROID_FREERDP_H */

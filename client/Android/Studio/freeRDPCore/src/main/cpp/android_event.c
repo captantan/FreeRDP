@@ -25,6 +25,7 @@
 #include "android_cliprdr.h"
 #include "captantan_keyboard.h" /* captantan fork */
 #include "captantan_disp.h"     /* captantan fork */
+#include "captantan_pen.h"      /* captantan fork */
 
 /* Merges a pure move into a pure move still waiting at the tail of the queue */
 WINPR_ATTR_NODISCARD
@@ -217,6 +218,11 @@ static BOOL android_process_event(ANDROID_EVENT_QUEUE* queue, freerdp* inst)
 			 * (captantan_disp.c) */
 			case EVENT_TYPE_CAPTANTAN_DISP:
 				rc = captantan_disp_process_event(inst, event);
+				break;
+
+			/* captantan fork: pen input, sent through the input channel (captantan_pen.c) */
+			case EVENT_TYPE_CAPTANTAN_PEN:
+				rc = captantan_pen_process_event(inst, event);
 				break;
 
 			case EVENT_TYPE_DISCONNECT:
@@ -545,6 +551,11 @@ void android_event_free(ANDROID_EVENT* event)
 		/* captantan fork */
 		case EVENT_TYPE_CAPTANTAN_DISP:
 			captantan_disp_event_free(event);
+			break;
+
+		/* captantan fork */
+		case EVENT_TYPE_CAPTANTAN_PEN:
+			captantan_pen_event_free(event);
 			break;
 
 		default:

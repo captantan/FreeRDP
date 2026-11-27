@@ -233,7 +233,7 @@
     <string name="captantan_touch_drag">One-finger drag in direct touch</string>
     <string name="captantan_touch_drag_scroll">Scrolls, as on a Windows touchscreen</string>
     <string name="captantan_touch_drag_off">Does nothing (upstream)</string>
-    <string name="captantan_touch_note">Direct touch: tap to click, hold a moment and then drag to select or move a window. Zoomed in, a one-finger drag moves the view. Trackpad: move one finger anywhere to move the pointer. Tap to click, tap with two fingers to right-click, drag two fingers to scroll and pinch to zoom. To drag or select, tap and then touch again and move. A mouse, a touchpad and a stylus work as always. The session bar\'s input mode button switches modes during a session.</string>
+    <string name="captantan_touch_note">Direct touch: tap to click, hold a moment and then drag to select or move a window. Zoomed in, a one-finger drag moves the view. Trackpad: move one finger anywhere to move the pointer. Tap to click, tap with two fingers to right-click, drag two fingers to scroll and pinch to zoom. To drag or select, tap and then touch again and move. A mouse and a touchpad work as always. The session bar\'s input mode button switches modes during a session. Pen: as a pen, the host gets the pen itself, with pressure, tilt, the side button and the eraser, and does with it what it does with its own pens (Windows hosts; elsewhere the pen is a pointer). As a pointer, hovering moves the mouse pointer, a tap clicks, a quick drag scrolls, hold a moment and then drag to select, and a tap with the side button held is a right click.</string>
     <string-array name="captantan_touch_mode_entries">
         <item>@string/captantan_touch_mode_direct</item>
         <item>@string/captantan_touch_mode_touch_pointer</item>
@@ -262,5 +262,18 @@
     <string-array name="captantan_touch_drag_values" translatable="false">
         <item>scroll</item>
         <item>off</item>
+    </string-array>
+    <!-- Pen input (captantan/PenInput.java) -->
+    <string name="captantan_pen_mode">Pen (stylus)</string>
+    <string name="captantan_pen_mode_pen">A pen, where the host takes one</string>
+    <string name="captantan_pen_mode_scroll">A pointer: a drag scrolls</string>
+    <string-array name="captantan_pen_mode_entries">
+        <item>@string/captantan_pen_mode_pen</item>
+        <item>@string/captantan_pen_mode_scroll</item>
+    </string-array>
+    <!-- Stored names of PenInput.Mode, in the same order. Never change them. -->
+    <string-array name="captantan_pen_mode_values" translatable="false">
+        <item>pen</item>
+        <item>scroll</item>
     </string-array>
 </resources>
