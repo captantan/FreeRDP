@@ -2505,8 +2505,12 @@ way to switch.
   - **Third build:** a narrow window (three tabs) went compact with 72 dp left to drag, and the
     switcher's button opened the sheet twice. The stroke with the curved tab looked off.
   - **Fourth build:** the pill, kept (see "Why a pill").
-  - **Not run:** "Open new connections" set to "In a new window" in desktop windowing, the phone, an
-    external display (none at hand; package 6.2), DeX.
+  - **"Open new connections" set to "In a new window"** in desktop windowing: a new connection opened
+    a window of its own, as in `.9` (the owner's word; no log was taken).
+  - **Phone** (API 37, fourth build): with nothing stored the new default was kept (`open new
+    connections: kept the default`); one session window, no strip ("not a desktop window"), the docked
+    bar and its switcher, two connections each at 1080x2029, below the bar, as in 6.1 and `.9`.
+  - **Not run:** an external display (none at hand; package 6.2), DeX.
 
 ## Package and version scheme
 
