@@ -15,6 +15,7 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.InputDevice;
 import android.view.Menu;
 import android.view.MotionEvent;
 import android.view.View;
@@ -25,6 +26,7 @@ import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.Space;
 import android.widget.TextView;
 
 import androidx.annotation.RequiresApi;
@@ -45,6 +47,7 @@ import com.freerdp.freerdpcore.presentation.SessionActivity;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -61,8 +64,8 @@ import java.util.Map;
  * ({@code WindowInsets.getBoundingRects(captionBar())}). The strip lies under the whole caption
  * bar, its tabs between those elements:
  * <ul>
- * <li><b>In the caption bar</b> (the caption bar inset is there and transparent): the tabs and "+"
- * are excluded from the system's gestures ({@link View#setSystemGestureExclusionRects}), so a tap
+ * <li><b>In the caption bar</b> (the caption bar inset is there and transparent): the tabs, "+"
+ * and the bar's buttons are excluded from the system's gestures ({@link View#setSystemGestureExclusionRects}), so a tap
  * and a mouse click reach them; the rest of the caption bar is the system's, which drags the
  * window (measured: without the exclusion the system takes even a tap there, and the view gets
  * a cancel). At least {@link #DRAG_MIN_DP} after "+" is always left for dragging; the tabs
@@ -73,11 +76,25 @@ import java.util.Map;
  * window has no caption bar (the tablet's full-display state, where the window covers the
  * display and the system hides its caption bar; or a caption bar that is not an inset, before
  * API 35, below it). The remote desktop's viewport leaves it out
- * ({@link SessionResizeController#setTabStripTop}), and the session bar sits below it. In the
+ * ({@link SessionResizeController#setTabStripTop}); the bar's buttons are in the row too. In the
  * window's own full screen (package 6.1) this row is hidden; in the caption bar the tabs stay,
  * since the caption bar does.</li>
  * </ul>
  * Outside desktop windowing there is no strip and the session switcher is the way to switch.
+ *
+ * <p><b>The bar's buttons</b> (the owner's choice in the 6.1b device run). In a desktop window the
+ * session bar is not shown: its keyboard, input mode, key capture, reset zoom and settings
+ * buttons are at the strip's right end ({@link SessionBar#pressOnTabStrip}), with the space for
+ * dragging between them and "+", and are excluded from the system's gestures like the tabs. The
+ * switcher, full screen and disconnect are not needed there (the tabs; the caption bar's
+ * maximise and full-display buttons; a tab's close control). The remote desktop gets the bar's
+ * strip back. In the window's own full screen (6.1, only from a window that was in it before
+ * 6.1b) the bar is the bar again.
+ *
+ * <p><b>Colours.</b> The strip has the theme's highest surface container in a light theme and
+ * its lowest in a dark one; the shown tab has the other end (white against grey in the light
+ * theme, as a browser's tab strip), the other tabs none, so the shown one stands out (the first
+ * device run found the two near-equal greys of the first build hard to tell apart).
  *
  * <p><b>Tabs.</b> A tap or click shows the tab's session in this window ({@link
  * SessionWindow#switchTo}); its close control disconnects it after asking, as the switcher and
@@ -106,6 +123,13 @@ final class SessionTabStrip implements SessionRegistry.Listener
 	private static final int PLUS_DP = 40;
 	private static final int TAB_TOP_GAP_DP = 4;
 	private static final int CLOSE_DP = 28;
+	/** A bar button on the strip, square, with an icon of {@link #TOOL_ICON_DP}. */
+	private static final int TOOL_DP = 40;
+	private static final int TOOL_ICON_DP = 20;
+	/** The bar's buttons the strip has, in the bar's order. */
+	private static final String[] TOOLS = { SessionBar.KEYBOARD, SessionBar.INPUT_MODE,
+		                                    SessionBar.KEY_CAPTURE, SessionBar.RESET_ZOOM,
+		                                    SessionBar.BAR_SETTINGS };
 
 	private enum Place
 	{
@@ -124,6 +148,8 @@ final class SessionTabStrip implements SessionRegistry.Listener
 	private final HorizontalScrollView scroll;
 	private final LinearLayout tabRow;
 	private final MaterialButton plus;
+	private final LinearLayout tools;
+	private final Map<String, MaterialButton> toolButtons = new LinkedHashMap<>();
 	private final Map<SessionHost, Tab> tabs = new HashMap<>();
 	private List<SessionHost> order = new ArrayList<>();
 
@@ -137,11 +163,16 @@ final class SessionTabStrip implements SessionRegistry.Listener
 	private int placeWidth = -1;
 	private int tabWidth = -1;
 	private int scrollWidth = -1;
+	private int toolsWidth = -1;
+	/** The bar's buttons are on the strip (a desktop window, not in its own full screen). */
+	private boolean holds;
 	private Boolean lightCaption;
 	private final Rect excluded = new Rect();
+	private final Rect excludedTools = new Rect();
 	private String lastPlaceLog;
 	private String lastTabsLog;
 	private int lastTool = MotionEvent.TOOL_TYPE_UNKNOWN;
+	private int lastSource;
 
 	SessionTabStrip(SessionWindow window)
 	{
@@ -176,6 +207,22 @@ final class SessionTabStrip implements SessionRegistry.Listener
 		});
 		row.addView(plus, new LinearLayout.LayoutParams(dp(PLUS_DP), dp(PLUS_DP), 0f));
 		((LinearLayout.LayoutParams)plus.getLayoutParams()).gravity = Gravity.CENTER_VERTICAL;
+		// In the caption bar this space is the system's: it drags the window.
+		row.addView(new Space(activity),
+		            new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
+		tools = new LinearLayout(activity);
+		tools.setOrientation(LinearLayout.HORIZONTAL);
+		tools.setGravity(Gravity.CENTER_VERTICAL);
+		tools.setVisibility(View.GONE);
+		for (String name : TOOLS)
+		{
+			final MaterialButton b = iconButton(toolIcon(name), toolDescription(name), TOOL_ICON_DP);
+			b.setOnClickListener(v -> window.getBar().pressOnTabStrip(name, v, tool()));
+			tools.addView(b, new LinearLayout.LayoutParams(dp(TOOL_DP), dp(TOOL_DP)));
+			toolButtons.put(name, b);
+		}
+		row.addView(tools, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+		                                                 ViewGroup.LayoutParams.MATCH_PARENT));
 		strip.addView(row, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
 		                                                ViewGroup.LayoutParams.MATCH_PARENT));
 		strip.setBackgroundColor(stripColor());
@@ -183,8 +230,10 @@ final class SessionTabStrip implements SessionRegistry.Listener
 			content.addView(strip, new FrameLayout.LayoutParams(
 			                           ViewGroup.LayoutParams.MATCH_PARENT, 0, Gravity.TOP));
 		strip.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> excludeLater());
+		tools.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> excludeLater());
 		scroll.setOnScrollChangeListener((v, x, y, ox, oy) -> excludeLater());
 
+		barButtonsChanged(); // the key capture and input mode buttons as the bar has them
 		SessionRegistry.addListener(this);
 		activity.getWindow().getDecorView().getViewTreeObserver().addOnGlobalLayoutListener(
 		    () -> place("layout"));
@@ -206,6 +255,27 @@ final class SessionTabStrip implements SessionRegistry.Listener
 		refresh(why);
 	}
 
+	/** Whether the bar's buttons are on the strip, and the bar not shown (SessionBar). */
+	boolean holdsBar()
+	{
+		return holds;
+	}
+
+	/** The bar changed the key capture or input mode button: the strip's copies follow. */
+	void barButtonsChanged()
+	{
+		if (destroyed)
+			return;
+		for (Map.Entry<String, MaterialButton> e : toolButtons.entrySet())
+		{
+			final int visibility =
+			    window.getBar().styleOnTabStrip(e.getKey(), e.getValue()) ? View.VISIBLE : View.GONE;
+			if (e.getValue().getVisibility() != visibility)
+				e.getValue().setVisibility(visibility);
+		}
+		place("bar buttons");
+	}
+
 	/** Light or dark changed: colours again. */
 	void rebuild()
 	{
@@ -213,6 +283,7 @@ final class SessionTabStrip implements SessionRegistry.Listener
 		for (Tab t : tabs.values())
 			t.restyle();
 		lightCaption = null;
+		barButtonsChanged(); // the bar was inflated again
 		refresh("ui mode changed");
 	}
 
@@ -285,6 +356,14 @@ final class SessionTabStrip implements SessionRegistry.Listener
 	{
 		if (destroyed)
 			return;
+		final boolean holdsNow = desktop && !window.isOwnFullScreen();
+		if (holdsNow != holds)
+		{
+			holds = holdsNow;
+			// the bar hides or shows for it; before the first session it learns it when shown
+			if (window.getHost() != null)
+				window.getBar().tabStripChanged(holds ? "a desktop window" : why);
+		}
 		final List<SessionHost> now = desktop ? SessionTabs.tabsOf(window) : new ArrayList<>();
 		final SessionHost shown = window.getHost();
 		if (desktop && shown != null && !now.contains(shown))
@@ -398,17 +477,24 @@ final class SessionTabStrip implements SessionRegistry.Listener
 			}
 		}
 
-		// The tabs share what the caption bar leaves, minus "+" and the drag area.
+		// The tabs share what the caption bar leaves, minus "+", the bar's buttons and the drag
+		// area.
 		final int width = Math.max(0, right - left);
 		final int n = Math.max(1, order.size());
-		final int forTabs = Math.max(0, width - dp(PLUS_DP) - (p == Place.CAPTION ? dp(DRAG_MIN_DP) : 0));
+		int shownTools = 0;
+		for (MaterialButton b : toolButtons.values())
+			if (b.getVisibility() != View.GONE)
+				shownTools++;
+		final int tw0 = (holds && p != Place.NONE) ? shownTools * dp(TOOL_DP) : 0;
+		final int forTabs = Math.max(0, width - dp(PLUS_DP) - tw0 -
+		                                    (p == Place.CAPTION ? dp(DRAG_MIN_DP) : 0));
 		final int tw = Math.max(Math.min(dp(TAB_MIN_DP), forTabs),
 		                        Math.min(dp(TAB_MAX_DP), forTabs / n));
 		final int sw = Math.min(tw * order.size(), forTabs);
 
 		final boolean changed = p != place || top != placeTop || height != placeHeight ||
 		                        left != placeLeft || width != placeWidth || tw != tabWidth ||
-		                        sw != scrollWidth;
+		                        sw != scrollWidth || tw0 != toolsWidth;
 		place = p;
 		if (!changed)
 			return;
@@ -418,6 +504,8 @@ final class SessionTabStrip implements SessionRegistry.Listener
 		placeWidth = width;
 		tabWidth = tw;
 		scrollWidth = sw;
+		toolsWidth = tw0;
+		tools.setVisibility(tw0 > 0 ? View.VISIBLE : View.GONE);
 
 		final FrameLayout.LayoutParams slp = (FrameLayout.LayoutParams)strip.getLayoutParams();
 		if (slp.height != height || slp.topMargin != top)
@@ -450,8 +538,10 @@ final class SessionTabStrip implements SessionRegistry.Listener
 		                           " to " + right + caption + "; " + order.size() + " tab(s) of " +
 		                           Math.round(tw / density) + " dp" +
 		                           (tw * order.size() > forTabs ? ", scrolling" : "") +
+		                           (tw0 > 0 ? ", the bar's " + shownTools + " buttons" : "") +
 		                           (p == Place.CAPTION
-		                                ? ", " + Math.round((width - dp(PLUS_DP) - sw) / density) +
+		                                ? ", " + Math.round((width - dp(PLUS_DP) - sw - tw0) /
+		                                                    density) +
 		                                      " dp left for dragging"
 		                                : ""));
 		if (!log.equals(lastPlaceLog))
@@ -467,22 +557,36 @@ final class SessionTabStrip implements SessionRegistry.Listener
 		strip.post(this::exclude);
 	}
 
-	/** The tabs and "+" take the caption bar's input from the system; the rest drags the window. */
+	/**
+	 * The tabs and "+", and the bar's buttons, take the caption bar's input from the system; the
+	 * space between them drags the window.
+	 */
 	private void exclude()
 	{
 		if (destroyed || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q)
 			return;
-		final Rect r = new Rect();
+		final Rect r = new Rect(), t = new Rect();
 		if (place == Place.CAPTION && strip.getVisibility() == View.VISIBLE)
+		{
 			r.set(row.getLeft() + scroll.getLeft(), 0, row.getLeft() + plus.getRight(),
 			      strip.getHeight());
-		if (r.equals(excluded))
+			if (tools.getVisibility() == View.VISIBLE && tools.getWidth() > 0)
+				t.set(row.getLeft() + tools.getLeft(), 0, row.getLeft() + tools.getRight(),
+				      strip.getHeight());
+		}
+		if (r.equals(excluded) && t.equals(excludedTools))
 			return;
 		excluded.set(r);
-		strip.setSystemGestureExclusionRects(r.isEmpty() ? Collections.emptyList()
-		                                                 : Collections.singletonList(new Rect(r)));
+		excludedTools.set(t);
+		final List<Rect> rects = new ArrayList<>();
+		if (!r.isEmpty())
+			rects.add(new Rect(r));
+		if (!t.isEmpty())
+			rects.add(new Rect(t));
+		strip.setSystemGestureExclusionRects(rects);
 		Log.i(TAG, "tab strip " + window.getName() + ": taken from the system's gestures " +
-		               (r.isEmpty() ? "nothing" : "x " + r.left + " to " + r.right));
+		               (r.isEmpty() ? "nothing" : "x " + r.left + " to " + r.right) +
+		               (t.isEmpty() ? "" : " and x " + t.left + " to " + t.right));
 	}
 
 	// ****************************************************************************
@@ -547,8 +651,7 @@ final class SessionTabStrip implements SessionRegistry.Listener
 			view.addView(close, new LinearLayout.LayoutParams(dp(CLOSE_DP), dp(CLOSE_DP)));
 
 			view.setOnTouchListener((v, ev) -> {
-				if (ev.getActionMasked() == MotionEvent.ACTION_DOWN)
-					lastTool = ev.getToolType(0);
+				noteTool(ev);
 				return false;
 			});
 			view.setOnClickListener(v -> {
@@ -615,10 +718,8 @@ final class SessionTabStrip implements SessionRegistry.Listener
 
 		void restyle()
 		{
-			background.setFillColor(ColorStateList.valueOf(
-			    shown ? MaterialColors.getColor(view, com.google.android.material.R.attr
-			                                              .colorSurfaceContainerHigh)
-			          : Color.TRANSPARENT));
+			background.setFillColor(ColorStateList.valueOf(shown ? shownTabColor()
+			                                                     : Color.TRANSPARENT));
 			title.setTextColor(MaterialColors.getColor(
 			    view, shown ? com.google.android.material.R.attr.colorOnSurface
 			                : com.google.android.material.R.attr.colorOnSurfaceVariant));
@@ -692,8 +793,7 @@ final class SessionTabStrip implements SessionRegistry.Listener
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
 			b.setTooltipText(description);
 		b.setOnTouchListener((v, ev) -> {
-			if (ev.getActionMasked() == MotionEvent.ACTION_DOWN)
-				lastTool = ev.getToolType(0);
+			noteTool(ev);
 			return false;
 		});
 		return b;
@@ -719,11 +819,67 @@ final class SessionTabStrip implements SessionRegistry.Listener
 		return activity.getDrawable(tv.resourceId);
 	}
 
-	/** Under the tabs: the theme's highest surface container; the shown tab has the bar's colour. */
+	/**
+	 * Under the tabs: the theme's highest surface container in a light theme, its lowest in a
+	 * dark one; the shown tab has the other end ({@link #shownTabColor}), so it stands out.
+	 */
 	private int stripColor()
 	{
 		return MaterialColors.getColor(content != null ? content : root,
-		                               com.google.android.material.R.attr.colorSurfaceContainerHighest);
+		                               lightTheme()
+		                                   ? com.google.android.material.R.attr.colorSurfaceContainerHighest
+		                                   : com.google.android.material.R.attr.colorSurfaceContainerLowest);
+	}
+
+	/** The shown tab: the other end of the surface containers from the strip. */
+	private int shownTabColor()
+	{
+		return MaterialColors.getColor(content != null ? content : root,
+		                               lightTheme()
+		                                   ? com.google.android.material.R.attr.colorSurfaceContainerLowest
+		                                   : com.google.android.material.R.attr.colorSurfaceContainerHighest);
+	}
+
+	private boolean lightTheme()
+	{
+		return ColorUtils.calculateLuminance(MaterialColors.getColor(
+		           content != null ? content : root,
+		           com.google.android.material.R.attr.colorSurface)) > 0.5;
+	}
+
+	/** A bar button's icon on the strip, before the bar styles it (barButtonsChanged). */
+	private static int toolIcon(String name)
+	{
+		switch (name)
+		{
+			case SessionBar.KEYBOARD:
+				return R.drawable.ic_keyboard;
+			case SessionBar.INPUT_MODE:
+				return R.drawable.ic_touch_pointer;
+			case SessionBar.KEY_CAPTURE:
+				return R.drawable.captantan_ic_key_capture;
+			case SessionBar.RESET_ZOOM:
+				return R.drawable.captantan_ic_zoom_reset;
+			default:
+				return R.drawable.ic_tune;
+		}
+	}
+
+	private String toolDescription(String name)
+	{
+		switch (name)
+		{
+			case SessionBar.KEYBOARD:
+				return activity.getString(R.string.captantan_bar_keyboard);
+			case SessionBar.INPUT_MODE:
+				return activity.getString(R.string.captantan_bar_touch_pointer);
+			case SessionBar.KEY_CAPTURE:
+				return activity.getString(R.string.captantan_bar_capture_on);
+			case SessionBar.RESET_ZOOM:
+				return activity.getString(R.string.captantan_bar_zoom_reset);
+			default:
+				return activity.getString(R.string.captantan_bar_settings);
+		}
 	}
 
 	/** The window covers its whole display (the tablet's full-display state hides the caption). */
@@ -736,18 +892,34 @@ final class SessionTabStrip implements SessionRegistry.Listener
 		    wm.getMaximumWindowMetrics().getBounds());
 	}
 
+	private void noteTool(MotionEvent ev)
+	{
+		if (ev.getActionMasked() != MotionEvent.ACTION_DOWN)
+			return;
+		lastTool = ev.getToolType(0);
+		lastSource = ev.getSource();
+	}
+
+	/**
+	 * How the last press came, for the log. A mouse, and a touchpad moving the pointer, come from
+	 * the mouse source; a touchpad's finger has the finger tool type there, so the source decides
+	 * (the first build read the tool type only and logged mouse clicks as "touch").
+	 */
 	private String tool()
 	{
+		final String raw = " (tool " + lastTool + ", source 0x" + Integer.toHexString(lastSource) +
+		                   ")";
+		if (lastTool == MotionEvent.TOOL_TYPE_MOUSE ||
+		    (lastSource & InputDevice.SOURCE_MOUSE) == InputDevice.SOURCE_MOUSE)
+			return (lastTool == MotionEvent.TOOL_TYPE_FINGER ? "touchpad" : "mouse") + raw;
 		switch (lastTool)
 		{
-			case MotionEvent.TOOL_TYPE_MOUSE:
-				return "mouse";
 			case MotionEvent.TOOL_TYPE_FINGER:
-				return "touch";
+				return "touch" + raw;
 			case MotionEvent.TOOL_TYPE_STYLUS:
-				return "pen";
+				return "pen" + raw;
 			default:
-				return "other";
+				return "other" + raw;
 		}
 	}
 

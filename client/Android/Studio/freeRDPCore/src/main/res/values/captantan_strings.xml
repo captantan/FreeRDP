@@ -176,6 +176,8 @@
     <string name="captantan_bar_settings_done">Done</string>
     <string name="captantan_bar_settings_saved">Saved for this connection.</string>
     <string name="captantan_bar_settings_unsaved">This session has no saved connection: the change lasts until the session ends.</string>
+    <!-- package 6.1b: the sheet opened from the tab strip in a desktop window -->
+    <string name="captantan_bar_settings_desktop">In a desktop window the bar\'s buttons are in the title bar, beside the tabs; the bar\'s place and opacity apply outside desktop windows.</string>
     <string name="captantan_bar_mode">Mode</string>
     <string name="captantan_bar_mode_overlay">Overlay</string>
     <string name="captantan_bar_mode_docked">Docked</string>

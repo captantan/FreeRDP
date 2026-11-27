@@ -286,6 +286,19 @@ public final class SessionWindow
 		tabStrip.update(on ? "full screen" : "full screen left");
 	}
 
+	/** Whether the bar's buttons are on the tab strip instead of the bar (package 6.1b). */
+	boolean barInTabStrip()
+	{
+		return tabStrip != null && tabStrip.holdsBar();
+	}
+
+	/** The bar changed a button the tab strip copies (package 6.1b). */
+	void tabStripButtonsChanged()
+	{
+		if (tabStrip != null)
+			tabStrip.barButtonsChanged();
+	}
+
 	/** Whether the window was opened as a window of its own (package 6.1b). */
 	boolean isOwnWindow()
 	{

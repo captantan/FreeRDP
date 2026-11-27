@@ -399,14 +399,15 @@ jobs:
           # and the system-gesture exclusion the tabs need on the tablet, their icons and strings,
           # the app-wide state keys (permanent once released: the session window's bounds, the
           # moved default of "Open new connections"), the new default in the settings screen, the
-          # connect that finishes a waiting one first, and the log strings.
+          # connect that finishes a waiting one first, the bar's buttons on the strip in a desktop
+          # window (the sheet's note, the log of a press there, mouse and touchpad), and the log strings.
           for c in SessionTabs SessionTabStrip; do
             grep -qaF "Lcom/freerdp/freerdpcore/captantan/$c;" "$RUNNER_TEMP/classes.dex.all" || fail "the APK lacks the class captantan/$c"
           done
-          for r in drawable/captantan_ic_close drawable/captantan_ic_add drawable/captantan_ic_attention string/captantan_tab_new string/captantan_tab_close string/captantan_back_other_tabs; do
+          for r in drawable/captantan_ic_close drawable/captantan_ic_add drawable/captantan_ic_attention string/captantan_tab_new string/captantan_tab_close string/captantan_back_other_tabs string/captantan_bar_settings_desktop; do
             grep -qF "$r" "$RUNNER_TEMP/resources.txt" || fail "the APK lacks the resource $r"
           done
-          for k in setSystemGestureExclusionRects setSystemBarsAppearance getBoundingRects captantan_tab_window_bounds captantan_new_connection_default_moved 'tab strip ' 'tabs: ' 'tab: ' 'taken from the system' 'shows its tab ' 'another connect started in it' 'open new connections: '; do
+          for k in setSystemGestureExclusionRects setSystemBarsAppearance getBoundingRects captantan_tab_window_bounds captantan_new_connection_default_moved 'tab strip ' 'tabs: ' 'tab: ' 'taken from the system' 'shows its tab ' 'another connect started in it' 'open new connections: ' 'its buttons are on the tab strip' '(tab strip, ' 'touchpad'; do
             grep -qaF -- "$k" "$RUNNER_TEMP/classes.dex.all" || fail "the APK lacks the string '$k' of session tabs (6.1b)"
           done
           # (the release build shortens resource paths: find the settings file by its content, the
