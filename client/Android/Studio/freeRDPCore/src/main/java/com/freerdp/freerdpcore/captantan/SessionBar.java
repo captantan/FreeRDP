@@ -124,8 +124,9 @@ public final class SessionBar
 	private View bar;
 	private LinearLayout buttons;
 	private MaterialButton fullScreenButton;
-	private MaterialButton scaleButton;
 	private final RemoteScaleSwitch scales;
+	/** The window's system-key capture (package 5.2), shown by the capture button. */
+	private KeyCaptureController keyCapture;
 
 	private SessionHost host;
 	private SessionBarSettings.Mode mode = SessionBarSettings.DEFAULT_MODE;
@@ -284,7 +285,6 @@ public final class SessionBar
 	void onShown(SessionHost shown)
 	{
 		closeDialog();
-		scales.close();
 		gestures.reset();
 		host = shown;
 		revealed = false;
@@ -297,7 +297,6 @@ public final class SessionBar
 	void onReleased()
 	{
 		closeDialog();
-		scales.close();
 		gestures.reset();
 		handler.removeCallbacks(hideOnTimeout);
 		if (host != null && revealed)
@@ -377,7 +376,6 @@ public final class SessionBar
 	void rebuild()
 	{
 		closeDialog();
-		scales.close();
 		container.removeView(bar);
 		inflate();
 		rootColor = 0; // the theme's colours changed: apply them again
@@ -392,7 +390,6 @@ public final class SessionBar
 	void onDestroy()
 	{
 		closeDialog();
-		scales.close();
 		gestures.reset();
 		handler.removeCallbacksAndMessages(null);
 	}
@@ -508,7 +505,6 @@ public final class SessionBar
 			bar.setVisibility(View.GONE);
 		}
 		updateFullScreenIcon();
-		showScale();
 		styleSystemBars();
 	}
 
@@ -525,6 +521,23 @@ public final class SessionBar
 		final Slider slider = v.findViewById(R.id.captantan_bar_settings_opacity);
 		final TextView note = v.findViewById(R.id.captantan_bar_settings_note);
 		final MaterialSwitch keep = v.findViewById(R.id.captantan_bar_settings_fullscreen);
+		// package 4.2: the remote scale, since 5.2 here; saved and applied at once
+		// (RemoteScaleSwitch)
+		final View scaleLink = v.findViewById(R.id.captantan_bar_settings_scale_link);
+		scaleLink.setVisibility(
+		    scales.fill(v.findViewById(R.id.captantan_bar_settings_scale), forHost) ? View.GONE
+		                                                                          : View.VISIBLE);
+		// package 5.2: system-key capture, saved at once (KeyCaptureController)
+		final MaterialSwitch capture = v.findViewById(R.id.captantan_bar_settings_capture);
+		if (keyCapture != null)
+		{
+			capture.setChecked(KeyCaptureController.isSupported() && keyCapture.isWanted());
+			capture.setEnabled(KeyCaptureController.isSupported());
+			capture.setOnCheckedChangeListener(
+			    (b, checked) -> keyCapture.setSaved(checked, "session bar settings"));
+		}
+		else
+			capture.setVisibility(View.GONE);
 
 		modes.check(mode == SessionBarSettings.Mode.DOCKED
 		                ? R.id.captantan_bar_mode_docked
@@ -657,13 +670,51 @@ public final class SessionBar
 		                                            false);
 		buttons = bar.findViewById(R.id.captantan_bar_buttons);
 		fullScreenButton = bar.findViewById(R.id.captantan_bar_fullscreen);
-		scaleButton = bar.findViewById(R.id.captantan_bar_scale);
 		cardRadius = ((MaterialCardView)bar).getRadius();
 		cardElevation = ((MaterialCardView)bar).getCardElevation();
 		bar.setVisibility(View.GONE);
 		container.addView(bar);
 		bindButtons();
 		showTouchMode(touchMode);
+		showCapture();
+	}
+
+	/** From SessionWindow: the capture button follows this window's controller (package 5.2). */
+	void watchKeyCapture(KeyCaptureController controller)
+	{
+		keyCapture = controller;
+		controller.setListener(c -> showCapture());
+		showCapture();
+	}
+
+	/**
+	 * The capture button shows whether system keys are captured for this session (package 5.2):
+	 * the setting, which applies whenever the window has focus. Shown only while a physical
+	 * keyboard is attached, the only source of system keys; disabled where Android has no capture
+	 * (before API 36.1).
+	 */
+	void showCapture()
+	{
+		final View b = (bar != null) ? bar.findViewById(R.id.captantan_bar_capture) : null;
+		if (!(b instanceof MaterialButton) || keyCapture == null)
+			return;
+		final int visibility = keyCapture.isKeyboardAttached() ? View.VISIBLE : View.GONE;
+		if (b.getVisibility() != visibility)
+		{
+			b.setVisibility(visibility);
+			buttonPx = -1; // the buttons are laid out again for the new count
+			lastLayoutLog = null;
+			layout();
+		}
+		final boolean supported = KeyCaptureController.isSupported();
+		final boolean on = supported && keyCapture.isWanted();
+		((MaterialButton)b).setIconResource(on ? R.drawable.captantan_ic_key_capture
+		                                       : R.drawable.captantan_ic_key_capture_off);
+		b.setEnabled(supported);
+		b.setContentDescription(activity.getString(
+		    !supported ? R.string.captantan_bar_capture_unsupported
+		               : on ? R.string.captantan_bar_capture_on : R.string.captantan_bar_capture_off));
+		b.setTooltipText(b.getContentDescription());
 	}
 
 	/** The input mode button shows the touch mode in force (package 4.3, TouchModeSwitch). */
@@ -677,25 +728,6 @@ public final class SessionBar
 		b.setContentDescription(
 		    activity.getString(R.string.captantan_bar_touch_mode, activity.getString(mode.label)));
 		b.setTooltipText(b.getContentDescription());
-	}
-
-	/**
-	 * The remote scale button says the scale in force (package 4.2). A link has its own scale (its
-	 * arguments): the button is there but disabled, so the bar does not change between sessions.
-	 */
-	void showScale()
-	{
-		if (scaleButton == null)
-			return;
-		final boolean usable = host != null && host.getBookmark() != null;
-		scaleButton.setEnabled(usable);
-		scaleButton.setContentDescription(
-		    !usable ? activity.getString(R.string.captantan_bar_scale_link)
-		            : activity.getString(R.string.captantan_bar_scale_now,
-		                                 RemoteScale.desktopPercent(
-		                                     activity, host,
-		                                     activity.getResources().getConfiguration().densityDpi)));
-		scaleButton.setTooltipText(scaleButton.getContentDescription());
 	}
 
 	/** A motion event at the window's callback (SessionBarGestures), for the pen's log. */
@@ -726,11 +758,14 @@ public final class SessionBar
 		// bar after a choice (TouchModeSwitch)
 		bind(R.id.captantan_bar_touch_pointer, "input mode", false,
 		     () -> window.getTouchModes().openMenu(bar.findViewById(R.id.captantan_bar_touch_pointer)));
+		// package 5.2: system-key capture on or off for this connection (KeyCaptureController)
+		bind(R.id.captantan_bar_capture, "key capture", true, () -> {
+			if (keyCapture != null)
+				keyCapture.setSaved(!keyCapture.isWanted(), "session bar button");
+		});
 		bind(R.id.captantan_bar_zoom_reset, "reset zoom", true,
 		     input::onTouchPointerResetScrollZoom);
-		// package 4.2: the remote scale menu; it hides the bar after a choice (RemoteScaleSwitch)
-		bind(R.id.captantan_bar_scale, "remote scale", false,
-		     () -> scales.openMenu(bar.findViewById(R.id.captantan_bar_scale), host));
+		// package 4.2's remote scale menu is in the settings sheet since 5.2 (RemoteScaleSwitch)
 		bind(R.id.captantan_bar_fullscreen, "full screen", true, this::toggleFullScreen);
 		bind(R.id.captantan_bar_settings, "bar settings", false, this::openSettings);
 		bind(R.id.captantan_bar_disconnect, "disconnect", true, this::confirmDisconnect);
@@ -855,8 +890,9 @@ public final class SessionBar
 		final View right = buttons.findViewById(R.id.captantan_bar_gap_right);
 		if (left == null || right == null)
 			return;
-		final int before = buttons.indexOfChild(left);
-		final int after = buttons.getChildCount() - 1 - buttons.indexOfChild(right);
+		final int before = shownButtons(0, buttons.indexOfChild(left));
+		final int after =
+		    shownButtons(buttons.indexOfChild(right) + 1, buttons.getChildCount());
 		setWidth(left, Math.max(0, after - before) * buttonSize);
 		setWidth(right, Math.max(0, before - after) * buttonSize);
 	}
@@ -868,8 +904,21 @@ public final class SessionBar
 		final View right = buttons.findViewById(R.id.captantan_bar_gap_right);
 		if (left == null || right == null)
 			return 0;
-		return Math.abs(buttons.getChildCount() - 1 - buttons.indexOfChild(right) -
-		                buttons.indexOfChild(left));
+		return Math.abs(shownButtons(buttons.indexOfChild(right) + 1, buttons.getChildCount()) -
+		                shownButtons(0, buttons.indexOfChild(left)));
+	}
+
+	/** The buttons (not gaps) among children [from, to) that are not GONE (package 5.2). */
+	private int shownButtons(int from, int to)
+	{
+		int n = 0;
+		for (int i = Math.max(0, from); i < to && i < buttons.getChildCount(); i++)
+		{
+			final View b = buttons.getChildAt(i);
+			if (!(b instanceof Space) && b.getVisibility() != View.GONE)
+				n++;
+		}
+		return n;
 	}
 
 	private static void setWidth(View v, int width)
@@ -1083,14 +1132,17 @@ public final class SessionBar
 			card.setCardElevation(elevation);
 
 		// The buttons shrink (down to BUTTON_MIN_DP) when the edge is too short for all of them.
-		int buttonCount = 0;
-		for (int i = 0; i < buttons.getChildCount(); i++)
-			if (!(buttons.getChildAt(i) instanceof Space))
-				buttonCount++;
-		// docked, the gap beside the smaller outer group takes the width of the buttons it lacks
-		final int count = Math.max(1, buttonCount + (docked ? groupDifference() : 0));
+		final int buttonCount = shownButtons(0, buttons.getChildCount()); // 5.2: not GONE ones
 		final int length = vertical ? ch - safe.top - safe.bottom : cw - safe.left - safe.right;
 		final int avail = length - 2 * gap - buttons.getPaddingLeft() - buttons.getPaddingRight();
+		// docked, the gap beside the smaller outer group takes the width of the buttons it lacks;
+		// 5.2: unless that alone would make the buttons smaller than full size
+		boolean centre = docked;
+		if (centre && groupDifference() > 0 &&
+		    avail / (buttonCount + groupDifference()) < Math.round(BUTTON_DP * density) &&
+		    avail / Math.max(1, buttonCount) >= Math.round(BUTTON_DP * density))
+			centre = false;
+		final int count = Math.max(1, buttonCount + (centre ? groupDifference() : 0));
 		final int size = Math.max(Math.round(BUTTON_MIN_DP * density),
 		                          Math.min(Math.round(BUTTON_DP * density), avail / count));
 		if (size != buttonPx)
@@ -1113,7 +1165,7 @@ public final class SessionBar
 
 		// Docked: the middle group sits in the middle of the bar. The gaps share the spare width
 		// equally, so the gap beside the smaller outer group also takes the difference.
-		evenOutGaps(docked ? size : 0);
+		evenOutGaps(centre ? size : 0);
 
 		// Docked: the strip is the bar's thickness. On the left and right it is also what the bar
 		// keeps clear of there beyond the navigation bar the session view is padded for already

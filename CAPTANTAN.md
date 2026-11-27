@@ -1447,6 +1447,10 @@ tries; what was dropped is listed at the end of this block, so it is not tried a
     scale (a menu, package 4.2 below), Session bar settings;
   - right: Sessions (`SessionSwitcher.open`), Full screen, Disconnect (asks first, as the switcher does).
 
+  Since package 5.2 the left group also has the capture button (only while a physical keyboard is
+  attached), the middle group is Reset zoom and Session bar settings, and the remote scale is a row of
+  chips in the bar settings sheet ("System-key capture" below).
+
   Upstream's toolbar had two actions (touch pointer, keyboard) and 2.2 had added the switcher to it; all
   three are here, so nothing is lost with the handle. Material icon buttons on a `MaterialCardView` in
   `colorSurfaceContainerHigh`, no fixed colours. Docked, the two gaps (`Space`s) share the spare width,
@@ -1931,7 +1935,9 @@ screen, and a button that changes the remote scale (3.3) during a session.
     (`thick + max(0, bar top - what the session view is padded for at the top)`, the latter from
     `SessionResizeController.getSystemInsets()`), which is the bar's thickness whenever the bar sits
     right below what the session view is padded for, so nothing changes in the usual cases.
-- **Remote scale menu** (`freeRDPCore/.../captantan/RemoteScaleSwitch.java`, new): a bar button in the
+- **Remote scale menu** (`freeRDPCore/.../captantan/RemoteScaleSwitch.java`, new). *Since package 5.2 a
+  row of chips in the bar settings sheet; the button and `captantan_ic_remote_scale` are gone (see
+  "System-key capture" below). What follows is 4.2's version.* A bar button in the
   middle group (reset zoom, remote scale, bar settings) with a Material icon ("format_size",
   Apache-2.0, `captantan_ic_remote_scale`). It opens an AppCompat `PopupMenu`, like the input mode
   menu: "Automatic (175 %)" with what Automatic gives in this window, then the steps 100 % to 500 % from
@@ -2023,6 +2029,123 @@ screen, and a button that changes the remote scale (3.3) during a session.
     itself, since the session view would be padded for it).
   - **A bar kept in full screen at another edge** (the code docks at any edge, untested): the corner
     and cutout handling here is for the top only.
+
+**System-key capture** (package 5.2)
+
+While a session window has focus, Android's system shortcuts (the Meta key alone, Meta+letter,
+Alt+Tab, Ctrl+Esc, Alt+F4, ...) go to the remote machine as real key down and key up on 5.1's path
+(`PhysicalKeyboard`), instead of Android acting on them.
+
+- **Mechanism.** Android 16 QPR2 (API 36.1) lets a focused window ask for keyboard capture
+  (`WindowManager.LayoutParams.setKeyboardCaptureEnabled`, applied with `Window.setAttributes`). It needs
+  the normal-level permission `android.permission.CAPTURE_KEYBOARD`; without it, Android ignores the
+  request silently. Every call is behind `KeyCaptureController.isSupported()`
+  (`SDK_INT >= 36 && SDK_INT_FULL >= BAKLAVA_1`), so the app runs as before on API 29 to 36.0, where
+  the keyboard accessibility service (upstream's, off unless enabled in Android's settings) stays the
+  only way to get these keys.
+- `freeRDPCore/.../captantan/KeyCaptureController.java` (new), one per `SessionWindow`. Capture is set
+  while the window has focus, is started, shows a connected session, and capture is wanted. It is
+  cleared as soon as one of these stops holding: a dialog, menu or other window takes focus, the
+  session is released, or the window stops or closes. Android itself applies capture to the focused
+  window only, so with two windows side by side each one captures only while it has focus.
+- **Focus hook:** none new. `SessionActivity.onWindowFocusChanged` already calls
+  `SessionWindow.onFocusChanged` (package 2.1), which now also tells the controller.
+- **The setting** (`ConnectionPrefs`, new key, per bookmark):
+
+  | Key | Values | Default | Notes |
+  |---|---|---|---|
+  | `key_capture` | boolean | `true` | "RDP options", new category "Keyboard"; the bar button; the bar settings sheet |
+
+  The bar button and the sheet save it with the bookmark (`SessionBarSettings.save`; for quick connect,
+  for that session only). The key is permanent once released.
+- **The bar.** A capture button (Material "keyboard_command_key", Apache-2.0,
+  `captantan_ic_key_capture`; struck through when off, `captantan_ic_key_capture_off`) at the end of the
+  left group. It is shown only while a physical alphabetic keyboard is attached
+  (`KeyCaptureController.findKeyboard`, kept current by an `InputDeviceListener` while the window is
+  started), so a phone without a keyboard keeps the narrower bar. Below API 36.1 it is disabled and its
+  description says why. To make room, reset zoom went back on the bar in 4.2's remote scale slot, and the
+  remote scale became a row of filter chips in the bar settings sheet (`captantan_scale_chip.xml`,
+  `RemoteScaleSwitch.fill`), above the new capture switch. A choice still saves `remote_scale` and asks
+  the server again at once, and the sheet stays open. `captantan_ic_remote_scale` and the scale button
+  were removed. Docked, the middle group is centred only if that does not shrink the buttons below 44 dp
+  (`SessionBar.layout`). Hidden buttons are no longer counted as buttons (`shownButtons`).
+- **Upstream files edited** (each marked `captantan fork`):
+  - `aFreeRDP/src/main/AndroidManifest.xml`: `<uses-permission android:name="android.permission.CAPTURE_KEYBOARD" />`
+    in the fork's own permission block (2.3's). It goes in the app module rather than the core library,
+    because that block is already ours: upstream's permission list in the core manifest stays
+    untouched, and a merge conflicts at most with our own lines. **Merge:** keep the line. If upstream
+    declares it itself, drop ours.
+  - Nothing else. `SessionActivity` is not edited: Escape arrives as Escape (see below), so the
+    Back-with-scan-code-1 case needed no fix here.
+- Ours, changed: `SessionWindow` (the controller and its hooks), `SessionBar` (the button, the sheet's
+  chips and switch, `shownButtons`, the centring rule), `RemoteScaleSwitch` (chips in place of the menu),
+  `ConnectionPrefs` (`KEY_CAPTURE`), `captantan_session_bar{,_settings}.xml`,
+  `captantan_connection_options.xml` and `captantan_strings.xml`.
+- **Escape.** While capturing, Android keeps a long press on Escape for itself: it is the user's way
+  out. On the tablet the first Escape press of a capture showed Android's own message explaining the
+  long press (once, not on every press). Holding Escape left the session window: the session stayed
+  connected, and capture came back on when the window got focus again. Ctrl+Esc shows the same message.
+- **Keys by mechanism** (tablet with the keyboard cover, GNOME host, capture on, service off;
+  full window and desktop window gave the same results):
+
+  | Keys | Window capture (API 36.1+) | Android keeps it | Accessibility service (any API) |
+  |---|---|---|---|
+  | Meta alone | to the remote | | to the remote (5.1) |
+  | Meta+L | to the remote (locks the remote session) | | not measured |
+  | Meta+Enter | to the remote | | not measured |
+  | Alt+Tab (held, Tab ×3) | to the remote | | to the remote (5.1) |
+  | Meta+E | nothing visible either side (the GNOME host has no binding) | | not measured |
+  | Ctrl+Esc | Android's capture message | | not measured |
+  | Ctrl+Space | to the remote while Android's language shortcut is off (no visible effect on GNOME) | while Android's keyboard-language shortcut is on | not measured |
+  | Meta+D | | yes (the tablet's desktop) | not measured |
+  | Meta+H | | yes (the tablet's home screen) | not measured |
+  | Escape held | | yes (leaves the window) | |
+  | Home, Overview, power, volume | | yes (Android's docs) | |
+
+  No modifier was left stuck after any of them. Below API 36.1 the "window capture" column is empty, and
+  only the service gets these keys.
+- **What can never be captured:** whatever Android keeps for itself, as listed above (Meta+D, Meta+H,
+  the long press on Escape, Ctrl+Space while it switches Android's keyboard language, and the system
+  buttons). Android publishes no list, so a new Android version may keep more or fewer keys.
+- **Lone modifier.** When Android takes a chord (Meta+D, Meta+H), the remote side has seen Meta down
+  but not its partner. Both of those leave the window. On focus loss 5.1 releases what is down with a
+  Ctrl tap in front of the Meta key up, so the remote side does not open its Start menu or Activities
+  view. A chord that Android swallowed without the window losing focus would leave a lone Meta tap on
+  the remote side; none was seen. This is not handled further.
+- **No double sends with the service on.** The service filters keys before any window gets them and
+  hands the ones it consumes to the focused session (2.1), so a consumed key never reaches the window.
+  Not re-measured in this package (see "Not run").
+- **Log** (tag `captantan.keys`, INFO; no per-key lines, those stay at DEBUG as in 5.1):
+  - once per window and session: `key capture: w<n> s<n> "<title>" mechanism <window keyboard capture
+    (API 37.0, ...) | none from the window (<why>)>; the keyboard accessibility service is on|off;
+    setting key_capture on|off; physical keyboard attached|none`;
+  - each change: `key capture on|off: w<n> s<n> "<title>" (<cause>)`, with the causes focus gained,
+    focus lost, window stopped, session released, session ended, session bar button, session bar
+    settings;
+  - `key capture wanted|not wanted: w<n> (<cause>, saved for bookmark <id> | this session only)`;
+  - `physical keyboard attached|gone: w<n> (<cause>): the bar shows|hides its capture button`.
+- **Device run** (2026-11-26, test builds of this package; the table is in the PR):
+  - **Tablet** (API 37.0, keyboard cover, GNOME host), full window and desktop window: the key table
+    above, and the Escape message and long press as described.
+  - Capture followed focus between two session windows, and between the session and its menus and
+    dialogs. The bar button and the sheet switch turned it off and on and saved it. The on-screen
+    keyboard, menus, trackpad mode and pen input worked as before.
+  - **Phone** (API 37.1): the bar. The capture button appears when the Bluetooth keyboard connects and
+    goes when it disconnects. Reset zoom is on the bar and the scale chips are in the sheet. Capture
+    went on at focus.
+  - **Not run:** the key list on the phone, Alt+F4, the accessibility service turned on together with
+    capture, a Windows host, and a device below API 36.1.
+- **For package 5.3** (a key combination):
+  - `KeyCaptureController.inFocusedWindow()` returns the focused window's controller, or null;
+  - `isCapturing()` says whether capture is set on the window now;
+  - `isWanted()` gives the setting in force for the session;
+  - `setCapture(on, cause)` changes it for this session only (not saved), and `toggle(cause)` flips it;
+  - `setSaved(on, cause)` does what the bar does;
+  - `isSupported()` and `isKeyboardAttached()` for the UI.
+
+  A combination meant for the app has to be one that capture does not swallow. Anything Android keeps
+  (above) never reaches the app either. Keys that arrive go to `PhysicalKeyboard` and so to the remote,
+  unless 5.3 takes them first.
 
 ## Package and version scheme
 
@@ -2317,8 +2440,8 @@ compile check runs on the merge.
      to delete bookmarks, add the call there too.
    - `aFreeRDP/src/main/AndroidManifest.xml` (package 2.3): keep the four `FOREGROUND_SERVICE*`
      permissions, the `SessionKeepAliveService` service with its types and subtype property, and
-     `SessionOpenActivity`. The compile check fails if the service, a type or a permission goes
-     missing. If upstream adds a foreground service of its own, check that its types and ours do not
+     `SessionOpenActivity`, and (package 5.2) `CAPTURE_KEYBOARD`. The compile check fails if the
+     service, a type or a permission goes missing. If upstream adds a foreground service of its own, check that its types and ours do not
      need permissions the other lacks. If upstream ever requests a permission in `SessionActivity` with
      the request code 2301, change `SessionKeeper.REQUEST_NOTIFICATIONS`: `SessionActivity` must keep
      ignoring that code in `onRequestPermissionsResult`.
@@ -2384,7 +2507,12 @@ The workflow `.github/workflows/captantan-android.yml` runs on pull requests int
   `ask again`, `remote scale: ` and `in full screen ` in the dex; pen input's rdpei channel in
   `libfreerdp-client3.so` (two of its strings), `captantan/PenInput`, its `Mode` and `PenProbe`, the three
   native methods of `PenInput` in the dex and exported from `libfreerdp-android.so`, the strings
-  `/multitouch`, `captantan.pen` and `pen_mode`, and the pen mode's values array;
+  `/multitouch`, `captantan.pen` and `pen_mode`, and the pen mode's values array; package 5.2's
+  `captantan/KeyCaptureController`, the `CAPTURE_KEYBOARD` permission in the merged manifest, the capture
+  button's and the settings switch's ids, the two capture icons, the scale chip layout, reset zoom's id
+  (back on the bar), and the strings `setKeyboardCaptureEnabled`, `hasKeyboardCapture`, `key_capture`,
+  `key capture ` and ` mechanism ` in the dex (4.2's scale button and icon are no longer asserted: the
+  settings sheet's chip row `captantan_bar_settings_scale` is);
 - test build: package `dev.captantan.freerdp.debug`, label `RDP debug`, the same version, signed with the
   committed public key, and byte-identical native libraries to the release APK.
 

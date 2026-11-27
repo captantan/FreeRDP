@@ -2,8 +2,8 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- captantan fork: the session bar (roadmap 4.1, captantan/SessionBar). SessionBar sets the
      place, the opacity and the size of every button in captantan_bar_buttons. Left: input
-     (keyboard, input mode); middle: the view and the bar (reset zoom, remote scale, bar
-     settings); right:
+     (keyboard, input mode, system-key capture); middle: the view and the bar (reset zoom, bar
+     settings, which has the remote scale); right:
      the session and the window (sessions, full screen, disconnect). A new button: a Button like
      these inside captantan_bar_buttons, and one bind(...) line in SessionBar.bindButtons. -->
 <com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
@@ -48,8 +48,23 @@
             android:contentDescription="@string/captantan_bar_touch_pointer"
             app:icon="@drawable/ic_touch_pointer" />
 
-        <!-- captantan fork: the two gaps share the rest of a docked bar's width, so reset zoom,
-             remote scale and bar settings sit in the middle (SessionBar evens out the groups' sizes); 8 dp each in
+        <!-- roadmap 5.2: system-key capture on or off (captantan/KeyCaptureController); the icon
+             shows the state. Its slot was the remote scale's, now in the bar settings. -->
+        <Button
+            android:id="@+id/captantan_bar_capture"
+            style="?attr/materialIconButtonStyle"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:padding="10dp"
+            android:contentDescription="@string/captantan_bar_capture_on"
+            app:icon="@drawable/captantan_ic_key_capture" />
+
+        <!-- captantan fork: the two gaps share the rest of a docked bar's width, so reset zoom and
+             bar settings sit in the middle (SessionBar evens out the groups' sizes); 8 dp each in
              overlay mode, across or down the bar -->
         <Space
             android:id="@+id/captantan_bar_gap"
@@ -59,6 +74,8 @@
             android:minWidth="8dp"
             android:minHeight="8dp" />
 
+        <!-- roadmap 5.2: the remote scale menu of 4.2 is in the bar's settings sheet now
+             (captantan/RemoteScaleSwitch) -->
         <Button
             android:id="@+id/captantan_bar_zoom_reset"
             style="?attr/materialIconButtonStyle"
@@ -71,20 +88,6 @@
             android:padding="10dp"
             android:contentDescription="@string/captantan_bar_zoom_reset"
             app:icon="@drawable/captantan_ic_zoom_reset" />
-
-        <!-- roadmap 4.2: the remote scale menu (captantan/RemoteScaleSwitch) -->
-        <Button
-            android:id="@+id/captantan_bar_scale"
-            style="?attr/materialIconButtonStyle"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            android:minWidth="0dp"
-            android:minHeight="0dp"
-            android:padding="10dp"
-            android:contentDescription="@string/captantan_bar_scale"
-            app:icon="@drawable/captantan_ic_remote_scale" />
 
         <Button
             android:id="@+id/captantan_bar_settings"

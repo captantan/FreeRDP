@@ -11,6 +11,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <!-- captantan fork: system-key capture (roadmap 5.2, freeRDPCore/.../captantan/
+         KeyCaptureController.java); normal protection level, Android 16 QPR2 and later -->
+    <uses-permission android:name="android.permission.CAPTURE_KEYBOARD" />
 
     <!-- captantan fork: the label is @string/app_title ("RDP"), it was the literal "aFreeRDP" -->
     <application

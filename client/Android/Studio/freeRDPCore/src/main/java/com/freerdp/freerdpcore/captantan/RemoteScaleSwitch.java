@@ -1,36 +1,39 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
  *
- * captantan fork: the session bar's quick remote scale switch (roadmap 4.2).
+ * captantan fork: the session bar's quick remote scale switch (roadmap 4.2), since 5.2 in the
+ * bar's settings sheet.
  */
 
 package com.freerdp.freerdpcore.captantan;
 
 import android.util.Log;
-import android.view.Menu;
-import android.view.MenuItem;
+import android.view.LayoutInflater;
 import android.view.View;
 
-import androidx.appcompat.widget.PopupMenu;
+import com.google.android.material.chip.Chip;
+import com.google.android.material.chip.ChipGroup;
 
 import com.freerdp.freerdpcore.R;
 import com.freerdp.freerdpcore.presentation.SessionActivity;
 
 /**
- * The session bar's remote scale button (package 4.2), one per {@link SessionBar}: a small menu
- * with the values of the "Remote scale" setting ({@link RemoteScale}), the one in force ticked.
- * "Automatic" says what it gives in this window ("Automatic (175 %)"); "Custom" is listed only
- * while it is the setting, with its percentage (the percentage itself is set in "RDP options").
+ * The session bar's remote scale choice, one per {@link SessionBar}. Package 4.2 made it a bar
+ * button with a menu; in 5.2 the button's slot went to "reset zoom" (so the capture button fits),
+ * and the choice moved into the bar's settings sheet as a row of choice chips: the values of the
+ * "Remote scale" setting ({@link RemoteScale}), the one in force checked. "Automatic" says what
+ * it gives in this window ("Automatic (175 %)"); "Custom" is listed only while it is the setting,
+ * with its percentage (the percentage itself is set in "RDP options").
  *
- * <p>A choice is saved under the session's bookmark, as a change in "RDP options" would be
- * (all its other settings kept), so it is there after a reconnect and in the bookmark editor. A
- * session without a saved bookmark (quick connect) keeps it for that session only, as the bar's
- * other settings do ({@link SessionBarSettings#save}). A {@code freerdp://} link has the scale
- * of its arguments: the button is disabled for it ({@link SessionBar#showScale}).
+ * <p>A choice is saved under the session's bookmark at once, as a change in "RDP options" would
+ * be (all its other settings kept), so it is there after a reconnect and in the bookmark editor.
+ * A session without a saved bookmark (quick connect) keeps it for that session only, as the bar's
+ * other settings do ({@link SessionBarSettings#save}). A {@code freerdp://} link has the scale of
+ * its arguments: the sheet says so instead of offering the chips.
  *
  * <p>Then the window asks the server again at once ({@link SessionResizeController#askAgain}):
  * after the usual settle wait, one layout request with the same size and the new scale, which
- * both hosts apply without a reconnect.
+ * both hosts apply without a reconnect; the sheet stays open, so the result can be seen.
  *
  * <p>Log (tag {@code captantan.bar}, INFO): {@code remote scale: w<n> s<n> "<title>": <stored
  * name> (<percent> % in this window; saved for bookmark <id> | this session only)}, then
@@ -40,7 +43,6 @@ final class RemoteScaleSwitch
 {
 	private final SessionWindow window;
 	private final SessionActivity activity;
-	private PopupMenu menu;
 
 	RemoteScaleSwitch(SessionWindow window)
 	{
@@ -48,12 +50,19 @@ final class RemoteScaleSwitch
 		this.activity = window.getActivity();
 	}
 
-	/** From the bar's button. */
-	void openMenu(View anchor, SessionHost host)
+	/**
+	 * Fills the settings sheet's chips for {@code host}. False, and the chips hidden, when the
+	 * session's scale is not the bar's to change (a link).
+	 */
+	boolean fill(ChipGroup chips, SessionHost host)
 	{
-		if (host == null || host.getBookmark() == null || anchor == null)
-			return;
-		close();
+		chips.removeAllViews();
+		if (host == null || host.getBookmark() == null)
+		{
+			chips.setVisibility(View.GONE);
+			return false;
+		}
+		chips.setVisibility(View.VISIBLE);
 		final ConnectionPrefs prefs = SessionBarSettings.of(activity, host);
 		final RemoteScale now = prefs.getRemoteScale();
 		final int dpi = densityDpi();
@@ -61,8 +70,7 @@ final class RemoteScaleSwitch
 		    activity.getResources().getStringArray(R.array.captantan_remote_scale_entries);
 		final String[] values =
 		    activity.getResources().getStringArray(R.array.captantan_remote_scale_values);
-		final PopupMenu m = new PopupMenu(activity, anchor);
-		final Menu items = m.getMenu();
+		final LayoutInflater inflater = LayoutInflater.from(chips.getContext());
 		for (int i = 0; i < values.length && i < entries.length; i++)
 		{
 			final RemoteScale scale = ConnectionPrefs.REMOTE_SCALE.parse(values[i]);
@@ -81,21 +89,22 @@ final class RemoteScaleSwitch
 			}
 			else
 				label = entries[i];
-			items.add(0, scale.ordinal(), i, label).setChecked(scale == now);
+			final Chip chip = (Chip)inflater.inflate(R.layout.captantan_scale_chip, chips, false);
+			chip.setId(View.generateViewId());
+			chip.setText(label);
+			chip.setTag(scale);
+			chips.addView(chip);
+			if (scale == now)
+				chips.check(chip.getId());
 		}
-		items.setGroupCheckable(0, true, true);
-		m.setOnMenuItemClickListener((MenuItem item) -> {
-			final int i = item.getItemId();
-			if (i >= 0 && i < RemoteScale.values().length)
-				choose(host, RemoteScale.values()[i]);
-			return true;
+		chips.setOnCheckedStateChangeListener((group, checked) -> {
+			if (checked.isEmpty())
+				return;
+			final View chip = group.findViewById(checked.get(0));
+			if (chip != null && chip.getTag() instanceof RemoteScale)
+				choose(host, (RemoteScale)chip.getTag());
 		});
-		m.setOnDismissListener(d -> {
-			if (menu == d)
-				menu = null;
-		});
-		menu = m;
-		m.show();
+		return true;
 	}
 
 	private void choose(SessionHost target, RemoteScale scale)
@@ -111,22 +120,10 @@ final class RemoteScaleSwitch
 		          ")");
 		window.getResizer().askAgain("remote scale " + scale.storedName() + " (" + percent +
 		                             " %) from the session bar");
-		window.getBar().showScale();
-		window.getBar().hide("after remote scale");
 	}
 
 	private int densityDpi()
 	{
 		return activity.getResources().getConfiguration().densityDpi;
-	}
-
-	void close()
-	{
-		if (menu != null)
-		{
-			final PopupMenu m = menu;
-			menu = null;
-			m.dismiss();
-		}
 	}
 }

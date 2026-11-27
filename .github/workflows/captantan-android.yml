@@ -316,13 +316,14 @@ jobs:
             grep -qaF "$k" "$RUNNER_TEMP/classes.dex.all" || fail "the APK lacks the string '$k' of the session bar"
           done
           echo "session bar: classes, layer, layouts, icons and per-connection keys present"
-          # Session bar leftovers (roadmap 4.2): the remote scale menu, its button and icon, the
+          # Session bar leftovers (roadmap 4.2): the remote scale choice (since 5.2 in the bar's
+          # settings sheet, no longer a button with an icon), the
           # "keep in full screen" switch and its per-connection key (a boolean field), and the
           # resize controller's "ask again".
           for c in RemoteScaleSwitch 'ConnectionPrefs$BoolField'; do
             grep -qaF "Lcom/freerdp/freerdpcore/captantan/$c;" "$RUNNER_TEMP/classes.dex.all" || fail "the APK lacks the class captantan/$c"
           done
-          for r in id/captantan_bar_scale id/captantan_bar_settings_fullscreen drawable/captantan_ic_remote_scale string/captantan_bar_fullscreen_keep string/captantan_bar_scale_auto array/captantan_remote_scale_values; do
+          for r in id/captantan_bar_settings_scale id/captantan_bar_settings_fullscreen string/captantan_bar_fullscreen_keep string/captantan_bar_scale_auto array/captantan_remote_scale_values; do
             grep -qF "$r" "$RUNNER_TEMP/resources.txt" || fail "the APK lacks the resource $r"
           done
           for k in bar_in_fullscreen askAgain 'ask again' 'remote scale: ' 'in full screen '; do
@@ -364,6 +365,19 @@ jobs:
           done
           grep -qF 'array/captantan_pen_mode_values' "$RUNNER_TEMP/resources.txt" || fail "the APK lacks the resource array/captantan_pen_mode_values"
           echo "pen input: rdpei channel built in, classes, natives, the /multitouch argument, the per-connection key and its stored names present"
+          # System-key capture (roadmap 5.2): the controller, the permission in the merged manifest
+          # (without it Android ignores the request silently), the window call, the bar's capture
+          # button, its icons and the settings switch, the per-connection key the "RDP options"
+          # screen edits by name (permanent once released), and the log strings.
+          grep -qaF "Lcom/freerdp/freerdpcore/captantan/KeyCaptureController;" "$RUNNER_TEMP/classes.dex.all" || fail "the APK lacks the class captantan/KeyCaptureController"
+          grep -qF '"android.permission.CAPTURE_KEYBOARD"' "$RUNNER_TEMP/manifest-rel.txt" || fail "the merged manifest lacks the permission CAPTURE_KEYBOARD"
+          for r in id/captantan_bar_capture id/captantan_bar_settings_capture drawable/captantan_ic_key_capture drawable/captantan_ic_key_capture_off string/captantan_key_capture layout/captantan_scale_chip id/captantan_bar_zoom_reset; do
+            grep -qF "$r" "$RUNNER_TEMP/resources.txt" || fail "the APK lacks the resource $r"
+          done
+          for k in setKeyboardCaptureEnabled hasKeyboardCapture key_capture 'key capture ' ' mechanism ' android.permission.CAPTURE_KEYBOARD; do
+            grep -qaF -- "$k" "$RUNNER_TEMP/classes.dex.all" || fail "the APK lacks the string '$k' of system-key capture"
+          done
+          echo "system-key capture: controller, permission, window call, bar button, icons, switch, per-connection key and log strings present"
 
           echo "== preview badging"
           "$AAPT" dump badging "$PRE" > "$RUNNER_TEMP/preview-badging.txt"
