@@ -149,10 +149,19 @@ public final class WindowBounds
 		final Rect bounds = usable(from, id, stored, displayOf(from, options));
 		if (bounds == null)
 			return options;
-		final Bundle merged = ActivityOptions.makeBasic().setLaunchBounds(bounds).toBundle();
-		if (options != null)
-			merged.putAll(options); // the caller's (a launch display) has no launch bounds
-		return merged;
+		// The only options a caller passes are upstream's launch display (ExternalDisplayManager):
+		// one ActivityOptions carries both, so neither bundle's defaults can hide the other.
+		final ActivityOptions merged = ActivityOptions.makeBasic().setLaunchBounds(bounds);
+		final int display = askedDisplay(options);
+		if (display != Display.INVALID_DISPLAY)
+			merged.setLaunchDisplayId(display);
+		return merged.toBundle();
+	}
+
+	private static int askedDisplay(Bundle options)
+	{
+		return (options != null) ? options.getInt(KEY_LAUNCH_DISPLAY_ID, Display.INVALID_DISPLAY)
+		                         : Display.INVALID_DISPLAY;
 	}
 
 	/** The stored bounds if they suit this display, moved onto it if need be; null if not. */
@@ -221,9 +230,7 @@ public final class WindowBounds
 	/** The display a launch goes to: the one its options name, else the launching activity's. */
 	@RequiresApi(Build.VERSION_CODES.R) private static Display displayOf(Activity from, Bundle options)
 	{
-		final int asked = (options != null)
-		                      ? options.getInt(KEY_LAUNCH_DISPLAY_ID, Display.INVALID_DISPLAY)
-		                      : Display.INVALID_DISPLAY;
+		final int asked = askedDisplay(options);
 		if (asked != Display.INVALID_DISPLAY)
 		{
 			final DisplayManager dm = from.getSystemService(DisplayManager.class);
