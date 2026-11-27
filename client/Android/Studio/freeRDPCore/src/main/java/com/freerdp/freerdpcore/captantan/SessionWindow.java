@@ -168,8 +168,6 @@ public final class SessionWindow
 	private SessionState blank;
 	/** This window's own full screen, in a desktop window (package 6.1, {@link FullScreen}). */
 	private boolean ownFullScreen = false;
-	/** Android was asked to take this window to full screen (FullScreen.requestSystem). */
-	boolean askedSystemFullScreen = false;
 	/** The task's label as last set (package 6.1); null is the app's name. */
 	private String title;
 	private boolean titlePending = false;

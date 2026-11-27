@@ -7,9 +7,6 @@
 package com.freerdp.freerdpcore.captantan;
 
 import android.app.Activity;
-import android.os.Build;
-import android.os.OutcomeReceiver;
-import android.util.Log;
 
 import com.freerdp.freerdpcore.presentation.ApplicationSettingsActivity;
 
@@ -24,13 +21,16 @@ import com.freerdp.freerdpcore.presentation.ApplicationSettingsActivity;
  * two app-wide settings, "Hide Status Bar" and "Hide Navigation Bar", as before (package 4.1).
  * <li><b>In a desktop window</b> full screen is the window's own, and the app-wide settings are
  * ignored: a desktop window opens out of full screen, and turning it on hides this window's
- * system bars only, and the window asks Android to take it to full screen
- * ({@code Activity.requestFullscreenMode}, API 34): it then covers the whole display without its
- * caption bar and the taskbar, and goes back to its bounds when full screen is off again. Hiding
- * the bars alone does not enlarge a desktop window on the tablet (measured: the caption and the
- * bounds stayed). Other windows are not touched. The owner chose this on 2026-11-26 (it is how
- * a browser's full screen works in a desktop window); before, one window's choice hit every
- * window.
+ * session bar and system bars only. The window keeps its bounds: on the tablet a desktop window
+ * covers the whole display, without caption bar or taskbar, when it is maximised with the
+ * caption bar's button, and full screen in a maximised window then also hides the bar. Other
+ * windows are not touched. The owner chose a per-window full screen on 2026-11-26 (as a browser
+ * has it); before, one window's choice hit every window.
+ * <li>Measured on the tablet (2026-11-26), and why the window is not enlarged by the app:
+ * hiding the system bars leaves a desktop window at its bounds with its caption bar, and
+ * {@code Activity.requestFullscreenMode} takes the window out of desktop windowing into the
+ * tablet's full-screen mode, after which asking to leave is refused ("denied by system policy")
+ * and the window cannot go back; it was tried and removed.
  * <li>A window in its own full screen stays in it until the button or Back turns it off, even if
  * it leaves desktop windowing meanwhile (so the two rules cannot hand it back and forth).
  * </ul>
@@ -59,52 +59,6 @@ public final class FullScreen
 		if (SessionLauncher.isDesktopWindowing(activity))
 			return false;
 		return ApplicationSettingsActivity.getHideNavigationBar(activity);
-	}
-
-	/**
-	 * In a desktop window, asks Android to take the window to full screen and back
-	 * ({@code Activity.requestFullscreenMode}, API 34; it must follow a user's action, as the
-	 * bar's button and Back are). Leaving asks only if entering was asked here. The result is
-	 * logged (tag {@code captantan.bar}); a refusal leaves the window's own full screen with only
-	 * the system bars hidden.
-	 */
-	static void requestSystem(Activity activity, SessionWindow window, boolean enter)
-	{
-		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
-			return;
-		if (enter && !SessionLauncher.isDesktopWindowing(activity))
-			return;
-		if (!enter && !window.askedSystemFullScreen)
-			return;
-		window.askedSystemFullScreen = enter;
-		final String what = enter ? "enter" : "exit";
-		try
-		{
-			activity.requestFullscreenMode(enter ? Activity.FULLSCREEN_MODE_REQUEST_ENTER
-			                                     : Activity.FULLSCREEN_MODE_REQUEST_EXIT,
-			                               new OutcomeReceiver<Void, Throwable>() {
-				                               @Override public void onResult(Void result)
-				                               {
-					                               Log.i(SessionBar.TAG, "system full screen " + what +
-					                                                         ": " + window.getName() +
-					                                                         " done");
-				                               }
-
-				                               @Override public void onError(Throwable error)
-				                               {
-					                               Log.i(SessionBar.TAG,
-					                                     "system full screen " + what + ": " +
-					                                         window.getName() + " refused (" +
-					                                         error.getMessage() + ")");
-				                               }
-			                               });
-			Log.i(SessionBar.TAG, "system full screen " + what + " asked: " + window.getName());
-		}
-		catch (RuntimeException e)
-		{
-			Log.i(SessionBar.TAG, "system full screen " + what + ": " + window.getName() +
-			                          " failed (" + e + ")");
-		}
 	}
 
 	/** Full screen: both bars hidden. */
