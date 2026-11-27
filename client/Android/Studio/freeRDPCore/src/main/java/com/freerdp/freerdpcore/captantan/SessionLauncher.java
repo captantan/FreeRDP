@@ -242,8 +242,10 @@ public final class SessionLauncher
 			if (bringToFront(live.getWindow(), from.getLocalClassName()))
 				return;
 		}
-		// Package 6.1b: a session that is a tab of a window is shown in that window.
-		final SessionWindow tabOf = (live != null) ? SessionTabs.ownerOf(live) : null;
+		// Package 6.1b: a session that is a tab of a window is shown in that window (unless the
+		// setting asks for a new window, which then takes it, as before).
+		final SessionWindow tabOf =
+		    (live != null && !opensInNewWindow(from)) ? SessionTabs.ownerOf(live) : null;
 		if (tabOf != null && !tabOf.getActivity().isFinishing() &&
 		    bringToFront(tabOf, from.getLocalClassName() + " (" + live + " is its tab)"))
 		{

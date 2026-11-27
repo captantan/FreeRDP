@@ -377,6 +377,12 @@ final class SessionTabStrip implements SessionRegistry.Listener
 				caption = ", the system's elements " + rects;
 				reason = "in the caption bar";
 			}
+			else if (transparentCaption && !coversDisplay())
+			{
+				// A new desktop window gets its caption bar 14 to 40 ms after its first layout
+				// (measured): no row in between, which would move the bar twice.
+				reason = "waiting for the caption bar";
+			}
 			else if (window.isOwnFullScreen())
 			{
 				reason = "full screen and no caption bar";
@@ -387,7 +393,8 @@ final class SessionTabStrip implements SessionRegistry.Listener
 				height = dp(ROW_DP);
 				top = root.getPaddingTop();
 				reason = captionTop > 0 ? "below the caption bar, which the app cannot draw in"
-				                        : "no caption bar (the window covers the display?)";
+				         : transparentCaption ? "no caption bar: the window covers the display"
+				                              : "no caption bar";
 			}
 		}
 
@@ -717,6 +724,16 @@ final class SessionTabStrip implements SessionRegistry.Listener
 	{
 		return MaterialColors.getColor(content != null ? content : root,
 		                               com.google.android.material.R.attr.colorSurfaceContainerHighest);
+	}
+
+	/** The window covers its whole display (the tablet's full-display state hides the caption). */
+	private boolean coversDisplay()
+	{
+		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R)
+			return true;
+		final android.view.WindowManager wm = activity.getWindowManager();
+		return wm.getCurrentWindowMetrics().getBounds().contains(
+		    wm.getMaximumWindowMetrics().getBounds());
 	}
 
 	private String tool()
