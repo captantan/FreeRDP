@@ -11,19 +11,23 @@ import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.InsetDrawable;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
+import android.view.RoundedCorner;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.Space;
 import android.widget.TextView;
 
+import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AlertDialog;
 import androidx.core.graphics.ColorUtils;
 import androidx.core.graphics.Insets;
@@ -36,6 +40,7 @@ import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.android.material.materialswitch.MaterialSwitch;
 import com.google.android.material.slider.Slider;
 
 import com.freerdp.freerdpcore.R;
@@ -50,15 +55,16 @@ import com.freerdp.freerdpcore.presentation.SessionInputManager;
  *
  * <p><b>Buttons</b> ({@code res/layout/captantan_session_bar.xml}, bound in {@link #bindButtons}):
  * the session switcher, the on-screen keyboard (the system keyboard with upstream's key bar, as
- * upstream's toolbar button did), the touch pointer, reset zoom (zoom 1:1, scrolled to the top
- * left, as the touch pointer's own reset), full screen (upstream's "Hide Status Bar" and "Hide
- * Navigation Bar" settings, both at once), the bar's settings, and disconnect (asks first).
+ * upstream's toolbar button did), the input mode menu (4.3), reset zoom (zoom 1:1, scrolled to
+ * the top left, as the touch pointer's own reset), the remote scale menu (4.2,
+ * {@link RemoteScaleSwitch}), full screen (upstream's "Hide Status Bar" and "Hide Navigation Bar"
+ * settings, both at once), the bar's settings, and disconnect (asks first).
  * Upstream's toolbar had two actions (touch pointer, keyboard) and the fork had added the switcher
  * to it; all three are here.
  *
- * <p><b>Settings</b> per connection ({@link SessionBarSettings}): the mode, the edge and the
- * opacity, applied when the window shows a session ({@link #onShown}), so a switch to another
- * session in the same window takes that session's.
+ * <p><b>Settings</b> per connection ({@link SessionBarSettings}): the mode, the edge, the
+ * opacity and whether a docked bar stays in full screen, applied when the window shows a session
+ * ({@link #onShown}), so a switch to another session in the same window takes that session's.
  * <ul>
  * <li>Overlay: the bar floats over the remote picture, centred on its edge (any of the four),
  * with the opacity. The remote desktop keeps its size.</li>
@@ -69,6 +75,11 @@ import com.freerdp.freerdpcore.presentation.SessionInputManager;
  * ({@link SessionBarGestures}) or a call ({@link #reveal}, package 5.3's key combination) brings
  * it over the picture for a moment: it hides again after a button is used, after a press anywhere
  * else, or {@link #HIDE_AFTER_MS} after it was last touched.</li>
+ * <li>Docked, kept in full screen ({@code bar_in_fullscreen}, package 4.2): full screen hides the
+ * system bars only; the bar stays in its strip as outside full screen, with no timeout. Its
+ * buttons keep clear of the camera cutout and the screen's rounded corners (the strip paints
+ * behind them), and it does not move for system bars a swipe pulls in: they lie over it for
+ * the {@link #HIDE_AFTER_MS} until they are put away, and the remote desktop is not resized.</li>
  * </ul>
  *
  * <p><b>Where it sits.</b> In {@code captantan_session_bar_container}, a full-size layer on top
@@ -113,6 +124,8 @@ public final class SessionBar
 	private View bar;
 	private LinearLayout buttons;
 	private MaterialButton fullScreenButton;
+	private MaterialButton scaleButton;
+	private final RemoteScaleSwitch scales;
 
 	private SessionHost host;
 	private SessionBarSettings.Mode mode = SessionBarSettings.DEFAULT_MODE;
@@ -120,6 +133,8 @@ public final class SessionBar
 	/** The edge as stored: overlay's. Docked always uses the top ({@link #pickEdge}). */
 	private SessionBarSettings.Edge storedEdge = SessionBarSettings.DEFAULT_EDGE;
 	private int opacity = SessionBarSettings.DEFAULT_OPACITY;
+	/** Docked mode: the bar stays in full screen too (package 4.2, {@code bar_in_fullscreen}). */
+	private boolean keepInFullScreen;
 	/** Docked mode in full screen: the bar is shown over the picture for a moment. */
 	private boolean revealed;
 	/** Full screen as of the last insets, to notice a change made in another window. */
@@ -130,6 +145,7 @@ public final class SessionBar
 	private int rootColor = Color.BLACK;
 	private int[] scrollBackground;
 	private boolean lightBars;
+	private boolean lightNavBar;
 	/** The window is told a system bar (or a desktop window's caption bar) is on screen. */
 	private boolean barsShown;
 	private AlertDialog dialog;
@@ -150,6 +166,7 @@ public final class SessionBar
 		this.input = input;
 		this.density = activity.getResources().getDisplayMetrics().density;
 		this.container = activity.findViewById(R.id.captantan_session_bar_container);
+		this.scales = new RemoteScaleSwitch(window);
 		inflate();
 		this.gestures = SessionBarGestures.install(activity, this);
 		container.getViewTreeObserver().addOnGlobalLayoutListener(this::layout);
@@ -161,7 +178,8 @@ public final class SessionBar
 
 	/**
 	 * Shows the bar of a docked-mode session in full screen over the picture for
-	 * {@link #HIDE_AFTER_MS}. Otherwise the bar is shown anyway and nothing changes. For
+	 * {@link #HIDE_AFTER_MS}. Otherwise (overlay, docked outside full screen, docked and kept in
+	 * full screen) the bar is shown anyway and nothing changes. For
 	 * package 5.3's key combination:
 	 * {@code SessionBar.revealInFocusedWindow("Ctrl+Alt+B")}.
 	 *
@@ -227,10 +245,14 @@ public final class SessionBar
 		    (mode != SessionBarSettings.Mode.DOCKED || revealed || docked());
 	}
 
-	/** Docked mode outside full screen: the bar is a toolbar in its own strip of the window. */
+	/**
+	 * Docked mode outside full screen, or in full screen when it is kept there (4.2): the bar is a
+	 * toolbar in its own strip of the window.
+	 */
 	private boolean docked()
 	{
-		return host != null && mode == SessionBarSettings.Mode.DOCKED && !isFullScreen();
+		return host != null && mode == SessionBarSettings.Mode.DOCKED &&
+		    (keepInFullScreen || !isFullScreen());
 	}
 
 	/**
@@ -262,6 +284,7 @@ public final class SessionBar
 	void onShown(SessionHost shown)
 	{
 		closeDialog();
+		scales.close();
 		gestures.reset();
 		host = shown;
 		revealed = false;
@@ -274,6 +297,7 @@ public final class SessionBar
 	void onReleased()
 	{
 		closeDialog();
+		scales.close();
 		gestures.reset();
 		handler.removeCallbacks(hideOnTimeout);
 		if (host != null && revealed)
@@ -353,10 +377,12 @@ public final class SessionBar
 	void rebuild()
 	{
 		closeDialog();
+		scales.close();
 		container.removeView(bar);
 		inflate();
 		rootColor = 0; // the theme's colours changed: apply them again
 		lightBars = !lightSystemBars();
+		lightNavBar = !lightNavigationBar();
 		buttonPx = -1;
 		lastLayoutLog = null;
 		showForState();
@@ -366,6 +392,7 @@ public final class SessionBar
 	void onDestroy()
 	{
 		closeDialog();
+		scales.close();
 		gestures.reset();
 		handler.removeCallbacksAndMessages(null);
 	}
@@ -431,6 +458,7 @@ public final class SessionBar
 		storedEdge = p.getBarEdge();
 		pickEdge();
 		opacity = p.getBarOpacity();
+		keepInFullScreen = p.getBarInFullScreen();
 	}
 
 	/**
@@ -460,7 +488,7 @@ public final class SessionBar
 		final long id = SessionBarSettings.bookmarkIdOf(host);
 		Log.i(TAG, "applied (" + why + "): " + window.getName() + " " + host + ": mode " +
 		               mode.storedName() + ", edge " + edge.storedName() + ", opacity " + opacity +
-		               " % (" +
+		               " %, in full screen " + (keepInFullScreen ? "kept" : "hidden") + " (" +
 		               (id > 0 ? "bookmark " + id : "no saved bookmark") + ")");
 	}
 
@@ -480,6 +508,7 @@ public final class SessionBar
 			bar.setVisibility(View.GONE);
 		}
 		updateFullScreenIcon();
+		showScale();
 		styleSystemBars();
 	}
 
@@ -495,6 +524,7 @@ public final class SessionBar
 		final View edgeLabel = v.findViewById(R.id.captantan_bar_settings_edge_label);
 		final Slider slider = v.findViewById(R.id.captantan_bar_settings_opacity);
 		final TextView note = v.findViewById(R.id.captantan_bar_settings_note);
+		final MaterialSwitch keep = v.findViewById(R.id.captantan_bar_settings_fullscreen);
 
 		modes.check(mode == SessionBarSettings.Mode.DOCKED
 		                ? R.id.captantan_bar_mode_docked
@@ -504,6 +534,9 @@ public final class SessionBar
 		final int edgeShown = (mode == SessionBarSettings.Mode.OVERLAY) ? View.VISIBLE : View.GONE;
 		edges.setVisibility(edgeShown);
 		edgeLabel.setVisibility(edgeShown);
+		// package 4.2: "keep in full screen" is docked's
+		keep.setChecked(keepInFullScreen);
+		keep.setVisibility(mode == SessionBarSettings.Mode.DOCKED ? View.VISIBLE : View.GONE);
 		slider.setValue(Math.round(opacity / 5f) * 5f);
 		note.setText(SessionBarSettings.bookmarkIdOf(forHost) > 0
 		                 ? R.string.captantan_bar_settings_saved
@@ -519,7 +552,17 @@ public final class SessionBar
 			final int shown = (mode == SessionBarSettings.Mode.OVERLAY) ? View.VISIBLE : View.GONE;
 			edges.setVisibility(shown);
 			edgeLabel.setVisibility(shown);
+			keep.setVisibility(mode == SessionBarSettings.Mode.DOCKED ? View.VISIBLE : View.GONE);
 			pickEdge();
+			handler.removeCallbacks(hideOnTimeout);
+			showForState();
+			layout();
+		});
+		keep.setOnCheckedChangeListener((b, checked) -> {
+			keepInFullScreen = checked;
+			// as for the mode: the bar stays shown while the dialog is open; in full screen the
+			// strip comes or goes at once, and the remote desktop is resized to it
+			revealed = (mode == SessionBarSettings.Mode.DOCKED);
 			handler.removeCallbacks(hideOnTimeout);
 			showForState();
 			layout();
@@ -547,12 +590,12 @@ public final class SessionBar
 			dialog = null;
 			if (host != forHost)
 				return;
-			final boolean saved =
-			    SessionBarSettings.save(activity, forHost, mode, storedEdge, opacity);
+			final boolean saved = SessionBarSettings.save(activity, forHost, mode, storedEdge,
+			                                              opacity, keepInFullScreen);
 			Log.i(TAG, "settings: " + window.getName() + " " + forHost + ": mode " +
 			               mode.storedName() + ", stored edge " + storedEdge.storedName() +
-			               ", opacity " +
-			               opacity + " % (" +
+			               ", opacity " + opacity + " %, in full screen " +
+			               (keepInFullScreen ? "kept" : "hidden") + " (" +
 			               (saved ? "saved for bookmark " + SessionBarSettings.bookmarkIdOf(forHost)
 			                      : "for this session only, no saved bookmark") +
 			               ")");
@@ -614,6 +657,7 @@ public final class SessionBar
 		                                            false);
 		buttons = bar.findViewById(R.id.captantan_bar_buttons);
 		fullScreenButton = bar.findViewById(R.id.captantan_bar_fullscreen);
+		scaleButton = bar.findViewById(R.id.captantan_bar_scale);
 		cardRadius = ((MaterialCardView)bar).getRadius();
 		cardElevation = ((MaterialCardView)bar).getCardElevation();
 		bar.setVisibility(View.GONE);
@@ -633,6 +677,25 @@ public final class SessionBar
 		b.setContentDescription(
 		    activity.getString(R.string.captantan_bar_touch_mode, activity.getString(mode.label)));
 		b.setTooltipText(b.getContentDescription());
+	}
+
+	/**
+	 * The remote scale button says the scale in force (package 4.2). A link has its own scale (its
+	 * arguments): the button is there but disabled, so the bar does not change between sessions.
+	 */
+	void showScale()
+	{
+		if (scaleButton == null)
+			return;
+		final boolean usable = host != null && host.getBookmark() != null;
+		scaleButton.setEnabled(usable);
+		scaleButton.setContentDescription(
+		    !usable ? activity.getString(R.string.captantan_bar_scale_link)
+		            : activity.getString(R.string.captantan_bar_scale_now,
+		                                 RemoteScale.desktopPercent(
+		                                     activity, host,
+		                                     activity.getResources().getConfiguration().densityDpi)));
+		scaleButton.setTooltipText(scaleButton.getContentDescription());
 	}
 
 	/** A motion event at the window's callback (SessionBarGestures), for the pen's log. */
@@ -665,6 +728,9 @@ public final class SessionBar
 		     () -> window.getTouchModes().openMenu(bar.findViewById(R.id.captantan_bar_touch_pointer)));
 		bind(R.id.captantan_bar_zoom_reset, "reset zoom", true,
 		     input::onTouchPointerResetScrollZoom);
+		// package 4.2: the remote scale menu; it hides the bar after a choice (RemoteScaleSwitch)
+		bind(R.id.captantan_bar_scale, "remote scale", false,
+		     () -> scales.openMenu(bar.findViewById(R.id.captantan_bar_scale), host));
 		bind(R.id.captantan_bar_fullscreen, "full screen", true, this::toggleFullScreen);
 		bind(R.id.captantan_bar_settings, "bar settings", false, this::openSettings);
 		bind(R.id.captantan_bar_disconnect, "disconnect", true, this::confirmDisconnect);
@@ -832,6 +898,16 @@ public final class SessionBar
 	}
 
 	/**
+	 * As {@link #lightSystemBars} for the navigation bar alone. In full screen with the bar kept
+	 * (4.2) a navigation bar a swipe pulls in lies over the remote picture, not the bar's colour,
+	 * so it keeps light icons; the status bar lies over the bar's strip.
+	 */
+	public boolean lightNavigationBar()
+	{
+		return lightSystemBars() && !isFullScreen();
+	}
+
+	/**
 	 * Docked, the status bar and the navigation bar get the bar's colour: the session's root
 	 * view (upstream's black) takes it, and the session view keeps black only inside its padding,
 	 * where the remote desktop is. Otherwise both are as upstream has them.
@@ -866,16 +942,21 @@ public final class SessionBar
 			scroll.setBackground(null);
 		}
 		final boolean light = lightSystemBars();
-		if (light != lightBars)
+		final boolean lightNav = lightNavigationBar();
+		if (light != lightBars || lightNav != lightNavBar)
 		{
 			lightBars = light;
+			lightNavBar = lightNav;
 			final WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(
 			    activity.getWindow(), activity.getWindow().getDecorView());
 			controller.setAppearanceLightStatusBars(light);
-			controller.setAppearanceLightNavigationBars(light);
+			controller.setAppearanceLightNavigationBars(lightNav);
 			Log.i(TAG, "system bars: " + window.getName() +
 			               (docked ? " in the bar's colour" : " black") + ", " +
-			               (light ? "dark" : "light") + " icons");
+			               (light ? "dark" : "light") + " icons" +
+			               (lightNav != light ? " (navigation bar " + (lightNav ? "dark" : "light") +
+			                                        ")"
+			                                  : ""));
 		}
 	}
 
@@ -916,11 +997,18 @@ public final class SessionBar
 		final int cr = Math.max(0, root.getWidth() - cl - cw);
 		final int cb = Math.max(0, root.getHeight() - ct - ch);
 
+		// Docked in full screen (package 4.2): the bar keeps clear of what is always there (the
+		// cutout, a caption bar), not of system bars a swipe pulls in for a moment; following
+		// those would move the strip and resize the remote desktop twice per swipe.
+		final boolean docked = docked();
+		final boolean keptFull = docked && isFullScreen();
 		Insets sys = Insets.NONE, ime = Insets.NONE;
 		if (insets != null)
 		{
-			sys = insets.getInsets(WindowInsetsCompat.Type.systemBars() |
-			                       WindowInsetsCompat.Type.displayCutout());
+			sys = insets.getInsets(keptFull ? WindowInsetsCompat.Type.displayCutout() |
+			                                      WindowInsetsCompat.Type.captionBar()
+			                                : WindowInsetsCompat.Type.systemBars() |
+			                                      WindowInsetsCompat.Type.displayCutout());
 			ime = insets.getInsets(WindowInsetsCompat.Type.ime());
 		}
 		int bottom = Math.max(0, Math.max(sys.bottom, ime.bottom) - cb);
@@ -934,6 +1022,8 @@ public final class SessionBar
 		}
 		safe.set(Math.max(0, sys.left - cl), Math.max(0, sys.top - ct),
 		         Math.max(0, sys.right - cr), bottom);
+		if (docked && edge == SessionBarSettings.Edge.TOP)
+			keepClearOfTopCorners(cl, ct, cw);
 
 		final int gap = Math.round(GAP_DP * density);
 		if (container.getPaddingLeft() != safe.left || container.getPaddingTop() != safe.top ||
@@ -963,7 +1053,6 @@ public final class SessionBar
 				gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
 				break;
 		}
-		final boolean docked = docked();
 		final int margin = docked ? 0 : gap;
 		final int across = ViewGroup.LayoutParams.MATCH_PARENT;
 		final int wrap = ViewGroup.LayoutParams.WRAP_CONTENT;
@@ -1051,9 +1140,16 @@ public final class SessionBar
 					reserve(0, 0, thick + Math.max(0, safe.right - nav.right), 0);
 					break;
 				default:
-					// the session view starts below the status bar and caption already
-					reserve(0, thick, 0, 0);
+				{
+					// The session view starts below what it is padded for at the top already
+					// (the status bar and cutout, a caption bar, fitted rounded corners). The
+					// bar may sit lower: in full screen below the cutout (4.2), with only "Hide
+					// Status Bar" on below the cutout too. The strip reaches down to the bar's
+					// bottom, so the bar never covers the picture.
+					final int padded = window.getResizer().getSystemInsets()[1];
+					reserve(0, thick + Math.max(0, container.getTop() + safe.top - padded), 0, 0);
 					break;
+				}
 			}
 		}
 		else
@@ -1072,6 +1168,53 @@ public final class SessionBar
 			lastLayoutLog = log;
 			Log.i(TAG, log);
 		}
+	}
+
+	/**
+	 * A docked bar across the top: its ends keep clear of the screen's rounded top corners where
+	 * they reach down to the bar (in full screen, where nothing else lies above it; package 4.2).
+	 * Widens {@link #safe} on the left and right; the strip paints behind the corners. In window
+	 * coordinates: the corners' centres are given in the window's, as is the layer's place.
+	 */
+	private void keepClearOfTopCorners(int cl, int ct, int cw)
+	{
+		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || insets == null)
+			return;
+		final WindowInsets platform = insets.toWindowInsets();
+		if (platform == null)
+			return;
+		final int barTop = ct + safe.top;
+		final RoundedCorner tl = platform.getRoundedCorner(RoundedCorner.POSITION_TOP_LEFT);
+		final RoundedCorner tr = platform.getRoundedCorner(RoundedCorner.POSITION_TOP_RIGHT);
+		if (tl != null)
+		{
+			final int reach = cornerReach(tl, barTop);
+			if (reach >= 0)
+				safe.left = Math.max(safe.left, tl.getCenter().x - reach - cl);
+		}
+		if (tr != null)
+		{
+			final int reach = cornerReach(tr, barTop);
+			if (reach >= 0)
+				safe.right = Math.max(safe.right, cl + cw - (tr.getCenter().x + reach));
+		}
+	}
+
+	/**
+	 * How far from a top corner's centre, sideways, the screen still shows at the row {@code y}
+	 * (window coordinates): 0 keeps clear of the whole corner; -1 if the corner does not reach down
+	 * to that row.
+	 */
+	@RequiresApi(Build.VERSION_CODES.S)
+	private static int cornerReach(RoundedCorner corner, int y)
+	{
+		final int r = corner.getRadius();
+		final int dy = corner.getCenter().y - y;
+		if (r <= 0 || dy <= 0)
+			return -1;
+		if (dy >= r)
+			return 0;
+		return (int)Math.floor(Math.sqrt((double)r * r - (double)dy * dy));
 	}
 
 	private static String rectText(Rect r)

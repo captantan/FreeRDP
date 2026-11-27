@@ -56,6 +56,12 @@
             android:entryValues="@array/captantan_bar_mode_values"
             android:defaultValue="docked"
             app:useSimpleSummaryProvider="true" />
+        <!-- roadmap 4.2: docked only (ConnectionOptionsFragment enables it for docked) -->
+        <SwitchPreferenceCompat
+            android:key="bar_in_fullscreen"
+            android:title="@string/captantan_bar_fullscreen_keep"
+            android:summary="@string/captantan_bar_fullscreen_keep_summary"
+            android:defaultValue="false" />
         <!-- the edge is overlay's: docked is always at the top (4.1 device run) -->
         <ListPreference
             android:key="bar_edge"

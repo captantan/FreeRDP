@@ -171,6 +171,24 @@ public final class ConnectionOptions
 				}
 			}
 
+			@Override public boolean getBoolean(String key, boolean defValue)
+			{
+				ConnectionPrefs.Field<?> f = ConnectionPrefs.field(key);
+				if (f instanceof ConnectionPrefs.BoolField)
+					return values.get((ConnectionPrefs.BoolField)f);
+				return defValue;
+			}
+
+			@Override public void putBoolean(String key, boolean value)
+			{
+				ConnectionPrefs.Field<?> f = ConnectionPrefs.field(key);
+				if (f instanceof ConnectionPrefs.BoolField)
+				{
+					values.set((ConnectionPrefs.BoolField)f, value);
+					markChanged();
+				}
+			}
+
 			@Override public int getInt(String key, int defValue)
 			{
 				ConnectionPrefs.Field<?> f = ConnectionPrefs.field(key);

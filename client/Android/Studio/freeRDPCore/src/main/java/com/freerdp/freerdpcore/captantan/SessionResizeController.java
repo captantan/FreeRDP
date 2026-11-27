@@ -39,7 +39,7 @@ import java.util.Set;
  * the bottom the navigation bar (unless hidden by the setting) and, with "fit rounded corners",
  * the screen's rounded corners;</li>
  * <li>the extra insets of {@link #setReservedInsets}, which the docked session bar (4.1)
- * uses for its strip.</li>
+ * uses for its strip, also in full screen when it is kept there (4.2).</li>
  * </ul>
  * Not subtracted: the on-screen keyboard (IME) and the app's own key bar above it, the floating
  * toolbar, the touch pointer, a system bar shown for a moment by a swipe, dialogs and sheets. Those
@@ -250,6 +250,34 @@ public final class SessionResizeController implements DisplayControl.Listener
 	}
 
 	/**
+	 * Asks the session again for the viewport, after the usual {@link #SETTLE_MS} wait, although
+	 * the viewport has not changed (package 4.2: the session bar's remote scale menu changed the
+	 * scale). Every request carries the scale, and the native side sends a layout whose scale
+	 * differs from the session's even at the same size, so a scale-only change is not skipped.
+	 * Does nothing while no session is bound; a window that is not visible asks when it is.
+	 *
+	 * @param cause what changed, for the log
+	 */
+	public void askAgain(String cause)
+	{
+		if (host == null)
+			return;
+		Log.i(TAG, "ask again " + windowName + ": " + host + " (" + cause + ")");
+		restartWait();
+	}
+
+	/**
+	 * The system insets of {@link #setSystemInsets}: left, top, right, bottom in pixels from the
+	 * root view's edges (a copy; zeros before the first insets pass). The session view is padded
+	 * by them plus the reserved strip; the docked session bar (4.2) reads the top one to make its
+	 * strip reach below a camera cutout the session view is not padded for (full screen).
+	 */
+	public int[] getSystemInsets()
+	{
+		return (systemInsets != null) ? systemInsets.clone() : new int[4];
+	}
+
+	/**
 	 * The window became visible. A window that nobody sees asks for nothing (a fold stops the
 	 * window and changes its insets well before the new configuration arrives), so the wait starts
 	 * again here: the viewport of the new configuration usually follows within a frame.
@@ -405,11 +433,12 @@ public final class SessionResizeController implements DisplayControl.Listener
 		}
 		// The remote scale (package 3.3): 0 / 0 is the session's own (a link).
 		final int dpi = activity.getResources().getConfiguration().densityDpi;
-		final int desktopScale = RemoteScale.desktopPercent(activity, h.getBookmark(), dpi);
+		// (package 4.2: for the session, so a quick connect's choice from its bar counts)
+		final int desktopScale = RemoteScale.desktopPercent(activity, h, dpi);
 		final int deviceScale = (desktopScale > 0) ? RemoteScale.deviceFor(desktopScale) : 0;
 		final String scaleText =
 		    (desktopScale > 0) ? ", scale " + desktopScale + "/" + deviceScale + " (" +
-		                             RemoteScale.describe(activity, h.getBookmark()) + ")"
+		                             RemoteScale.describe(activity, h) + ")"
 		                       : "";
 		int w = viewportWidth;
 		int hh = viewportHeight;

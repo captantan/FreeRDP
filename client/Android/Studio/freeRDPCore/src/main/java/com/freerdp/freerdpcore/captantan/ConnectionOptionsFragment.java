@@ -57,5 +57,19 @@ public class ConnectionOptionsFragment extends PreferenceFragmentCompat
 				});
 			}
 		}
+
+		// Session bar (roadmap 4.2): "keep in full screen" is docked's, so it is enabled for
+		// docked only (shown, so the option is found).
+		ListPreference barMode = findPreference(ConnectionPrefs.BAR_MODE.key);
+		Preference keep = findPreference(ConnectionPrefs.BAR_IN_FULLSCREEN.key);
+		if (barMode != null && keep != null)
+		{
+			final String docked = SessionBarSettings.Mode.DOCKED.storedName();
+			keep.setEnabled(docked.equals(barMode.getValue()));
+			barMode.setOnPreferenceChangeListener((p, value) -> {
+				keep.setEnabled(docked.equals(value));
+				return true;
+			});
+		}
 	}
 }
