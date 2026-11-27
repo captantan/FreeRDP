@@ -62,6 +62,12 @@ import com.freerdp.freerdpcore.presentation.SessionInputManager;
  * Upstream's toolbar had two actions (touch pointer, keyboard) and the fork had added the switcher
  * to it; all three are here.
  *
+ * <p><b>In a desktop window</b> (package 6.1b) the bar is not shown and takes no strip: the
+ * keyboard, input mode, key capture, reset zoom and settings buttons are on the tab strip in the
+ * caption bar ({@link SessionTabStrip}, {@link #pressOnTabStrip}), and the switcher, full screen
+ * and disconnect are left out there (the tabs, the caption bar's own buttons and a tab's close
+ * control do their work). The owner chose this in the 6.1b device run.
+ *
  * <p><b>Settings</b> per connection ({@link SessionBarSettings}): the mode, the edge, the
  * opacity and whether a docked bar stays in full screen, applied when the window shows a session
  * ({@link #onShown}), so a switch to another session in the same window takes that session's.
@@ -103,6 +109,16 @@ public final class SessionBar
 	public static final long HIDE_AFTER_MS = 5000;
 
 	static final int MOUSE_BAND_DP = 8;
+
+	// The buttons' names, for the log and for the tab strip (package 6.1b).
+	static final String SESSIONS = "sessions";
+	static final String KEYBOARD = "keyboard";
+	static final String INPUT_MODE = "input mode";
+	static final String KEY_CAPTURE = "key capture";
+	static final String RESET_ZOOM = "reset zoom";
+	static final String FULL_SCREEN = "full screen";
+	static final String BAR_SETTINGS = "bar settings";
+	static final String DISCONNECT = "disconnect";
 	private static final int GAP_DP = 4;
 	private static final int BUTTON_DP = 44;
 	private static final int BUTTON_MIN_DP = 32;
@@ -193,6 +209,12 @@ public final class SessionBar
 			Log.i(TAG, "reveal asked in " + window.getName() + " (" + cause + "): no session shown");
 			return;
 		}
+		if (inTabStrip())
+		{
+			Log.i(TAG, "reveal asked in " + window.getName() + " (" + cause + "): a desktop " +
+			               "window, the buttons are on the tab strip");
+			return;
+		}
 		if (mode != SessionBarSettings.Mode.DOCKED || docked())
 		{
 			Log.i(TAG, "reveal asked in " + window.getName() + " (" + cause + "): mode " +
@@ -242,7 +264,7 @@ public final class SessionBar
 	/** Whether the bar is on screen (overlay, docked, or revealed in full screen). */
 	public boolean isShown()
 	{
-		return host != null &&
+		return host != null && !inTabStrip() &&
 		    (mode != SessionBarSettings.Mode.DOCKED || revealed || docked());
 	}
 
@@ -252,7 +274,7 @@ public final class SessionBar
 	 */
 	private boolean docked()
 	{
-		return host != null && mode == SessionBarSettings.Mode.DOCKED &&
+		return host != null && !inTabStrip() && mode == SessionBarSettings.Mode.DOCKED &&
 		    (keepInFullScreen || !isFullScreen());
 	}
 
@@ -401,7 +423,7 @@ public final class SessionBar
 	boolean wantsMouseReveal()
 	{
 		return host != null && mode == SessionBarSettings.Mode.DOCKED && !isShown() &&
-		    dialog == null && container.isLaidOut();
+		    !inTabStrip() && dialog == null && container.isLaidOut();
 	}
 
 	boolean isRevealed()
@@ -554,6 +576,10 @@ public final class SessionBar
 		note.setText(SessionBarSettings.bookmarkIdOf(forHost) > 0
 		                 ? R.string.captantan_bar_settings_saved
 		                 : R.string.captantan_bar_settings_unsaved);
+		// package 6.1b: a desktop window shows no bar, its buttons are on the tab strip
+		if (inTabStrip())
+			note.setText(activity.getString(R.string.captantan_bar_settings_desktop) + " " +
+			             note.getText());
 
 		modes.addOnButtonCheckedListener((group, id, checked) -> {
 			if (!checked)
@@ -613,7 +639,7 @@ public final class SessionBar
 			                      : "for this session only, no saved bookmark") +
 			               ")");
 			apply("settings changed");
-			if (mode == SessionBarSettings.Mode.DOCKED)
+			if (mode == SessionBarSettings.Mode.DOCKED && !inTabStrip())
 			{
 				// shown for the dialog: hide it again as after any other button
 				revealed = true;
@@ -715,6 +741,7 @@ public final class SessionBar
 		    !supported ? R.string.captantan_bar_capture_unsupported
 		               : on ? R.string.captantan_bar_capture_on : R.string.captantan_bar_capture_off));
 		b.setTooltipText(b.getContentDescription());
+		window.tabStripButtonsChanged(); // package 6.1b: its copy on the tab strip
 	}
 
 	/** The input mode button shows the touch mode in force (package 4.3, TouchModeSwitch). */
@@ -728,6 +755,7 @@ public final class SessionBar
 		b.setContentDescription(
 		    activity.getString(R.string.captantan_bar_touch_mode, activity.getString(mode.label)));
 		b.setTooltipText(b.getContentDescription());
+		window.tabStripButtonsChanged(); // package 6.1b: its copy on the tab strip
 	}
 
 	/** A motion event at the window's callback (SessionBarGestures), for the pen's log. */
@@ -752,26 +780,21 @@ public final class SessionBar
 	 */
 	private void bindButtons()
 	{
-		bind(R.id.captantan_bar_sessions, "sessions", true, () -> SessionSwitcher.open(window));
-		bind(R.id.captantan_bar_keyboard, "keyboard", true, input::toggleKeyboard);
+		bind(R.id.captantan_bar_sessions, SESSIONS, true);
+		bind(R.id.captantan_bar_keyboard, KEYBOARD, true);
 		// package 4.3: the input mode menu (direct touch, touch pointer, trackpad); it hides the
 		// bar after a choice (TouchModeSwitch)
-		bind(R.id.captantan_bar_touch_pointer, "input mode", false,
-		     () -> window.getTouchModes().openMenu(bar.findViewById(R.id.captantan_bar_touch_pointer)));
+		bind(R.id.captantan_bar_touch_pointer, INPUT_MODE, false);
 		// package 5.2: system-key capture on or off for this connection (KeyCaptureController)
-		bind(R.id.captantan_bar_capture, "key capture", true, () -> {
-			if (keyCapture != null)
-				keyCapture.setSaved(!keyCapture.isWanted(), "session bar button");
-		});
-		bind(R.id.captantan_bar_zoom_reset, "reset zoom", true,
-		     input::onTouchPointerResetScrollZoom);
+		bind(R.id.captantan_bar_capture, KEY_CAPTURE, true);
+		bind(R.id.captantan_bar_zoom_reset, RESET_ZOOM, true);
 		// package 4.2's remote scale menu is in the settings sheet since 5.2 (RemoteScaleSwitch)
-		bind(R.id.captantan_bar_fullscreen, "full screen", true, this::toggleFullScreen);
-		bind(R.id.captantan_bar_settings, "bar settings", false, this::openSettings);
-		bind(R.id.captantan_bar_disconnect, "disconnect", true, this::confirmDisconnect);
+		bind(R.id.captantan_bar_fullscreen, FULL_SCREEN, true);
+		bind(R.id.captantan_bar_settings, BAR_SETTINGS, false);
+		bind(R.id.captantan_bar_disconnect, DISCONNECT, true);
 	}
 
-	private void bind(int id, String name, boolean hidesAfter, Runnable action)
+	private void bind(int id, String name, boolean hidesAfter)
 	{
 		final View b = bar.findViewById(id);
 		if (b == null)
@@ -781,11 +804,118 @@ public final class SessionBar
 			if (host == null)
 				return;
 			Log.i(TAG, "button: " + window.getName() + " " + host + ": " + name);
-			action.run();
+			run(name, v);
 			if (hidesAfter)
 				hide("after " + name);
 		});
 	}
+
+	/** A button's action, pressed on the bar or (package 6.1b) on the tab strip. */
+	private void run(String name, View from)
+	{
+		switch (name)
+		{
+			case SESSIONS:
+				SessionSwitcher.open(window);
+				break;
+			case KEYBOARD:
+				input.toggleKeyboard();
+				break;
+			case INPUT_MODE:
+				window.getTouchModes().openMenu(from);
+				break;
+			case KEY_CAPTURE:
+				if (keyCapture != null)
+					keyCapture.setSaved(!keyCapture.isWanted(), "session bar button");
+				break;
+			case RESET_ZOOM:
+				input.onTouchPointerResetScrollZoom();
+				break;
+			case FULL_SCREEN:
+				toggleFullScreen();
+				break;
+			case BAR_SETTINGS:
+				openSettings();
+				break;
+			case DISCONNECT:
+				confirmDisconnect();
+				break;
+			default:
+				break;
+		}
+	}
+
+	// ****************************************************************************
+	// In a desktop window: the buttons on the tab strip (package 6.1b)
+
+	/**
+	 * Whether the tab strip has the bar's buttons: in a desktop window the bar is not shown and
+	 * takes no strip; five of its buttons are on the tab strip, in the caption bar beside the
+	 * tabs. The other three are not needed there: the tabs are the switcher, a tab's close
+	 * control disconnects, and the caption bar's own button gives the window the whole display.
+	 */
+	private boolean inTabStrip()
+	{
+		return window.barInTabStrip();
+	}
+
+	/** The tab strip took the buttons or gave them back: the bar shows or hides for it. */
+	void tabStripChanged(String why)
+	{
+		revealed = false;
+		handler.removeCallbacks(hideOnTimeout);
+		Log.i(TAG, "bar " + window.getName() + ": " +
+		               (inTabStrip() ? "not shown, its buttons are on the tab strip"
+		                             : "shown as its settings say, the tab strip has no buttons") +
+		               " (" + why + ")");
+		apply(why);
+	}
+
+	/** A button on the tab strip was pressed: as the bar's own. */
+	void pressOnTabStrip(String name, View from, String tool)
+	{
+		if (host == null)
+			return;
+		Log.i(TAG, "button: " + window.getName() + " " + host + ": " + name + " (tab strip, " +
+		               tool + ")");
+		run(name, from);
+	}
+
+	/**
+	 * A tab strip button as the bar's: the key capture button's icon, state and whether it is
+	 * shown (a physical keyboard attached), the input mode button's icon. False when it is hidden.
+	 */
+	boolean styleOnTabStrip(String name, MaterialButton b)
+	{
+		final String description;
+		boolean shown = true;
+		if (KEY_CAPTURE.equals(name))
+		{
+			if (keyCapture == null)
+				return false;
+			final boolean supported = KeyCaptureController.isSupported();
+			final boolean on = supported && keyCapture.isWanted();
+			b.setIconResource(on ? R.drawable.captantan_ic_key_capture
+			                     : R.drawable.captantan_ic_key_capture_off);
+			b.setEnabled(supported);
+			description = activity.getString(!supported ? R.string.captantan_bar_capture_unsupported
+			                                  : on      ? R.string.captantan_bar_capture_on
+			                                            : R.string.captantan_bar_capture_off);
+			shown = keyCapture.isKeyboardAttached();
+		}
+		else if (INPUT_MODE.equals(name))
+		{
+			b.setIconResource(touchMode.icon);
+			description = activity.getString(R.string.captantan_bar_touch_mode,
+			                                 activity.getString(touchMode.label));
+		}
+		else
+			return true;
+		b.setContentDescription(description);
+		b.setTooltipText(description);
+		return shown;
+	}
+
 
 	private void confirmDisconnect()
 	{
@@ -1033,7 +1163,7 @@ public final class SessionBar
 	private void reserve(int left, int top, int right, int bottom)
 	{
 		final SessionResizeController resizer = window.getResizer();
-		final int[] was = resizer.getReservedInsets();
+		final int[] was = resizer.getBarReservedInsets();
 		if (was[0] == left && was[1] == top && was[2] == right && was[3] == bottom)
 			return;
 		resizer.setReservedInsets(left, top, right, bottom);
@@ -1083,7 +1213,9 @@ public final class SessionBar
 			keys.getLocationInWindow(k);
 			bottom = Math.max(bottom, ct + ch - k[1]);
 		}
-		safe.set(Math.max(0, sys.left - cl), Math.max(0, sys.top - ct),
+		// package 6.1b: the session tabs' own row, where a desktop window has no caption bar
+		final int tabRow = window.getResizer().getTabStripTop();
+		safe.set(Math.max(0, sys.left - cl), Math.max(0, sys.top - ct) + tabRow,
 		         Math.max(0, sys.right - cr), bottom);
 		if (docked && edge == SessionBarSettings.Edge.TOP)
 			keepClearOfTopCorners(cl, ct, cw);
@@ -1213,7 +1345,9 @@ public final class SessionBar
 					// Status Bar" on below the cutout too. The strip reaches down to the bar's
 					// bottom, so the bar never covers the picture.
 					final int padded = window.getResizer().getSystemInsets()[1];
-					reserve(0, thick + Math.max(0, container.getTop() + safe.top - padded), 0, 0);
+					// (the tab row of 6.1b is left out of the viewport by the controller itself)
+					reserve(0, thick + Math.max(0, container.getTop() + safe.top - tabRow - padded),
+					        0, 0);
 					break;
 				}
 			}

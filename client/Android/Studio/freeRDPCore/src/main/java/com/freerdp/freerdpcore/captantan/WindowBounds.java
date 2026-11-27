@@ -10,6 +10,7 @@ import android.app.Activity;
 import android.app.ActivityOptions;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.Rect;
 import android.hardware.display.DisplayManager;
 import android.os.Build;
@@ -19,6 +20,7 @@ import android.view.Display;
 import android.view.WindowManager;
 
 import androidx.annotation.RequiresApi;
+import androidx.preference.PreferenceManager;
 
 import com.freerdp.freerdpcore.R;
 import com.freerdp.freerdpcore.domain.BookmarkBase;
@@ -60,6 +62,12 @@ public final class WindowBounds
 	private static final String VERSION = "1";
 	/** ActivityOptions' bundle key for the launch display (ActivityOptions.KEY_LAUNCH_DISPLAY_ID). */
 	private static final String KEY_LAUNCH_DISPLAY_ID = "android:activity.launchDisplayId";
+	/**
+	 * Package 6.1b: the session window's bounds (the window with the tabs), app-wide state in the
+	 * app's default preferences, in the format of {@link ConnectionPrefs#STATE_WINDOW_BOUNDS}.
+	 * Permanent once released.
+	 */
+	static final String PREF_TAB_WINDOW = "captantan_tab_window_bounds";
 
 	private WindowBounds()
 	{
@@ -79,31 +87,64 @@ public final class WindowBounds
 		final long id = bookmarkId(host.getBookmark());
 		if (id <= 0)
 			return; // quick connect or link: nothing to store under
-		if (!SessionLauncher.isDesktopWindowing(activity))
-			return; // only desktop windows have bounds worth opening at
-		final WindowManager wm = activity.getWindowManager();
-		final Rect bounds = wm.getCurrentWindowMetrics().getBounds();
-		final Rect display = wm.getMaximumWindowMetrics().getBounds();
-		if (bounds.isEmpty())
+		final String value = currentValue(activity, windowName + " " + host, why);
+		if (value == null)
 			return;
-		if (bounds.contains(display))
-		{
-			Log.i(TAG, "window bounds not stored: " + windowName + " " + host + " covers the whole " +
-			               "display " + display.width() + "x" + display.height() +
-			               " (maximised or full screen; the bounds before are kept) (" + why + ")");
-			return;
-		}
-		final int dpi = activity.getResources().getConfiguration().densityDpi;
-		final String value = VERSION + ";" + bounds.left + "," + bounds.top + "," + bounds.right +
-		                     "," + bounds.bottom + ";" + display.width() + "x" + display.height() +
-		                     ";" + dpi;
 		final String old = ConnectionPrefs.getState(activity, id, ConnectionPrefs.STATE_WINDOW_BOUNDS);
 		if (value.equals(old))
 			return;
 		ConnectionPrefs.putState(activity, id, ConnectionPrefs.STATE_WINDOW_BOUNDS, value);
 		Log.i(TAG, "window bounds stored: " + windowName + " " + host + " (bookmark " + id + ") " +
-		               describe(bounds) + " on a " + display.width() + "x" + display.height() +
-		               " display at " + dpi + " dpi (" + why + ")");
+		               value + " (" + why + ")");
+	}
+
+	/**
+	 * Package 6.1b: stores the bounds of the session window, the one a plain launch reaches and
+	 * that holds the tabs, as the app's ({@link #PREF_TAB_WINDOW}), not a bookmark's: whichever
+	 * of its tabs it shows, it is the same window, and it opens again where it was. Same format
+	 * and rules as {@link #remember}. UI thread.
+	 */
+	static void rememberTabWindow(Activity activity, String windowName, String why)
+	{
+		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R)
+			return;
+		final String value = currentValue(activity, windowName + " (the session window)", why);
+		if (value == null)
+			return;
+		final SharedPreferences prefs = prefs(activity);
+		if (value.equals(prefs.getString(PREF_TAB_WINDOW, null)))
+			return;
+		prefs.edit().putString(PREF_TAB_WINDOW, value).apply();
+		Log.i(TAG, "window bounds stored: " + windowName + " (the session window, for the app) " +
+		               value + " (" + why + ")");
+	}
+
+	/** The stored value for the window's bounds now, or null if they are not to be stored. */
+	@RequiresApi(Build.VERSION_CODES.R)
+	private static String currentValue(Activity activity, String what, String why)
+	{
+		if (!SessionLauncher.isDesktopWindowing(activity))
+			return null; // only desktop windows have bounds worth opening at
+		final WindowManager wm = activity.getWindowManager();
+		final Rect bounds = wm.getCurrentWindowMetrics().getBounds();
+		final Rect display = wm.getMaximumWindowMetrics().getBounds();
+		if (bounds.isEmpty())
+			return null;
+		if (bounds.contains(display))
+		{
+			Log.i(TAG, "window bounds not stored: " + what + " covers the whole " +
+			               "display " + display.width() + "x" + display.height() +
+			               " (maximised or full screen; the bounds before are kept) (" + why + ")");
+			return null;
+		}
+		final int dpi = activity.getResources().getConfiguration().densityDpi;
+		return VERSION + ";" + bounds.left + "," + bounds.top + "," + bounds.right + "," +
+		    bounds.bottom + ";" + display.width() + "x" + display.height() + ";" + dpi;
+	}
+
+	private static SharedPreferences prefs(Context context)
+	{
+		return PreferenceManager.getDefaultSharedPreferences(context.getApplicationContext());
 	}
 
 	// ****************************************************************************
@@ -148,7 +189,31 @@ public final class WindowBounds
 			               "the window");
 			return options;
 		}
-		final Rect bounds = usable(from, id, stored, displayOf(from, options));
+		return withBounds(from, "bookmark " + id, stored, options);
+	}
+
+	/**
+	 * Package 6.1b: the options for a plain launch that makes the session window (none is open),
+	 * from a desktop window or the list in desktop windowing: the session window's own bounds
+	 * ({@link #rememberTabWindow}) if valid for the display.
+	 */
+	static Bundle forTabWindowLaunch(Activity from, Bundle options)
+	{
+		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R)
+			return options;
+		final String stored = prefs(from).getString(PREF_TAB_WINDOW, null);
+		if (stored == null)
+		{
+			Log.i(TAG, "window bounds: none stored for the session window; the system places it");
+			return options;
+		}
+		return withBounds(from, "the session window", stored, options);
+	}
+
+	@RequiresApi(Build.VERSION_CODES.R)
+	private static Bundle withBounds(Activity from, String whose, String stored, Bundle options)
+	{
+		final Rect bounds = usable(from, whose, stored, displayOf(from, options));
 		if (bounds == null)
 			return options;
 		// The only options a caller passes are upstream's launch display (ExternalDisplayManager):
@@ -167,7 +232,7 @@ public final class WindowBounds
 	}
 
 	/** The stored bounds if they suit this display, moved onto it if need be; null if not. */
-	@RequiresApi(Build.VERSION_CODES.R) private static Rect usable(Activity from, long id, String stored, Display display)
+	@RequiresApi(Build.VERSION_CODES.R) private static Rect usable(Activity from, String whose, String stored, Display display)
 	{
 		final String[] part = stored.split(";");
 		final Rect bounds;
@@ -186,13 +251,13 @@ public final class WindowBounds
 		}
 		catch (RuntimeException e)
 		{
-			Log.i(TAG, "window bounds ignored for bookmark " + id + ": not readable (\"" + stored +
+			Log.i(TAG, "window bounds ignored for " + whose + ": not readable (\"" + stored +
 			               "\")");
 			return null;
 		}
 		if (display == null)
 		{
-			Log.i(TAG, "window bounds ignored for bookmark " + id + ": the display is not known");
+			Log.i(TAG, "window bounds ignored for " + whose + ": the display is not known");
 			return null;
 		}
 		final Context dc = from.createDisplayContext(display);
@@ -205,7 +270,7 @@ public final class WindowBounds
 		                   " display at " + storedDpi + " dpi";
 		if (area.width() != storedW || area.height() != storedH || dpi != storedDpi)
 		{
-			Log.i(TAG, "window bounds ignored for bookmark " + id + ": " + was + "; display " +
+			Log.i(TAG, "window bounds ignored for " + whose + ": " + was + "; display " +
 			               display.getDisplayId() + " is " + area.width() + "x" + area.height() +
 			               " at " + dpi + " dpi");
 			return null;
@@ -216,14 +281,14 @@ public final class WindowBounds
 		if (bounds.width() > area.width() || bounds.height() > area.height() ||
 		    bounds.width() < minW || bounds.height() < minH)
 		{
-			Log.i(TAG, "window bounds ignored for bookmark " + id + ": " + was + "; the size does " +
+			Log.i(TAG, "window bounds ignored for " + whose + ": " + was + "; the size does " +
 			               "not fit between the minimum " + minW + "x" + minH + " and the display");
 			return null;
 		}
 		final Rect used = new Rect(bounds);
 		used.offset(Math.max(0, area.left - used.left), Math.max(0, area.top - used.top));
 		used.offset(Math.min(0, area.right - used.right), Math.min(0, area.bottom - used.bottom));
-		Log.i(TAG, "window bounds used for bookmark " + id + ": " + describe(used) +
+		Log.i(TAG, "window bounds used for " + whose + ": " + describe(used) +
 		               (used.equals(bounds) ? "" : " (" + was + ", moved onto the display)") +
 		               ", display " + display.getDisplayId());
 		return used;

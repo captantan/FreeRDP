@@ -435,9 +435,9 @@ is shown in at most one window.
   carries the session's token (`SessionWindow.EXTRA_SESSION`) and its connection reference or link
   (`intentFor`).
 - **The setting** "Open new connections" (Settings, User interface; key `captantan_new_connection_window`):
-  "In a new window in desktop windowing, else in the session window" (`desktop`, the default), "In the
-  session window" (`this_window`), "In a new window" (`new_window`). So a phone gets one window that
-  switches. **Desktop windowing** is detected per launch from the launching activity: Android's desktop
+  "In a new window in desktop windowing, else in the session window" (`desktop`, the default until
+  6.1b), "In the session window" (`this_window`, the default since 6.1b, see "Session tabs"), "In a new
+  window" (`new_window`). So a phone gets one window that switches. **Desktop windowing** is detected per launch from the launching activity: Android's desktop
   windowing and DeX run apps in freeform windows (also when maximised), which the activity's
   configuration prints as `mWindowingMode=freeform` (Android has no public call for it); older DeX also
   has `Configuration.semDesktopModeEnabled`, read by reflection where it exists. Split screen is not
@@ -2302,6 +2302,215 @@ and a one-window default are the next package, not this one.
     and off with Back, one request each way. As in `.8`.
   - **Not run:** an external display (none at hand; package 6.2), the system's "New window" (not
     declared), a desktop window below API 34, DeX.
+
+**Session tabs** (package 6.1b)
+
+In a desktop window the open sessions are tabs in the window's caption bar, like a browser's; one
+window is the default, and a tab can be ejected into a window of its own. Outside desktop windowing
+(the tablet's full window, split screen, the phone) nothing is shown and the session switcher stays the
+way to switch.
+
+- **What the tablet's caption bar allows** (measured with a probe build on 2026-11-27, API 37, 280 dpi,
+  desktop windowing; the owner's word for what was seen, `captantan.bar` for the numbers):
+  - A window that asks for `WindowInsetsController.APPEARANCE_TRANSPARENT_CAPTION_BAR_BACKGROUND`
+    (API 35) gets its content laid out under the caption bar: the root view is the window's full
+    height, and the caption bar is a real inset, `captionBar()` top 70 px (40 dp), visible. Without the
+    flag (6.1) the content was laid out below it and the inset read 0. The inset arrives 14 to 40 ms
+    after the window's first layout, as before.
+  - `WindowInsets.getBoundingRects(captionBar())` names what the system keeps drawing over it: the app
+    icon with its menu at the left (0 to 144 px) and the window buttons at the right (424 px: minimise,
+    maximise, full display, close). Everything between is the app's to draw.
+  - **Input:** the system takes every touch and mouse press in the caption bar that the app has not
+    taken with `View.setSystemGestureExclusionRects`, whether the app's view is clickable or not: a
+    clickable view there gets the down and then a cancel, also for a tap that does not move, and the
+    window drags. Where the app has taken it, taps and clicks reach the view and the window does not
+    drag. This is what Android's desktop windowing guide says too ("Support desktop windowing").
+  - The system's caption icons are drawn light over a light strip unless the app also sets
+    `APPEARANCE_LIGHT_CAPTION_BARS` (seen in the probe: barely visible).
+  - The caption's "maximise" keeps the caption (the window fills the area below the status bar,
+    2960x1654 at 0,82); its "full display" button makes the window cover the display (2960x1848) and
+    hides the caption bar: the inset is 0, the bounding rects empty.
+  - So: tabs in the caption bar, taken from the system's gestures, with empty caption left to drag.
+- `freeRDPCore/.../captantan/SessionTabs.java` (new): which window lists which session. Every live
+  session is a tab of at most one window, the one that showed it last (`take`, from `SessionWindow.show`):
+  a new connection, a switch, an eject, a launch. A window that lets go of a session for another tab
+  keeps it. A window that closes hands its tabs to the session window used (focused) last, or, with no
+  other window, to none; the next session window that opens as the only one takes every session that
+  belongs to no window. So closing an ejected window with "Leave running" puts its session back as a
+  tab of the remaining window, and Back "Leave running" on the only window and a later launch from the
+  list give one window with all the sessions as tabs. Tabs are in the order the sessions started.
+- `freeRDPCore/.../captantan/SessionTabStrip.java` (new): the strip, one per window, drawn by the app:
+  - **In the caption bar:** under the whole caption bar, its tabs and "+" at the left between the
+    system's elements, the session bar's buttons at the right end, both taken from the system's
+    gestures; the space between, at least 72 dp, stays the system's, to drag the window. Tabs are 104
+    to 240 dp wide and share what is left; "+", the bar's buttons and the switcher are 36 dp. The
+    caption's icons are dark while the strip is light. The remote desktop is not touched: it was
+    already below the caption bar, so the tabs cost nothing and a tab switch changes nothing in the
+    viewport.
+  - **Compact** (a narrow window, the owner's choice in the second run): when the window's tabs do not
+    fit at 104 dp, the strip shows the shown session's tab alone and the switcher's button (the bottom
+    sheet with every session, as outside desktop windowing) before "+"; widened, the tabs come back.
+    The first build scrolled the tabs instead, which left pieces of tabs at the edges.
+  - **Colours and shape:** the strip has one end of the theme's surface containers (highest in a light
+    theme, lowest in a dark one) and the shown tab the other; the shown tab is a pill floating on the
+    strip (the theme's medium corners, 5 dp clear above and below), with a press and hover highlight of
+    the same shape; the other tabs have no fill, with a short divider between two of them.
+  - **Why a pill (the owner's rule, keep it):** a tab joined to what lies below it, as Chrome's tab and
+    address bar, is the better style when there is something for the tab to anchor to; Firefox's pills
+    feel disjointed from its address bar. Under these tabs there is nothing but the remote picture, so
+    the pill is better here. Three builds were compared on the tablet: the first gave the shown tab the
+    bar's colour against a near-equal grey (hard to tell which tab was shown); the second ran a stroke
+    in the shown tab's colour along the strip's bottom and curved the tab into it, as Chrome's tab
+    shape, to give it something to anchor to (looked off without an address bar); the third, the pill,
+    was kept. The dividers between inactive tabs stay (the owner: dropping them as Firefox does would
+    go the wrong way). If a toolbar ever comes back under the tabs, bring back the joined tab.
+  - **A row of its own**, 40 dp, at the top of the window, when a desktop window has no caption bar
+    (the full-display state; or a caption bar that is not an inset, below API 35). The viewport leaves
+    it out (`SessionResizeController.setTabStripTop`, added to `getReservedInsets` so upstream's
+    insets code pads the session view by it); the bar's buttons are in the row too. A new window does
+    not show the row while it waits for its caption bar.
+  - **The session bar's buttons** (the owner's choice after the first tablet run): in a desktop window
+    the session bar is not shown and takes no strip (`SessionBar.inTabStrip`). Five of its buttons are
+    on the strip: keyboard, input mode, key capture (only with a physical keyboard, as on the bar),
+    reset zoom and the bar's settings, pressed through the bar's own actions
+    (`SessionBar.pressOnTabStrip`), with the key capture and input mode icons kept as the bar has them.
+    The other three are left out there: the switcher (the tabs are it), full screen (the caption
+    bar's maximise and full-display buttons; the bar's per-window full screen of 6.1 did not do what
+    the owner expected in a desktop window, and the full-display state is the whole screen), and
+    disconnect (a tab's close control). The remote desktop gets the bar's 85 px back. The bar's
+    settings sheet says that its place and opacity apply outside desktop windows. Outside desktop
+    windowing the bar is as before, with all eight buttons.
+  - **Full screen** (the window's own, 6.1): no longer offered in a desktop window. A window that was in
+    it already (from its saved state) keeps the bar until Back leaves it; the row of the full-display
+    state is hidden then.
+  - **A tab:** the connection's name (ellipsised), a progress ring while connecting or ending, the
+    error icon while it waits for an answer (certificate, login), a close control (asks, then
+    disconnects), a tooltip with the state for the mouse. A tap or click shows it (`switchTo`, no
+    reconnect); a long press or right click opens a menu: "Open in new window" (the eject; not for a
+    window's only tab) and "Disconnect" (asks). A session that ended with an error is not kept as a
+    tab: the window shows the next tab and says so as upstream did (a toast), and a session that
+    ended in no window is told as in 2.3.
+  - **"+"** opens the connection list with its search field, as the switcher's "New connection".
+  - The controls never take keyboard focus: a physical keyboard keeps typing into the session.
+- **One window by default.** "Open new connections" defaults to "In the session window (a new tab in a
+  desktop window)" (`this_window`); the three stored values and what they do are unchanged. The
+  entries were reordered (the default first) and `this_window` reworded. Since the app's settings
+  screen stores each setting's default the first time the app runs, a stored `desktop` cannot be told
+  from a choice: at app start, once (`captantan_new_connection_default_moved`), a stored `desktop`
+  becomes `this_window`. **A user who had chosen `desktop` on purpose gets the new default once and
+  has to choose it again; `this_window` and `new_window` are kept.** With `new_window` or `desktop`
+  everything is as in release `.9`: a new connection in desktop windowing opens a window of its own,
+  and a tap on a running session in the list moves it into a new window. With `this_window` a tap on
+  a session that is a tab of a window brings that window to the front and shows the tab.
+- **The eject.** "Open in new window" (`SessionLauncher.openInNewWindow`) opens a window of its own for
+  the session, at its bookmark's remembered bounds (6.1). The window it left shows its next tab (to the
+  right, else to the left), as a browser does, and closes only if it has none. The same holds when the
+  shown session of a desktop window ends (disconnect, failure, the server): the window shows its next
+  tab instead of closing. Outside desktop windowing both close the window as before.
+- **Which bounds a window keeps** (6.1 stored a window's bounds for every bookmark it showed, which with
+  tabs would move the main window to whichever tab it showed last):
+  - A *window of its own* (opened with `FLAG_ACTIVITY_MULTIPLE_TASK`: an eject, "Open in new window",
+    or the settings `new_window` and `desktop`) stores its bounds for the bookmark it shows, at stop and
+    at a release, as in 6.1 (not for a session it loses to another window).
+  - The *session window* (the one a plain launch makes or reaches, with the tabs) stores its bounds
+    for the app, at stop: `captantan_tab_window_bounds` in the app's preferences, same format as
+    `window_bounds`. A plain launch that makes the session window (none is open) in desktop windowing
+    opens it there. An open session window is reached as it is (no launch bounds: they would move it).
+  - So the main window comes back where it was whatever tab it showed, and an ejected window comes
+    back where that connection's own window was.
+  - The role is fixed when the window is made and kept in its saved state.
+- **Back** in a desktop window with several tabs adds to the question that "Leave running" closes the
+  window and the other sessions in its tabs keep running. "Disconnect" ends the shown session, and the
+  window shows its next tab.
+- **The connect that waits for the caption bar** (6.1 review): a second connect in the same window
+  within the 300 ms wait no longer replaces the first: the waiting one goes first, at the size of now
+  (`connect size ...; a desktop window, another connect started in it after N ms of waiting`).
+- **The system's "New window"** (`PROPERTY_SUPPORTS_MULTI_INSTANCE_SYSTEM_UI`): still not declared. With
+  tabs a second empty session window would have nothing to show either (a session window without a
+  session closes), "+" and the list make new tabs, and the eject makes a second window with a session in
+  it. A window with only a tab strip and no session was not built.
+- **Stored state** (new, app-wide, in the app's default preferences; permanent once released):
+
+  | Key | Format | Notes |
+  |---|---|---|
+  | `captantan_tab_window_bounds` | as `window_bounds` (6.1) | the session window's bounds, stored at stop in desktop windowing |
+  | `captantan_new_connection_default_moved` | boolean | true once a stored `desktop` was moved to the new default |
+
+  `captantan_new_connection_window` keeps its key and values; its default is now `this_window`.
+- **Log** (INFO):
+  - `captantan.bar`: `tab strip w<n>: a desktop window, transparent caption bar asked for`; `tab strip
+    w<n>: in the caption bar, 70 px high at y 0, from x 144 to 1631, the system's elements [...]; 3
+    tab(s) of 200 dp, 380 dp left for dragging (<why>)`, or `a row of its own ... (no caption bar: the
+    window covers the display)`, or `none (<why>)`; `tab strip w<n>: taken from the system's gestures x
+    A to B`; `tab strip w<n>: caption bar icons dark|light`; `tabs w<n>: 3: s1 "..." (shown), s2 "..."
+    connecting, ... (<why>)` at each change; `tab: w<n> switch to s<n> (touch|mouse|pen)`, `tab: ...
+    close ...` (the tool read from the event's source, `touchpad` for a touchpad's finger, with the raw
+    `(tool N, source 0x...)`: the first build logged mouse clicks as touch), `tab: ... menu of ...
+    (long press|right click)`, `tab: ... open ... in a new window`,
+    `tab: ... "+"`; `bar w<n>: not shown, its buttons are on the tab strip (<why>)`; `button: w<n> s<n>:
+    keyboard (tab strip, mouse ...)`.
+  - `captantan.session`: `window open: w<n>, the session window | a window of its own`; `tabs: s<n> is a
+    tab of w<n> (was w<m> | was in no window's tabs; shown)`; `tabs: w<n> closed, N tab(s) go to w<m> |
+    belong to no window`; `tabs: w<n> takes N session(s) no window had`; `tabs: w<n> shows its tab s<n>
+    (s<m>: <why>; not closing)`; `open new connections: desktop -> this_window ...` or `kept ...`; `window
+    bounds stored: w<n> (the session window, for the app) ...`, `window bounds used for the session
+    window: ...`. `window bounds used for` / `ignored for` now name `bookmark <id>` or `the session
+    window`.
+  - `captantan.resize`: `viewport w<n>: ... (tab strip row N px)`.
+- **Upstream files edited** (each marked `captantan fork`):
+  - `res/xml/settings_app_ui.xml`: the `ListPreference` of "Open new connections" (2.2) has
+    `android:defaultValue="this_window"` (was `desktop`). **Merging:** keep the default and the entries'
+    array names; the values array is ours.
+  Nothing else upstream changed: the strip is added to the activity's content view by
+  `SessionWindow`, and its row reaches upstream's insets code through the existing
+  `getReservedInsets` edit (4.1).
+- Ours, changed: `SessionWindow` (tabs, the strip, the next tab on eject and end, the window's role and
+  bounds, the Back note), `SessionResizeController` (`setTabStripTop`, `getBarReservedInsets`, the
+  connect that waits), `SessionBar` (keeps clear of the row; compares its own strip; not shown in a
+  desktop window, its actions shared with the strip, the sheet's note), `SessionLauncher`
+  (the default and its move, a launch to the tab's window, the session window's bounds),
+  `SessionRegistry` (calls the move at start), `WindowBounds` (the session window's bounds),
+  `captantan_strings.xml`, three Material icons (`captantan_ic_close`, `_add`, `_attention`;
+  Apache-2.0), the compile check.
+- **Tried and dropped:** the probe build's four test zones (`CaptionProbe`, step 1), replaced by the
+  strip; a row under the caption bar on every desktop window (not needed: the caption bar takes the
+  tabs at no cost to the remote desktop); a visible eject icon on the shown tab (the owner chose the
+  menu only); the shown tab in the bar's colour, joined to the docked bar below it (too close to the
+  strip's grey; and the bar left the desktop window); a stroke along the strip with the shown tab
+  curving into it (commit 5d7e004d7; see "Why a pill"); scrolling tabs in a narrow window (replaced
+  by compact); listing every session no other window shows in each strip, or every session with the
+  others marked (the owner chose a window's own tabs).
+- **Device runs** (2026-11-27, four test builds after the probe; the table is in the pull request).
+  Tablet (API 37, 280 dpi, desktop windowing, the owner's touchpad and touch), GNOME and Windows
+  hosts; tags `captantan.*` without `captantan.keys`:
+  - **First build:** the stored `desktop` moved to `this_window` at the first start. Three connections
+    from the list became three tabs of one window. Tab switches by touch: no reconnect, and every
+    resize request after a switch was at the same size and skipped (`CURRENT_SIZE`): no stray resize.
+    Close asked first; "+" opened the list and the new connection became a tab. The eject (right
+    click, twice) opened the session at its bookmark's bounds and the old window kept its shown tab;
+    closing the ejected window with "Leave running" (Back's question and the bar's disconnect
+    question) brought the session back as a tab, both times. Maximise, restore and an edge resize:
+    one request each. The full-display state: the tabs became the 70 px row and the viewport
+    2960x1693 (the bar's 85 px and the row), back in the caption bar on restore. Two windows side by
+    side after an eject: each resized its own session and listed its own tabs. The owner: the height
+    is right; the shown tab was hard to tell; the bar's full-screen button did nothing in a desktop
+    window (no press reached the log); and asked for the bar's buttons in the caption bar.
+  - **Second build** (the bar's buttons in the caption bar): the presses came with source `0x2002` and
+    tool type finger (the touchpad), so the first build's log had called them touch; now `touchpad`.
+    Key capture from the strip. A half-screen window with three tabs scrolled them at 112 dp. The
+    tablet outside desktop windowing: one session window, no strip, the bar with its eight buttons,
+    its disconnect. The session window opened at its stored bounds (`window bounds used for the
+    session window`). The owner: liked it; asked for tighter gaps, a fallback to the switcher in
+    narrow windows, and a shown tab that looks attached.
+  - **Third build:** a narrow window (three tabs) went compact with 72 dp left to drag, and the
+    switcher's button opened the sheet twice. The stroke with the curved tab looked off.
+  - **Fourth build:** the pill, kept (see "Why a pill").
+  - **"Open new connections" set to "In a new window"** in desktop windowing: a new connection opened
+    a window of its own, as in `.9` (the owner's word; no log was taken).
+  - **Phone** (API 37, fourth build): with nothing stored the new default was kept (`open new
+    connections: kept the default`); one session window, no strip ("not a desktop window"), the docked
+    bar and its switcher, two connections each at 1080x2029, below the bar, as in 6.1 and `.9`.
+  - **Not run:** an external display (none at hand; package 6.2), DeX.
 
 ## Package and version scheme
 
