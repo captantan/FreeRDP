@@ -33,6 +33,9 @@ class ExternalDisplayManager
 
 	void launchSessionWithDisplayPicker(String refStr)
 	{
+		// captantan fork: an open session's window comes to the front, with no display question
+		if (com.freerdp.freerdpcore.captantan.SessionLauncher.bringToFrontIfShown(activity, refStr))
+			return;
 		Display[] secondary = getSecondaryDisplays();
 		if (secondary.length == 0)
 		{

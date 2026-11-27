@@ -95,6 +95,14 @@
                     android:host="*"
                     android:scheme="freerdp" />
             </intent-filter>
+            <!-- captantan fork: a desktop window's first size and its smallest one (roadmap 6.1,
+                 captantan/WindowBounds; a connection's window then opens where it was last) -->
+            <layout
+                android:defaultWidth="60%"
+                android:defaultHeight="75%"
+                android:gravity="center"
+                android:minWidth="@dimen/captantan_window_min_width"
+                android:minHeight="@dimen/captantan_window_min_height" />
         </activity>
         <activity
             android:exported="true"

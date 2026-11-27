@@ -16,6 +16,7 @@ import android.os.SystemClock;
 import android.util.Log;
 import android.view.Display;
 import android.view.View;
+import android.view.WindowInsets;
 import android.widget.Toast;
 
 import com.freerdp.freerdpcore.R;
@@ -88,6 +89,12 @@ public final class SessionResizeController implements DisplayControl.Listener
 	/** How long the viewport has to stay the same before the session is asked for it. */
 	public static final long SETTLE_MS = 400;
 
+	/**
+	 * The longest a new connection in a desktop window waits for the window's caption bar inset
+	 * (package 6.1). It arrived 11 to 37 ms after the first layout on the tablet (3.3).
+	 */
+	public static final long CAPTION_WAIT_MS = 300;
+
 	/** A server that has not opened Display Control this long after connecting has none. */
 	private static final long NO_CHANNEL_AFTER_MS = 8000;
 
@@ -141,6 +148,18 @@ public final class SessionResizeController implements DisplayControl.Listener
 
 	private final Runnable channelCheck = this::checkChannel;
 
+	/** A connect waiting for the caption bar (package 6.1), the session, and since when. */
+	private Runnable pendingConnect;
+	private SessionHost pendingSession;
+	private long pendingSince;
+	/** The size and density the first size of the connect was taken at (prepareConnect). */
+	private int firstWidth;
+	private int firstHeight;
+	private int firstDpi;
+
+	private final Runnable captionTimeout = () -> finishConnect(
+	    "a desktop window, but no caption bar after " + CAPTION_WAIT_MS + " ms (full screen?)");
+
 	private void checkChannel()
 	{
 		final SessionHost h = host;
@@ -181,6 +200,16 @@ public final class SessionResizeController implements DisplayControl.Listener
 			return;
 		systemInsets = now;
 		viewportMaybeChanged("insets " + left + "/" + top + "/" + right + "/" + bottom);
+		// A connect waiting for the caption bar goes on once it is here (posted: this runs in
+		// the insets pass, and the viewport then has its final size).
+		if (pendingConnect != null)
+			handler.post(() -> {
+				final int caption = captionTop();
+				if (pendingConnect != null && caption > 0)
+					finishConnect("a desktop window, caption bar " + caption + " px arrived " +
+					              (SystemClock.uptimeMillis() - pendingSince) +
+					              " ms after the first size");
+			});
 	}
 
 	/**
@@ -324,9 +353,96 @@ public final class SessionResizeController implements DisplayControl.Listener
 		}
 		settings.setWidth(validWidth(w));
 		settings.setHeight(validHeight(h));
+		firstWidth = settings.getWidth();
+		firstHeight = settings.getHeight();
+		firstDpi = activity.getResources().getConfiguration().densityDpi;
 		Log.i(TAG, "connect from " + windowName + " at " + settings.getWidth() + "x" +
 		               settings.getHeight() + " (viewport " + w + "x" + h + ", display " +
 		               displayId() + ", " + lastConfig.densityDpi + " dpi)");
+	}
+
+	/**
+	 * Hook in {@link SessionWindow#start}, in place of connecting at once (package 6.1): the size
+	 * of {@link #prepareConnect}, taken at the window's first layout, is taken again right before
+	 * the connect, so that it is the size the session view really gets.
+	 * <ul>
+	 * <li>In a desktop window whose caption bar inset has not arrived yet (it comes 11 to 37 ms
+	 * after the first layout on the tablet), the connect waits for it, at most
+	 * {@link #CAPTION_WAIT_MS}: it then goes on without it, so a connect never hangs.</li>
+	 * <li>Otherwise it goes on at once, with the size of now: the same as before, or the size
+	 * after a permission question that came in between and a window that changed meanwhile.</li>
+	 * </ul>
+	 * Sessions that do not follow the window (a fixed resolution, a link) connect at once,
+	 * unchanged. A window closed during the wait connects at once ({@link #onDestroy}).
+	 */
+	void connectWhenSized(SessionHost session, Runnable connect)
+	{
+		pendingConnect = connect;
+		pendingSession = session;
+		pendingSince = SystemClock.uptimeMillis();
+		if (!follows(session))
+		{
+			finishConnect(null);
+			return;
+		}
+		if (!SessionLauncher.isDesktopWindowing(activity))
+		{
+			finishConnect("not a desktop window");
+			return;
+		}
+		final int caption = captionTop();
+		if (caption > 0 || Build.VERSION.SDK_INT < Build.VERSION_CODES.R)
+		{
+			finishConnect("a desktop window, caption bar " + caption + " px already in the insets");
+			return;
+		}
+		Log.i(TAG, "connect " + session + " waits for the caption bar of desktop window " +
+		               windowName + " (viewport now " + getViewportWidth() + "x" +
+		               getViewportHeight() + ", at most " + CAPTION_WAIT_MS + " ms)");
+		handler.postDelayed(captionTimeout, CAPTION_WAIT_MS);
+	}
+
+	/** Takes the connect size again (unless {@code why} is null: not following) and connects. */
+	private void finishConnect(String why)
+	{
+		final Runnable connect = pendingConnect;
+		final SessionHost session = pendingSession;
+		pendingConnect = null;
+		pendingSession = null;
+		handler.removeCallbacks(captionTimeout);
+		if (connect == null)
+			return;
+		final BookmarkBase bookmark = (session != null) ? session.getBookmark() : null;
+		if (why != null && bookmark != null)
+		{
+			final BookmarkBase.ScreenSettings settings = bookmark.getActiveScreenSettings();
+			final int w = getViewportWidth();
+			final int h = getViewportHeight();
+			if (w > 0 && h > 0)
+			{
+				settings.setWidth(validWidth(w));
+				settings.setHeight(validHeight(h));
+			}
+			final int dpi = activity.getResources().getConfiguration().densityDpi;
+			if (firstDpi != 0 && dpi != firstDpi)
+				RemoteScale.prepareConnect(activity, bookmark, dpi);
+			final boolean same =
+			    settings.getWidth() == firstWidth && settings.getHeight() == firstHeight;
+			Log.i(TAG, "connect size " + session + ": " + settings.getWidth() + "x" +
+			               settings.getHeight() + " from " + windowName + " (viewport " + w + "x" +
+			               h + "; " + (same ? "as first taken" : "first taken at " + firstWidth +
+			               "x" + firstHeight) + "; " + why + ")");
+		}
+		connect.run();
+	}
+
+	/** The caption bar inset at the top of the window now, in pixels (0 below API 30). */
+	private int captionTop()
+	{
+		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || root == null)
+			return 0;
+		final WindowInsets in = root.getRootWindowInsets();
+		return (in != null) ? in.getInsets(WindowInsets.Type.captionBar()).top : 0;
 	}
 
 	static int validWidth(int w)
@@ -414,6 +530,9 @@ public final class SessionResizeController implements DisplayControl.Listener
 
 	void onDestroy()
 	{
+		// A connect still waiting for the caption bar goes on: the session lives without a window.
+		if (pendingConnect != null)
+			finishConnect("its window closed while it waited for the caption bar");
 		handler.removeCallbacks(settle);
 		handler.removeCallbacks(channelCheck);
 		settlePending = false;

@@ -215,7 +215,24 @@ public final class SessionLauncher
 		               (newWindow ? "a new window" : "the session window") + " (setting " +
 		               getPlacement(from).stored + ", desktop windowing " +
 		               describeWindowing(from) + ")");
+		// A new desktop window opens where the connection's last one was (package 6.1).
+		if (newWindow && isDesktopWindowing(from))
+			options = WindowBounds.forLaunch(from, intent, options);
 		from.startActivity(intent, options);
+	}
+
+	/**
+	 * A tap on a connection in the list whose live session a window shows (package 6.1): that
+	 * window comes to the front, before anything else would be asked (upstream's display picker,
+	 * shown when an external display is connected). False if no window shows a session of the
+	 * connection; then the launch goes on as before.
+	 */
+	public static boolean bringToFrontIfShown(Activity from, String connectionReference)
+	{
+		final SessionHost live = SessionRegistry.find(connectionReference);
+		final SessionWindow shownIn = (live != null) ? live.getWindow() : null;
+		return shownIn != null && bringToFront(shownIn, from.getLocalClassName() + " (" + live +
+		                                                    " is open there)");
 	}
 
 	/**
@@ -247,7 +264,10 @@ public final class SessionLauncher
 		               (host.getWindow() != null ? "in " + host.getWindow().getName()
 		                                         : "in no window") +
 		               ")");
-		from.startActivity(intent);
+		// A new desktop window opens where the connection's last one was (package 6.1).
+		final Bundle options =
+		    isDesktopWindowing(from) ? WindowBounds.forLaunch(from, host, null) : null;
+		from.startActivity(intent, options);
 	}
 
 	/**

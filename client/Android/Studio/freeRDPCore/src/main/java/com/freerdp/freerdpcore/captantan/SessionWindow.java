@@ -6,6 +6,7 @@
 
 package com.freerdp.freerdpcore.captantan;
 
+import android.app.ActivityManager;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
@@ -165,6 +166,10 @@ public final class SessionWindow
 	private boolean destroyed = false;
 	private AlertDialog backDialog;
 	private SessionState blank;
+	/** The task's label as last set (package 6.1); null is the app's name. */
+	private String title;
+	private boolean titlePending = false;
+	private final Runnable applyTitle = this::applyTitle;
 
 	/**
 	 * Call in the activity's onCreate, when its views, toolbar and input manager exist.
@@ -387,7 +392,9 @@ public final class SessionWindow
 
 		final SessionHost created = SessionRegistry.start(state, titleOf(state, progressTitle), key);
 		show(created);
-		created.connect();
+		// At the size the session view really gets: a desktop window's caption bar inset arrives
+		// after its first layout (package 6.1), and a permission question may have come between.
+		resizer.connectWhenSized(created, created::connect);
 	}
 
 	private static String titleOf(SessionState state, String fallback)
@@ -451,6 +458,8 @@ public final class SessionWindow
 		ports.setSession(target.getState());
 		// The window's intent names what it shows (see the class comment).
 		activity.setIntent(SessionLauncher.intentFor(activity, target));
+		// And its task is labelled with it (package 6.1).
+		titleChanged();
 
 		// Before attach(): attaching shows the session's open questions (certificate, login) in
 		// this window at once, and a dialog shown later lies on top of one shown earlier. The
@@ -505,12 +514,53 @@ public final class SessionWindow
 		final SessionHost was = host;
 		if (was == null)
 			return;
+		// Its connection's next window opens where this one is now (package 6.1).
+		if (!destroyed)
+			WindowBounds.remember(activity, was, name, reason);
 		unbind(true);
 		host = null;
 		bar.onReleased();
 		touchModes.onReleased();
 		ports.setSession(null);
 		was.detach(this, reason);
+		titleChanged();
+	}
+
+	// ****************************************************************************
+	// The window's title (package 6.1)
+
+	/**
+	 * The task's label follows the session the window shows, so the caption bar, the taskbar and
+	 * Recents tell the windows apart; with no session it is the app's name again. Posted, so that
+	 * a switch (a release and a show in one go) sets it once.
+	 */
+	private void titleChanged()
+	{
+		if (destroyed || titlePending)
+			return;
+		titlePending = true;
+		sessionView.post(applyTitle);
+	}
+
+	private void applyTitle()
+	{
+		titlePending = false;
+		if (destroyed || activity.isFinishing())
+			return;
+		final String label =
+		    (host != null && !host.getTitle().isEmpty()) ? host.getTitle() : null;
+		if (java.util.Objects.equals(label, title))
+			return;
+		title = label;
+		final ActivityManager.TaskDescription description =
+		    (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+		        ? new ActivityManager.TaskDescription.Builder().setLabel(label).build()
+		        : new ActivityManager.TaskDescription(label);
+		activity.setTaskDescription(description);
+		Log.i(TAG, "window title: " + name + " " +
+		               (label != null ? "\"" + label + "\" (" + host + ")"
+		                              : "the app's name (no session)") +
+		               ", task " + activity.getTaskId());
 	}
 
 	/**
@@ -676,6 +726,7 @@ public final class SessionWindow
 		bar.onReleased();
 		ports.setSession(null);
 		from.detach(this, "session ended");
+		titleChanged();
 	}
 
 	// ****************************************************************************
@@ -699,6 +750,8 @@ public final class SessionWindow
 	public void onStop()
 	{
 		started = false;
+		// Closed, minimised or hidden: its connection's next window opens here (package 6.1).
+		WindowBounds.remember(activity, host, name, "window stopped");
 		resizer.onStop();
 		keyCapture.onStop();
 		if (host != null)
