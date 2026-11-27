@@ -800,11 +800,13 @@ public final class SessionBar
 		    .show();
 	}
 
-	/** Upstream's two settings, Hide Status Bar and Hide Navigation Bar (app-wide), both at once. */
+	/**
+	 * Full screen in this window: upstream's two settings, Hide Status Bar and Hide Navigation Bar
+	 * (app-wide), both at once; in a desktop window the window's own (package 6.1, FullScreen).
+	 */
 	private boolean isFullScreen()
 	{
-		return ApplicationSettingsActivity.getHideStatusBar(activity) &&
-		    ApplicationSettingsActivity.getHideNavigationBar(activity);
+		return FullScreen.isOn(activity, window);
 	}
 
 	private void toggleFullScreen()
@@ -814,13 +816,25 @@ public final class SessionBar
 
 	private void setFullScreen(boolean full, String cause)
 	{
-		final SharedPreferences prefs = ApplicationSettingsActivity.get(activity);
-		prefs.edit()
-		    .putBoolean(activity.getString(R.string.preference_key_ui_hide_status_bar), full)
-		    .putBoolean(activity.getString(R.string.preference_key_ui_hide_navigation_bar), full)
-		    .apply();
-		Log.i(TAG, "full screen " + (full ? "on" : "off") + " in " + window.getName() + " (" +
-		               cause + "; Hide Status Bar and Hide Navigation Bar, app-wide)");
+		if (FullScreen.isPerWindow(activity, window))
+		{
+			// a desktop window's own full screen (package 6.1); the app-wide settings stay
+			window.setOwnFullScreen(full);
+			Log.i(TAG, "full screen " + (full ? "on" : "off") + " in " + window.getName() + " (" +
+			               cause + "; this desktop window only, the others and the app-wide " +
+			               "settings unchanged)");
+		}
+		else
+		{
+			final SharedPreferences prefs = ApplicationSettingsActivity.get(activity);
+			prefs.edit()
+			    .putBoolean(activity.getString(R.string.preference_key_ui_hide_status_bar), full)
+			    .putBoolean(activity.getString(R.string.preference_key_ui_hide_navigation_bar),
+			                full)
+			    .apply();
+			Log.i(TAG, "full screen " + (full ? "on" : "off") + " in " + window.getName() + " (" +
+			               cause + "; Hide Status Bar and Hide Navigation Bar, app-wide)");
+		}
 		activity.hideSystemBars(); // upstream's, made public for this (captantan fork)
 		wasFullScreen = full;
 		revealed = false;

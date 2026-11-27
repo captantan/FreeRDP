@@ -378,6 +378,23 @@ jobs:
             grep -qaF -- "$k" "$RUNNER_TEMP/classes.dex.all" || fail "the APK lacks the string '$k' of system-key capture"
           done
           echo "system-key capture: controller, permission, window call, bar button, icons, switch, per-connection key and log strings present"
+          # Window behaviour (roadmap 6.1): the remembered bounds and the state key they are stored
+          # under (permanent once released), the session window's <layout> (default and minimum
+          # size of a desktop window) in the merged manifest, the minimum size resources, the task
+          # label call, the connect that waits for a desktop window's caption bar, a desktop
+          # window's own full screen (captantan/FullScreen), and the log
+          # strings that make each part checkable on a device.
+          for c in WindowBounds FullScreen; do
+            grep -qaF "Lcom/freerdp/freerdpcore/captantan/$c;" "$RUNNER_TEMP/classes.dex.all" || fail "the APK lacks the class captantan/$c"
+          done
+          awk '/E: activity/{a=0} /SessionActivity"/{a=1} a&&/E: layout/{l=1} l&&/minWidth/{w=1} l&&/minHeight/{h=1} l&&/defaultWidth/{d=1} END{exit !(w&&h&&d)}' "$RUNNER_TEMP/manifest-rel.txt" || fail "the merged manifest has no <layout> with minWidth, minHeight and defaultWidth for SessionActivity"
+          for r in dimen/captantan_window_min_width dimen/captantan_window_min_height; do
+            grep -qF "$r" "$RUNNER_TEMP/resources.txt" || fail "the APK lacks the resource $r"
+          done
+          for k in window_bounds setLaunchBounds setTaskDescription android:activity.launchDisplayId 'window title: ' 'window bounds stored: ' 'window bounds used for bookmark ' 'window bounds ignored for bookmark ' 'waits for the caption bar' 'connect size ' bringToFrontIfShown 'this desktop window only'; do
+            grep -qaF -- "$k" "$RUNNER_TEMP/classes.dex.all" || fail "the APK lacks the string '$k' of window behaviour (6.1)"
+          done
+          echo "window behaviour: bounds class and key, manifest layout, minimum size, title, caption wait and log strings present"
 
           echo "== preview badging"
           "$AAPT" dump badging "$PRE" > "$RUNNER_TEMP/preview-badging.txt"

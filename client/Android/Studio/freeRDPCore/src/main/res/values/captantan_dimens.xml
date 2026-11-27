@@ -5,4 +5,10 @@
 <resources>
     <dimen name="captantan_switcher_thumbnail_width">112dp</dimen>
     <dimen name="captantan_switcher_thumbnail_height">72dp</dimen>
+    <!-- The smallest desktop window of a session (roadmap 6.1; the manifest's <layout> of
+         SessionActivity). Width: the session bar's eight buttons at their 32 dp floor, its two
+         4 dp gaps and 2 dp padding (268 dp), plus a margin. Height: the caption bar, the docked
+         bar and some of the remote desktop. Remembered window bounds below it are ignored. -->
+    <dimen name="captantan_window_min_width">280dp</dimen>
+    <dimen name="captantan_window_min_height">240dp</dimen>
 </resources>

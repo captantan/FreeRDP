@@ -53,6 +53,7 @@ import android.widget.Toast;
 import com.freerdp.freerdpcore.R;
 import com.freerdp.freerdpcore.application.GlobalApp;
 import com.freerdp.freerdpcore.application.SessionState;
+import com.freerdp.freerdpcore.captantan.FullScreen;    // captantan fork
 import com.freerdp.freerdpcore.captantan.SessionWindow; // captantan fork
 import com.freerdp.freerdpcore.domain.BookmarkBase;
 import com.freerdp.freerdpcore.domain.ConnectionReference;
@@ -147,8 +148,9 @@ public class SessionActivity extends AppCompatActivity
 
 	public void hideSystemBars() // captantan fork: public, for the session bar's full screen button
 	{
-		boolean hideStatusBar = ApplicationSettingsActivity.getHideStatusBar(this);
-		boolean hideNavBar = ApplicationSettingsActivity.getHideNavigationBar(this);
+		// captantan fork: per window in a desktop window, else upstream's settings (roadmap 6.1)
+		boolean hideStatusBar = FullScreen.hideStatusBar(this, window);
+		boolean hideNavBar = FullScreen.hideNavigationBar(this, window);
 
 		if (inputManager != null && inputManager.isSoftInputActive())
 		{
@@ -411,8 +413,9 @@ public class SessionActivity extends AppCompatActivity
 	private WindowInsetsCompat onWindowInsetsChanged(View rootView, WindowInsetsCompat windowInsets)
 	{
 		boolean fitSafeArea = ApplicationSettingsActivity.getFitRoundedCorners(this);
-		boolean hideStatusBar = ApplicationSettingsActivity.getHideStatusBar(this);
-		boolean hideNavBar = ApplicationSettingsActivity.getHideNavigationBar(this);
+		// captantan fork: per window in a desktop window, else upstream's settings (roadmap 6.1)
+		boolean hideStatusBar = FullScreen.hideStatusBar(this, window);
+		boolean hideNavBar = FullScreen.hideNavigationBar(this, window);
 
 		int insetsTop = windowInsets
 		                    .getInsets(WindowInsetsCompat.Type.statusBars() |

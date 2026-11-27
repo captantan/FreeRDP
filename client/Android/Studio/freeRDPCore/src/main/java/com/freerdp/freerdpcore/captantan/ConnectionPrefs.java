@@ -19,6 +19,10 @@
 // whose key is the field's key is then edited by the "RDP options" screen with no other change
 // (a BoolField by a SwitchPreferenceCompat).
 // Stored values that are missing, of the wrong type or unknown read as the field's default.
+//
+// State, not settings (roadmap 6.1): STATE_KEYS are kept in the same file under the bookmark's
+// prefix but are not fields. The options screen never shows them, saveAs() keeps them, and
+// forget() removes them with the rest. Read and write them with getState / putState.
 
 package com.freerdp.freerdpcore.captantan;
 
@@ -259,6 +263,14 @@ public final class ConnectionPrefs
 		                                       TOUCH_MODE,    POINTER_SPEED, TOUCH_SCROLL,
 		                                       TOUCH_DRAG,    PEN_MODE,     KEY_CAPTURE };
 
+	/**
+	 * Per-bookmark state of roadmap 6.1: the window's last bounds in desktop windowing, in the
+	 * format of {@link WindowBounds} ("1;l,t,r,b;WxH;dpi"). Permanent once released.
+	 */
+	public static final String STATE_WINDOW_BOUNDS = "window_bounds";
+
+	private static final String[] STATE_KEYS = { STATE_WINDOW_BOUNDS };
+
 	// ---------------------------------------------------------------------------------------------
 
 	private final Map<String, Object> values = new HashMap<>();
@@ -299,7 +311,7 @@ public final class ConnectionPrefs
 			return;
 		SharedPreferences prefs = open(context);
 		SharedPreferences.Editor editor = prefs.edit();
-		removeAll(prefs, editor, bookmarkId);
+		removeAll(prefs, editor, bookmarkId, true);
 		String prefix = prefix(bookmarkId);
 		for (Field<?> f : FIELDS)
 			writeIfSet(editor, prefix, f);
@@ -311,7 +323,35 @@ public final class ConnectionPrefs
 	{
 		SharedPreferences prefs = open(context);
 		SharedPreferences.Editor editor = prefs.edit();
-		removeAll(prefs, editor, bookmarkId);
+		removeAll(prefs, editor, bookmarkId, false);
+		editor.apply();
+	}
+
+	/** A state value of a saved bookmark (one of the STATE_ keys), or null. */
+	public static String getState(Context context, long bookmarkId, String key)
+	{
+		if (bookmarkId <= 0)
+			return null;
+		try
+		{
+			return open(context).getString(prefix(bookmarkId) + key, null);
+		}
+		catch (ClassCastException e)
+		{
+			return null;
+		}
+	}
+
+	/** Stores (or with null removes) a state value of a saved bookmark. */
+	public static void putState(Context context, long bookmarkId, String key, String value)
+	{
+		if (bookmarkId <= 0)
+			return;
+		SharedPreferences.Editor editor = open(context).edit();
+		if (value != null)
+			editor.putString(prefix(bookmarkId) + key, value);
+		else
+			editor.remove(prefix(bookmarkId) + key);
 		editor.apply();
 	}
 
@@ -421,11 +461,19 @@ public final class ConnectionPrefs
 	}
 
 	private static void removeAll(SharedPreferences prefs, SharedPreferences.Editor editor,
-	                              long bookmarkId)
+	                              long bookmarkId, boolean keepState)
 	{
 		String prefix = prefix(bookmarkId);
 		for (String key : prefs.getAll().keySet())
-			if (key.startsWith(prefix))
+			if (key.startsWith(prefix) && !(keepState && isState(key.substring(prefix.length()))))
 				editor.remove(key);
+	}
+
+	private static boolean isState(String key)
+	{
+		for (String k : STATE_KEYS)
+			if (k.equals(key))
+				return true;
+		return false;
 	}
 }
