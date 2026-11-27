@@ -412,7 +412,8 @@ is shown in at most one window.
   session that no window shows; one that a window shows is reached by bringing that window to the front)
   and "Disconnect" (asks first). At the bottom: "Connection list" and "New connection" (the list with its
   search field open, where a host name is typed for a quick connect). `SessionSwitcher.open(SessionWindow)`
-  is the one public way to open it for a window (package 5.3: with `SessionRegistry.getFocusedWindow()`);
+  is the one public way to open it for a window (a key combination would use it with
+  `SessionRegistry.getFocusedWindow()`; package 5.3, key combinations, was dropped by the owner on 2026-11-26);
   `openFromList(Activity)` opens it over the list.
   - **Why a bottom sheet** on both devices: on a folded phone it is at the thumb and leaves the session
     visible above it; on a wide window Material caps a bottom sheet at 640 dp and centres it. A side sheet
@@ -513,7 +514,7 @@ is shown in at most one window.
   the cause, Android closing a background app's TCP connections, and keeps the app out of the
   background while a session is live.)
 - Not in this package: the notification (2.3), the fork's session bar (4.1), resizing a session to the
-  window it attaches to (milestone 3), key combinations (5.3), window titles and bounds (6.1), restyling the
+  window it attaches to (milestone 3), key combinations (5.3, since dropped by the owner on 2026-11-26), window titles and bounds (6.1), restyling the
   list rows beyond the marking (7.2b).
 **Sessions in the background** (package 2.3)
 
@@ -1397,7 +1398,8 @@ hidden and overwritten at connect.
     again; only the newest is kept.
   - A connect that waited 29 s at a certificate prompt on the tablet and was resized meanwhile still came
     up at the final size. (The prompt came at every connect there only because the maintainer chose
-    "only this time" each time; after "Trust", a reconnect showed no prompt.)
+    "only this time" each time, on purpose, to test the prompt again: not a defect. After "Trust", a
+    reconnect showed no prompt.)
 - **For later packages.** Read the scale with `RemoteScale.desktopPercent(context, bookmark, densityDpi)`
   (0 for a link) and `RemoteScale.deviceFor(desktop)`; the setting with
   `ConnectionPrefs.load(context, id).getRemoteScale()`. To add a value: a new enum constant with a new,
@@ -1485,7 +1487,7 @@ tries; what was dropped is listed at the end of this block, so it is not tried a
   bars pulled in by a swipe stay until upstream's next `hideSystemBars` call.
 - **Seeing the bar in full screen without leaving it** (docked mode): the mouse pointer resting in an 8 dp
   band at the top for 250 ms (hover events still all reach the session), or a call:
-  `SessionBar.reveal(cause)` or `revealInFocusedWindow(cause)` (package 5.3). It then floats over the
+  `SessionBar.reveal(cause)` or `revealInFocusedWindow(cause)` (meant for package 5.3, dropped by the owner on 2026-11-26). It then floats over the
   picture and hides again after a button is used, after a press anywhere else (that whole gesture is
   kept from the session, so hiding the bar never clicks on the remote side), or 5 s after it was last
   touched or hovered.
@@ -1574,14 +1576,15 @@ tries; what was dropped is listed at the end of this block, so it is not tried a
     visibility change, measured. With `BEHAVIOR_DEFAULT` it is told, but the bar appearing with them was
     not wanted.
 
-**For later packages (4.2, 4.3, 5.3, 6.1).**
+**For later packages (4.2, 4.3, 5.3, 6.1).** (5.3, key combinations, was dropped by the owner on 2026-11-26; its items below are
+kept for a later key combination, should one be wanted.)
 
 - **Adding a button** (4.3's trackpad toggle, say): a `Button` with `style="?attr/materialIconButtonStyle"`,
   an icon and a content description inside `captantan_bar_buttons` in `captantan_session_bar.xml`, in the
   group it belongs to (copy a sibling's attributes), and one `bind(id, "name", hidesAfter, action)` line
   in `SessionBar.bindButtons`. The bar sizes and logs it with the others, and keeps the middle group
   centred.
-- **Showing the bar from code** (5.3's key combination): `SessionBar.revealInFocusedWindow("<keys>")`,
+- **Showing the bar from code** (5.3's key combination, dropped): `SessionBar.revealInFocusedWindow("<keys>")`,
   or `window.getBar().reveal(cause)` for a given `SessionWindow`. It shows a docked-mode bar in full
   screen for a moment, does nothing when the bar is shown anyway, and logs the cause. `hide(cause)`,
   `isShown()` and `leaveFullScreen(cause)` are public too.
@@ -1589,11 +1592,12 @@ tries; what was dropped is listed at the end of this block, so it is not tried a
   full screen, quick remote scale" below.
 - **Not in this package**, written down for later:
   - zooming out below the fit (7.x);
-  - a key combination (5.3);
+  - a key combination (5.3; dropped by the owner on 2026-11-26: the app's UI is reached with Back,
+    the bar's buttons and the mouse);
   - a full-screen setting, "true full screen" or "keep clear of the camera" (safe area). Asked for after
     the tablet's cutout hid GNOME's clock: the session draws under the cutout, and only the bar keeps
     clear of it;
-  - full screen in a desktop window (6.1). Android makes the window whole-screen without its caption. On
+  - full screen in a desktop window (done in 6.1: per window there, see "Window behaviour"). Android makes the window whole-screen without its caption. On
     leaving full screen the window stayed that way for about 7 s on the tablet before restoring, and the
     setting is app-wide;
   - session tabs in a desktop window's caption bar, as a browser has them (6.1, asked for in the device run).
@@ -2135,7 +2139,7 @@ Alt+Tab, Ctrl+Esc, Alt+F4, ...) go to the remote machine as real key down and ke
     went on at focus.
   - **Not run:** the key list on the phone, Alt+F4, the accessibility service turned on together with
     capture, a Windows host, and a device below API 36.1.
-- **For package 5.3** (a key combination):
+- **For a key combination** (package 5.3, dropped by the owner on 2026-11-26; kept should one be wanted later):
   - `KeyCaptureController.inFocusedWindow()` returns the focused window's controller, or null;
   - `isCapturing()` says whether capture is set on the window now;
   - `isWanted()` gives the setting in force for the session;
@@ -2145,7 +2149,7 @@ Alt+Tab, Ctrl+Esc, Alt+F4, ...) go to the remote machine as real key down and ke
 
   A combination meant for the app has to be one that capture does not swallow. Anything Android keeps
   (above) never reaches the app either. Keys that arrive go to `PhysicalKeyboard` and so to the remote,
-  unless 5.3 takes them first.
+  unless a key combination takes them first.
 
 ## Package and version scheme
 

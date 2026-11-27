@@ -685,7 +685,16 @@ public final class SessionResizeController implements DisplayControl.Listener
 		         ? "yes"
 		         : "no") +
 		    ", font scale " + c.fontScale + ", viewport " + getViewportWidth() + "x" +
-		    getViewportHeight();
+		    getViewportHeight() + windowBounds();
+	}
+
+	/** ", bounds WxH at x,y": the window in the display, in pixels (package 6.1; API 30+). */
+	private String windowBounds()
+	{
+		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R)
+			return "";
+		return ", bounds " +
+		    WindowBounds.describe(activity.getWindowManager().getCurrentWindowMetrics().getBounds());
 	}
 
 	private int displayId()
