@@ -205,6 +205,8 @@ public final class SessionWindow
 		if (shown != null)
 			activity.setIntent(shown);
 		Log.i(TAG, "window open: " + name + (shown != null ? " (recreated)" : ""));
+		// Test build of 6.1b, step 1: what the caption bar lets the app do.
+		CaptionProbe.install(activity, name);
 
 		// The switcher's button on upstream's floating toolbar (floating_toolbar.xml). The toolbar
 		// already makes it draggable like its other buttons; a tap opens the switcher. Since
