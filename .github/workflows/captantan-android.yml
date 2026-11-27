@@ -331,23 +331,26 @@ jobs:
           echo "trackpad mode: classes, view tag, icons, per-connection keys and stored names present"
           # Pen input: the input channel ([MS-RDPEI], "rdpei") is built into the client library and
           # asked for with /multitouch; the natives of captantan/PenInput are found by name at run
-          # time, so a missing or misnamed one compiles and then fails at the first pen event.
+          # time, so a missing or misnamed one compiles and then fails at the first pen event; and
+          # the per-connection key and stored names the "RDP options" screen edits by name
+          # (permanent once released).
           unzip -p "$REL" lib/arm64-v8a/libfreerdp-client3.so > "$RUNNER_TEMP/libfreerdp-client3.so"
           strings "$RUNNER_TEMP/libfreerdp-client3.so" > "$RUNNER_TEMP/freerdp-client3-strings.txt"
           for s in 'Microsoft::Windows::RDS::Input' 'Unknown [MS-RDPEI] protocolVersion'; do
             grep -qF "$s" "$RUNNER_TEMP/freerdp-client3-strings.txt" || fail "libfreerdp-client3.so lacks the string '$s' (the rdpei channel is not built in)"
           done
-          for c in PenInput PenProbe; do
+          for c in PenInput 'PenInput$Mode' PenProbe; do
             grep -qaF "Lcom/freerdp/freerdpcore/captantan/$c;" "$RUNNER_TEMP/classes.dex.all" || fail "the APK lacks the class captantan/$c"
           done
-          for n in nativeState nativeDescribe; do
+          for n in nativeState nativeDescribe nativePen; do
             grep -qaF "$n" "$RUNNER_TEMP/classes.dex.all" || fail "captantan/PenInput lacks the native method $n"
             grep -Eq " FUNC +GLOBAL +DEFAULT +[0-9]+ Java_com_freerdp_freerdpcore_captantan_PenInput_$n\$" "$RUNNER_TEMP/android-dynsyms.txt" || fail "libfreerdp-android.so does not export the native $n of captantan/PenInput"
           done
-          for k in /multitouch captantan.pen; do
+          for k in /multitouch captantan.pen pen_mode; do
             grep -qaF -- "$k" "$RUNNER_TEMP/classes.dex.all" || fail "the APK lacks the string '$k' of pen input"
           done
-          echo "pen input: rdpei channel built in, classes, natives and the /multitouch argument present"
+          grep -qF 'array/captantan_pen_mode_values' "$RUNNER_TEMP/resources.txt" || fail "the APK lacks the resource array/captantan_pen_mode_values"
+          echo "pen input: rdpei channel built in, classes, natives, the /multitouch argument, the per-connection key and its stored names present"
 
           echo "== preview badging"
           "$AAPT" dump badging "$PRE" > "$RUNNER_TEMP/preview-badging.txt"

@@ -452,6 +452,8 @@ public final class SessionWindow
 		bar.onShown(target);
 		// And its touch mode (package 4.3).
 		touchModes.onShown(target);
+		// And what a stylus is to it (pen input).
+		pen.onShown(target);
 
 		if (connected)
 			bind();
@@ -555,6 +557,9 @@ public final class SessionWindow
 		}
 		// Also makes PhysicalKeyboard forget its keys: from here on it has nothing it could send
 		// to this instance, which may be freed once its session has ended.
+		// A pen the session was told about leaves it while the session can still be told (pen
+		// input). Before the trackpad forgets the session's handle.
+		pen.onUnbound(sessionGoesOn);
 		// A button the trackpad holds is released while the session can still be told (4.3).
 		trackpad.onUnbound(sessionGoesOn);
 		input.cancelPendingEvents();
