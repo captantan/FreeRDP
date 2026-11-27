@@ -192,10 +192,7 @@
     <!-- the remote scale menu: "Automatic (175 %)" for this window's density -->
     <string name="captantan_bar_scale_auto">Automatic (%1$d %%)</string>
     <string name="captantan_bar_scale_custom">Custom (%1$d %%)</string>
-    <!-- roadmap 5.2: the View button (reset zoom and remote scale) and system-key capture
-         (captantan/KeyCaptureController) -->
-    <string name="captantan_bar_view_now">View: reset zoom, remote scale %1$d %%</string>
-    <string name="captantan_bar_view_link">View: reset zoom (remote scale set by the link)</string>
+    <!-- roadmap 5.2: system-key capture (captantan/KeyCaptureController) -->
     <string name="captantan_bar_capture_on">System keys go to the remote (tap: leave them to Android)</string>
     <string name="captantan_bar_capture_off">System keys stay with Android (tap: send them to the remote)</string>
     <string name="captantan_bar_capture_unsupported">System-key capture needs Android 16 QPR2 or later</string>

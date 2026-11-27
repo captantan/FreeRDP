@@ -2,7 +2,8 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- captantan fork: the session bar's settings dialog (roadmap 4.1, captantan/SessionBar): mode,
      "keep in full screen" (4.2), edge and opacity of this connection, applied while it is open
-     and saved when it closes. -->
+     and saved when it closes; the remote scale (4.2, here since 5.2) and system-key capture
+     (5.2), saved and applied at once. -->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -123,6 +124,31 @@
             android:stepSize="5"
             android:valueFrom="30"
             android:valueTo="100" />
+
+        <!-- roadmap 4.2's remote scale menu, here since 5.2 (captantan/RemoteScaleSwitch fills
+             the chips; a link's scale is its own: then only the note shows) -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/captantan_bar_scale"
+            android:textAppearance="?attr/textAppearanceTitleSmall" />
+
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/captantan_bar_settings_scale"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            app:selectionRequired="true"
+            app:singleSelection="true" />
+
+        <TextView
+            android:id="@+id/captantan_bar_settings_scale_link"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/captantan_bar_scale_link"
+            android:textAppearance="?attr/textAppearanceBodyMedium" />
 
         <!-- roadmap 5.2: system-key capture (captantan/KeyCaptureController), saved at once -->
         <com.google.android.material.materialswitch.MaterialSwitch

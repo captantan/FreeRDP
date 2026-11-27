@@ -287,7 +287,8 @@ public final class KeyCaptureController
 			            + "request): " +
 			            (service ? "the accessibility service" : "Android keeps its shortcuts");
 		else
-			mechanism = "window keyboard capture (API " + Build.VERSION.SDK_INT_FULL +
+			mechanism = "window keyboard capture (API " + (Build.VERSION.SDK_INT_FULL / 100000) +
+			            "." + (Build.VERSION.SDK_INT_FULL % 100000) +
 			            ", setKeyboardCaptureEnabled while focused)";
 		Log.i(TAG, "key capture: " + window.getName() + " " + host + " mechanism " + mechanism +
 		               "; " + serviceText + "; setting key_capture " + (wanted ? "on" : "off"));

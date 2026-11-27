@@ -124,7 +124,6 @@ public final class SessionBar
 	private View bar;
 	private LinearLayout buttons;
 	private MaterialButton fullScreenButton;
-	private MaterialButton scaleButton;
 	private final RemoteScaleSwitch scales;
 	/** The window's system-key capture (package 5.2), shown by the capture button. */
 	private KeyCaptureController keyCapture;
@@ -286,7 +285,6 @@ public final class SessionBar
 	void onShown(SessionHost shown)
 	{
 		closeDialog();
-		scales.close();
 		gestures.reset();
 		host = shown;
 		revealed = false;
@@ -299,7 +297,6 @@ public final class SessionBar
 	void onReleased()
 	{
 		closeDialog();
-		scales.close();
 		gestures.reset();
 		handler.removeCallbacks(hideOnTimeout);
 		if (host != null && revealed)
@@ -379,7 +376,6 @@ public final class SessionBar
 	void rebuild()
 	{
 		closeDialog();
-		scales.close();
 		container.removeView(bar);
 		inflate();
 		rootColor = 0; // the theme's colours changed: apply them again
@@ -394,7 +390,6 @@ public final class SessionBar
 	void onDestroy()
 	{
 		closeDialog();
-		scales.close();
 		gestures.reset();
 		handler.removeCallbacksAndMessages(null);
 	}
@@ -510,7 +505,6 @@ public final class SessionBar
 			bar.setVisibility(View.GONE);
 		}
 		updateFullScreenIcon();
-		showScale();
 		styleSystemBars();
 	}
 
@@ -527,6 +521,12 @@ public final class SessionBar
 		final Slider slider = v.findViewById(R.id.captantan_bar_settings_opacity);
 		final TextView note = v.findViewById(R.id.captantan_bar_settings_note);
 		final MaterialSwitch keep = v.findViewById(R.id.captantan_bar_settings_fullscreen);
+		// package 4.2: the remote scale, since 5.2 here; saved and applied at once
+		// (RemoteScaleSwitch)
+		final View scaleLink = v.findViewById(R.id.captantan_bar_settings_scale_link);
+		scaleLink.setVisibility(
+		    scales.fill(v.findViewById(R.id.captantan_bar_settings_scale), forHost) ? View.GONE
+		                                                                          : View.VISIBLE);
 		// package 5.2: system-key capture, saved at once (KeyCaptureController)
 		final MaterialSwitch capture = v.findViewById(R.id.captantan_bar_settings_capture);
 		if (keyCapture != null)
@@ -670,7 +670,6 @@ public final class SessionBar
 		                                            false);
 		buttons = bar.findViewById(R.id.captantan_bar_buttons);
 		fullScreenButton = bar.findViewById(R.id.captantan_bar_fullscreen);
-		scaleButton = bar.findViewById(R.id.captantan_bar_scale);
 		cardRadius = ((MaterialCardView)bar).getRadius();
 		cardElevation = ((MaterialCardView)bar).getCardElevation();
 		bar.setVisibility(View.GONE);
@@ -722,25 +721,6 @@ public final class SessionBar
 		b.setTooltipText(b.getContentDescription());
 	}
 
-	/**
-	 * The remote scale button says the scale in force (package 4.2). A link has its own scale (its
-	 * arguments): the button is there but disabled, so the bar does not change between sessions.
-	 */
-	void showScale()
-	{
-		if (scaleButton == null)
-			return;
-		final boolean usable = host != null && host.getBookmark() != null;
-		// package 5.2: the button is the "View" menu, which always has reset zoom
-		scaleButton.setContentDescription(
-		    !usable ? activity.getString(R.string.captantan_bar_view_link)
-		            : activity.getString(R.string.captantan_bar_view_now,
-		                                 RemoteScale.desktopPercent(
-		                                     activity, host,
-		                                     activity.getResources().getConfiguration().densityDpi)));
-		scaleButton.setTooltipText(scaleButton.getContentDescription());
-	}
-
 	/** A motion event at the window's callback (SessionBarGestures), for the pen's log. */
 	void probePen(String stage, MotionEvent ev)
 	{
@@ -774,11 +754,9 @@ public final class SessionBar
 			if (keyCapture != null)
 				keyCapture.setSaved(!keyCapture.isWanted(), "session bar button");
 		});
-		// package 4.2: the remote scale menu, since 5.2 the "View" menu with reset zoom first; it
-		// hides the bar after a choice (RemoteScaleSwitch)
-		bind(R.id.captantan_bar_scale, "view", false,
-		     () -> scales.openMenu(bar.findViewById(R.id.captantan_bar_scale), host,
-		                           input::onTouchPointerResetScrollZoom));
+		bind(R.id.captantan_bar_zoom_reset, "reset zoom", true,
+		     input::onTouchPointerResetScrollZoom);
+		// package 4.2's remote scale menu is in the settings sheet since 5.2 (RemoteScaleSwitch)
 		bind(R.id.captantan_bar_fullscreen, "full screen", true, this::toggleFullScreen);
 		bind(R.id.captantan_bar_settings, "bar settings", false, this::openSettings);
 		bind(R.id.captantan_bar_disconnect, "disconnect", true, this::confirmDisconnect);
