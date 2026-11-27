@@ -9,8 +9,12 @@ package com.freerdp.freerdpcore.captantan;
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.hardware.input.InputManager;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
+import android.view.InputDevice;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityManager;
@@ -82,11 +86,33 @@ public final class KeyCaptureController
 	private boolean capturing;
 	/** The session the mechanism line was last written for. */
 	private SessionHost described;
+	/** A physical (alphabetic, not virtual) keyboard is attached; the bar shows the button then. */
+	private boolean keyboardAttached;
+	private final InputManager inputManager;
+	private final InputManager.InputDeviceListener devices =
+	    new InputManager.InputDeviceListener() {
+		    @Override public void onInputDeviceAdded(int deviceId)
+		    {
+			    checkKeyboards("device " + deviceId + " added");
+		    }
+
+		    @Override public void onInputDeviceRemoved(int deviceId)
+		    {
+			    checkKeyboards("device " + deviceId + " removed");
+		    }
+
+		    @Override public void onInputDeviceChanged(int deviceId)
+		    {
+			    checkKeyboards("device " + deviceId + " changed");
+		    }
+	    };
 
 	KeyCaptureController(SessionWindow window)
 	{
 		this.window = window;
 		this.activity = window.getActivity();
+		this.inputManager = (InputManager)activity.getSystemService(Context.INPUT_SERVICE);
+		this.keyboardAttached = findKeyboard(activity);
 	}
 
 	void setListener(Listener listener)
@@ -115,6 +141,16 @@ public final class KeyCaptureController
 	public boolean isCapturing()
 	{
 		return capturing;
+	}
+
+	/**
+	 * Whether a physical keyboard is attached (an alphabetic keyboard that is not virtual: USB,
+	 * Bluetooth, a keyboard cover). System keys only come from one, so the bar shows its capture
+	 * button only then. Capture itself does not depend on it.
+	 */
+	public boolean isKeyboardAttached()
+	{
+		return keyboardAttached;
 	}
 
 	/** Whether capture is wanted for the session this window shows (it may still be off: focus). */
@@ -205,18 +241,25 @@ public final class KeyCaptureController
 	void onStart()
 	{
 		started = true;
+		if (inputManager != null)
+			inputManager.registerInputDeviceListener(devices, new Handler(Looper.getMainLooper()));
+		checkKeyboards("window started");
 		update("window started");
 	}
 
 	void onStop()
 	{
 		started = false;
+		if (inputManager != null)
+			inputManager.unregisterInputDeviceListener(devices);
 		update("window stopped");
 	}
 
 	void onDestroy()
 	{
 		destroyed = true;
+		if (inputManager != null)
+			inputManager.unregisterInputDeviceListener(devices);
 		update("window closed");
 		described = null;
 		listener = null;
@@ -261,6 +304,44 @@ public final class KeyCaptureController
 			Log.w(TAG, "key capture " + (on ? "on" : "off") + " failed in " + window.getName(), e);
 			return false;
 		}
+	}
+
+	private void checkKeyboards(String cause)
+	{
+		final boolean now = findKeyboard(activity);
+		if (now == keyboardAttached)
+			return;
+		keyboardAttached = now;
+		Log.i(TAG, "physical keyboard " + (now ? "attached" : "gone") + ": " + window.getName() +
+		               " (" + cause + "): the bar " + (now ? "shows" : "hides") +
+		               " its capture button");
+		notifyListener();
+	}
+
+	/**
+	 * Whether an alphabetic keyboard that is a real device is attached. A device's own buttons
+	 * (power, volume) are a keyboard too, but not an alphabetic one. Android may call a keyboard
+	 * non-alphabetic at first and correct it later (package 5.1 saw it); the device listener
+	 * then reports a change.
+	 */
+	static boolean findKeyboard(Context context)
+	{
+		final InputManager im = (InputManager)context.getSystemService(Context.INPUT_SERVICE);
+		if (im == null)
+			return false;
+		for (int id : im.getInputDeviceIds())
+		{
+			final InputDevice d = im.getInputDevice(id);
+			if (d == null || d.isVirtual() || !d.isEnabled())
+				continue;
+			final int sources = d.getSources();
+			if ((sources & InputDevice.SOURCE_KEYBOARD) != InputDevice.SOURCE_KEYBOARD ||
+			    (sources & InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD)
+				continue;
+			if (d.getKeyboardType() == InputDevice.KEYBOARD_TYPE_ALPHABETIC)
+				return true;
+		}
+		return false;
 	}
 
 	private void notifyListener()
