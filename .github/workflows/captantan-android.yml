@@ -409,12 +409,16 @@ jobs:
           for k in setSystemGestureExclusionRects setSystemBarsAppearance getBoundingRects captantan_tab_window_bounds captantan_new_connection_default_moved 'tab strip ' 'tabs: ' 'tab: ' 'taken from the system' 'shows its tab ' 'another connect started in it' 'open new connections: '; do
             grep -qaF -- "$k" "$RUNNER_TEMP/classes.dex.all" || fail "the APK lacks the string '$k' of session tabs (6.1b)"
           done
-          # (the release build shortens resource paths: the file's path comes from the resource table)
-          ui=$( { grep -A2 -E 'xml/settings_app_ui( |$)' "$RUNNER_TEMP/resources.txt" || true; } | sed -n 's/.*(file) \(res\/[^ ]*\).*/\1/p' | sed -n 1p)
-          [ -n "$ui" ] || ui=res/xml/settings_app_ui.xml
+          # (the release build shortens resource paths: find the settings file by its content, the
+          # one XML file whose defaultValue is one of the setting's stored values)
+          grep -n -A3 'settings_app_ui' "$RUNNER_TEMP/resources.txt" | head -8 || true
+          ui=""
+          for f in $(unzip -Z1 "$REL" | grep -E '^res/.*\.xml$'); do
+            "$AAPT" dump xmltree --file "$f" "$REL" > "$RUNNER_TEMP/xml.txt" 2>/dev/null || continue
+            if grep -qE 'defaultValue[^=]*="(this_window|desktop|new_window)"' "$RUNNER_TEMP/xml.txt"; then ui=$f; cp "$RUNNER_TEMP/xml.txt" "$RUNNER_TEMP/settings-ui.txt"; break; fi
+          done
+          [ -n "$ui" ] || fail "no XML file in the release APK has the default of Open new connections"
           echo "settings_app_ui.xml is $ui in the release APK"
-          if [ "$(basename "$AAPT")" = aapt ]; then "$AAPT" dump xmltree "$REL" "$ui" > "$RUNNER_TEMP/settings-ui.txt"
-          else "$AAPT" dump xmltree --file "$ui" "$REL" > "$RUNNER_TEMP/settings-ui.txt"; fi
           grep -qE 'defaultValue[^=]*="this_window"' "$RUNNER_TEMP/settings-ui.txt" || fail "the default of Open new connections is not this_window"
           echo "session tabs: model, strip, caption calls, icons, strings, state keys, the new default and log strings present"
 
