@@ -1862,7 +1862,7 @@ screen, and a button that changes the remote scale (3.3) during a session.
   - **Remote scale:** "Automatic" gave 125 % at 280 dpi; then 300 % and 175 %, each without a reconnect.
   - **Reported after the log stopped (no log):** the scale menu on the Windows host, trackpad mode,
     the input mode menu and a reconnect.
-  - **Not run:** Android's own touchpad settings together with the scale menu.
+  - **Not run:** the phone on the Windows host.
 - **For later packages.**
   - **A bar button with a menu:** copy `RemoteScaleSwitch` or `TouchModeSwitch` (a `PopupMenu`
     anchored on the button, closed by the bar in `onShown`/`onReleased`/`rebuild`/`onDestroy`, the
