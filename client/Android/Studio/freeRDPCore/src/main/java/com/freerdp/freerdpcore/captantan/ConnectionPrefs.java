@@ -14,9 +14,10 @@
 // Sessions without a saved bookmark (quick connect, hostname search) have the ID -1 and get the
 // defaults. freerdp:// links do not come here at all: their arguments come from the link.
 //
-// Adding a setting (later packages): declare a Field below (EnumField or IntField), add it to
-// FIELDS, and add a getter for callers. A preference in res/xml/captantan_connection_options.xml
-// whose key is the field's key is then edited by the "RDP options" screen with no other change.
+// Adding a setting (later packages): declare a Field below (EnumField, IntField or BoolField), add
+// it to FIELDS, and add a getter for callers. A preference in res/xml/captantan_connection_options.xml
+// whose key is the field's key is then edited by the "RDP options" screen with no other change
+// (a BoolField by a SwitchPreferenceCompat).
 // Stored values that are missing, of the wrong type or unknown read as the field's default.
 
 package com.freerdp.freerdpcore.captantan;
@@ -160,6 +161,37 @@ public final class ConnectionPrefs
 		}
 	}
 
+	/** A boolean setting (package 4.2). Stored values of another type read as the default. */
+	public static final class BoolField extends Field<Boolean>
+	{
+		public BoolField(String key, boolean defaultValue)
+		{
+			super(key, defaultValue);
+		}
+
+		@Override Boolean read(SharedPreferences prefs, String storedKey)
+		{
+			try
+			{
+				return prefs.getBoolean(storedKey, defaultValue);
+			}
+			catch (ClassCastException e)
+			{
+				return defaultValue;
+			}
+		}
+
+		@Override void write(SharedPreferences.Editor editor, String storedKey, Boolean value)
+		{
+			editor.putBoolean(storedKey, value);
+		}
+
+		@Override Boolean coerce(Object value)
+		{
+			return (value instanceof Boolean) ? (Boolean)value : defaultValue;
+		}
+	}
+
 	// ---------------------------------------------------------------------------------------------
 	// The settings. Keys are permanent: renaming one loses what users saved under it.
 
@@ -188,6 +220,12 @@ public final class ConnectionPrefs
 	    new IntField("bar_opacity", SessionBarSettings.DEFAULT_OPACITY,
 	                 SessionBarSettings.MIN_OPACITY, SessionBarSettings.MAX_OPACITY);
 
+	/**
+	 * A docked session bar stays in full screen, in its strip (roadmap 4.2). Off: full screen
+	 * hides it, as in 4.1. Applies to docked mode only.
+	 */
+	public static final BoolField BAR_IN_FULLSCREEN = new BoolField("bar_in_fullscreen", false);
+
 	/** What a finger on the session does (roadmap 4.3). See TouchMode and TrackpadInput. */
 	public static final EnumField<TouchMode> TOUCH_MODE =
 	    new EnumField<>("touch_mode", TouchMode.DEFAULT, TouchMode.values());
@@ -207,6 +245,7 @@ public final class ConnectionPrefs
 
 	private static final Field<?>[] FIELDS = { GRAPHICS_MODE, REMOTE_SCALE, REMOTE_SCALE_CUSTOM,
 		                                       BAR_MODE,      BAR_EDGE,     BAR_OPACITY,
+		                                       BAR_IN_FULLSCREEN,
 		                                       TOUCH_MODE,    POINTER_SPEED, TOUCH_SCROLL,
 		                                       TOUCH_DRAG };
 
@@ -314,6 +353,11 @@ public final class ConnectionPrefs
 	public int getBarOpacity()
 	{
 		return get(BAR_OPACITY);
+	}
+
+	public boolean getBarInFullScreen()
+	{
+		return get(BAR_IN_FULLSCREEN);
 	}
 
 	public TouchMode getTouchMode()

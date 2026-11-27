@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- captantan fork: the session bar's settings dialog (roadmap 4.1, captantan/SessionBar): mode,
-     edge and opacity of this connection, applied while it is open and saved when it closes. -->
+     "keep in full screen" (4.2), edge and opacity of this connection, applied while it is open
+     and saved when it closes. -->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -45,6 +46,16 @@
                 android:layout_weight="1"
                 android:text="@string/captantan_bar_mode_docked" />
         </com.google.android.material.button.MaterialButtonToggleGroup>
+
+        <!-- roadmap 4.2: docked only (SessionBar shows it for docked) -->
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/captantan_bar_settings_fullscreen"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:minHeight="48dp"
+            android:text="@string/captantan_bar_fullscreen_keep"
+            android:textAppearance="?attr/textAppearanceBodyLarge" />
 
         <!-- the edge is overlay's (SessionBar shows these two for overlay only): docked is always
              at the top -->

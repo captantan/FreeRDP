@@ -15,9 +15,10 @@ import java.util.WeakHashMap;
 import java.util.function.Consumer;
 
 /**
- * Mode, edge and opacity of the session bar ({@link SessionBar}), per connection. They are fields of
- * {@link ConnectionPrefs} (keys {@code bar_mode}, {@code bar_edge}, {@code bar_opacity}), edited on
- * the "RDP options" screen and from the bar's own settings button.
+ * Mode, edge, opacity and "keep in full screen" of the session bar ({@link SessionBar}), per
+ * connection. They are fields of {@link ConnectionPrefs} (keys {@code bar_mode}, {@code bar_edge},
+ * {@code bar_opacity}, {@code bar_in_fullscreen}), edited on the "RDP options" screen and from the
+ * bar's own settings button.
  *
  * <p>A session without a saved bookmark (quick connect, a {@code freerdp://} link) gets the
  * defaults. A change made from its bar lasts for that session only: it is kept here, keyed by the
@@ -32,7 +33,8 @@ public final class SessionBarSettings
 		OVERLAY("overlay"),
 		/**
 		 * Outside full screen a toolbar across its edge, in a strip the remote desktop keeps clear
-		 * of; in full screen not shown.
+		 * of; in full screen not shown, or, with {@code bar_in_fullscreen} (4.2), the same as
+		 * outside.
 		 */
 		DOCKED("docked");
 
@@ -111,18 +113,20 @@ public final class SessionBarSettings
 	 * Stores changed settings for a session: under its bookmark (all its other settings are kept),
 	 * or, without one, for this session only. Returns true if they were saved with a bookmark.
 	 */
-	public static boolean save(Context context, SessionHost host, Mode mode, Edge edge, int opacity)
+	public static boolean save(Context context, SessionHost host, Mode mode, Edge edge, int opacity,
+	                           boolean inFullScreen)
 	{
 		return save(context, host, p -> {
 			p.set(ConnectionPrefs.BAR_MODE, mode);
 			p.set(ConnectionPrefs.BAR_EDGE, edge);
 			p.set(ConnectionPrefs.BAR_OPACITY, opacity);
+			p.set(ConnectionPrefs.BAR_IN_FULLSCREEN, inFullScreen);
 		});
 	}
 
 	/**
-	 * Changes settings of a session as {@link #save(Context, SessionHost, Mode, Edge, int)} does,
-	 * for any field (package 4.3's touch mode). Returns true if they were saved with a bookmark.
+	 * Changes settings of a session as the other {@code save} does, for any field (package 4.3's
+	 * touch mode, 4.2's remote scale). Returns true if they were saved with a bookmark.
 	 */
 	public static boolean save(Context context, SessionHost host, Consumer<ConnectionPrefs> change)
 	{
