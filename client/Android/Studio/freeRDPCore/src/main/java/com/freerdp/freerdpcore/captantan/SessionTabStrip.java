@@ -7,8 +7,13 @@
 package com.freerdp.freerdpcore.captantan;
 
 import android.content.res.ColorStateList;
-import android.graphics.Color;
+import android.graphics.Canvas;
+import android.graphics.ColorFilter;
+import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.PixelFormat;
 import android.graphics.Rect;
+import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.text.TextUtils;
@@ -38,7 +43,6 @@ import com.google.android.material.button.MaterialButton;
 import com.google.android.material.color.MaterialColors;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.progressindicator.CircularProgressIndicator;
-import com.google.android.material.shape.MaterialShapeDrawable;
 import com.google.android.material.shape.ShapeAppearanceModel;
 
 import com.freerdp.freerdpcore.R;
@@ -69,7 +73,10 @@ import java.util.Map;
  * and a mouse click reach them; the rest of the caption bar is the system's, which drags the
  * window (measured: without the exclusion the system takes even a tap there, and the view gets
  * a cancel). At least {@link #DRAG_MIN_DP} after "+" is always left for dragging; the tabs
- * shrink to {@link #TAB_MIN_DP}, then scroll. The remote desktop is not touched: the content
+ * shrink to {@link #TAB_MIN_DP}. A window too narrow for its tabs at that width is
+ * <b>compact</b>: the shown session's tab alone and the switcher's button (the bottom sheet with
+ * every session, as outside desktop windowing) before "+" (the owner's choice in the second
+ * device run; the first build scrolled the tabs, which left pieces of tabs at the edges). The remote desktop is not touched: the content
  * was already laid out below the caption bar. The caption bar's own icons are made dark while
  * the strip is light ({@code APPEARANCE_LIGHT_CAPTION_BARS}).</li>
  * <li><b>A row of its own</b>, {@link #ROW_DP} high, at the top of the window, when a desktop
@@ -91,10 +98,13 @@ import java.util.Map;
  * strip back. In the window's own full screen (6.1, only from a window that was in it before
  * 6.1b) the bar is the bar again.
  *
- * <p><b>Colours.</b> The strip has the theme's highest surface container in a light theme and
- * its lowest in a dark one; the shown tab has the other end (white against grey in the light
- * theme, as a browser's tab strip), the other tabs none, so the shown one stands out (the first
- * device run found the two near-equal greys of the first build hard to tell apart).
+ * <p><b>Colours and shape.</b> The strip has the theme's highest surface container in a light
+ * theme and its lowest in a dark one; the shown tab has the other end (white against grey in the
+ * light theme, as a browser's tab strip), the other tabs none, with a short divider between two
+ * of them. A stroke of the shown tab's colour runs along the strip's bottom, and the shown tab
+ * curves out into it at its feet, so tab and stroke are one shape on top of the remote picture,
+ * as a browser's tab and toolbar (the owner's wish in the second run: the white tab alone did not
+ * look attached). The first build's two near-equal greys were hard to tell apart.
  *
  * <p><b>Tabs.</b> A tap or click shows the tab's session in this window ({@link
  * SessionWindow#switchTo}); its close control disconnects it after asking, as the switcher and
@@ -116,15 +126,22 @@ final class SessionTabStrip implements SessionRegistry.Listener
 
 	/** The row's height when there is no caption bar: the tablet's caption bar is 40 dp. */
 	static final int ROW_DP = 40;
-	static final int TAB_MIN_DP = 112;
+	/** Narrower than this, the window's tabs give way to the shown one and the switcher. */
+	static final int TAB_MIN_DP = 104;
 	static final int TAB_MAX_DP = 240;
 	/** What is always left of the caption bar for dragging the window, after "+". */
-	static final int DRAG_MIN_DP = 96;
-	private static final int PLUS_DP = 40;
+	static final int DRAG_MIN_DP = 72;
+	private static final int PLUS_DP = 36;
+	/** The switcher's button of a narrow window (compact). */
+	private static final int SWITCHER_DP = 36;
 	private static final int TAB_TOP_GAP_DP = 4;
-	private static final int CLOSE_DP = 28;
+	private static final int CLOSE_DP = 24;
+	/** The shown tab's feet: it curves out into the stroke at its bottom, as a browser's tab. */
+	private static final int FOOT_DP = 8;
+	/** The line under the strip in the shown tab's colour, that the shown tab joins. */
+	private static final int STROKE_DP = 3;
 	/** A bar button on the strip, square, with an icon of {@link #TOOL_ICON_DP}. */
-	private static final int TOOL_DP = 40;
+	private static final int TOOL_DP = 36;
 	private static final int TOOL_ICON_DP = 20;
 	/** The bar's buttons the strip has, in the bar's order. */
 	private static final String[] TOOLS = { SessionBar.KEYBOARD, SessionBar.INPUT_MODE,
@@ -148,6 +165,8 @@ final class SessionTabStrip implements SessionRegistry.Listener
 	private final HorizontalScrollView scroll;
 	private final LinearLayout tabRow;
 	private final MaterialButton plus;
+	private final MaterialButton switcher;
+	private final StripBackground stripBackground;
 	private final LinearLayout tools;
 	private final Map<String, MaterialButton> toolButtons = new LinkedHashMap<>();
 	private final Map<SessionHost, Tab> tabs = new HashMap<>();
@@ -164,6 +183,8 @@ final class SessionTabStrip implements SessionRegistry.Listener
 	private int tabWidth = -1;
 	private int scrollWidth = -1;
 	private int toolsWidth = -1;
+	/** A narrow window: only the shown tab, and the switcher's button for the others. */
+	private boolean compact;
 	/** The bar's buttons are on the strip (a desktop window, not in its own full screen). */
 	private boolean holds;
 	private Boolean lightCaption;
@@ -198,6 +219,15 @@ final class SessionTabStrip implements SessionRegistry.Listener
 		scroll.addView(tabRow, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
 		                                                    ViewGroup.LayoutParams.MATCH_PARENT));
 		row.addView(scroll, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT));
+		// A narrow window: the switcher (a bottom sheet with every session), as outside desktop
+		// windowing, in place of the tabs that do not fit.
+		switcher = iconButton(R.drawable.captantan_ic_sessions,
+		                      activity.getString(R.string.captantan_bar_sessions), TOOL_ICON_DP);
+		switcher.setOnClickListener(
+		    v -> window.getBar().pressOnTabStrip(SessionBar.SESSIONS, v, tool()));
+		switcher.setVisibility(View.GONE);
+		row.addView(switcher, new LinearLayout.LayoutParams(dp(SWITCHER_DP), dp(SWITCHER_DP)));
+		((LinearLayout.LayoutParams)switcher.getLayoutParams()).gravity = Gravity.CENTER_VERTICAL;
 		plus = iconButton(R.drawable.captantan_ic_add, activity.getString(R.string.captantan_tab_new),
 		                  24);
 		plus.setOnClickListener(v -> {
@@ -225,7 +255,9 @@ final class SessionTabStrip implements SessionRegistry.Listener
 		                                                 ViewGroup.LayoutParams.MATCH_PARENT));
 		strip.addView(row, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
 		                                                ViewGroup.LayoutParams.MATCH_PARENT));
-		strip.setBackgroundColor(stripColor());
+		stripBackground = new StripBackground();
+		strip.setBackground(stripBackground);
+		stripBackground.setColors(stripColor(), shownTabColor());
 		if (content != null)
 			content.addView(strip, new FrameLayout.LayoutParams(
 			                           ViewGroup.LayoutParams.MATCH_PARENT, 0, Gravity.TOP));
@@ -279,7 +311,7 @@ final class SessionTabStrip implements SessionRegistry.Listener
 	/** Light or dark changed: colours again. */
 	void rebuild()
 	{
-		strip.setBackgroundColor(stripColor());
+		stripBackground.setColors(stripColor(), shownTabColor());
 		for (Tab t : tabs.values())
 			t.restyle();
 		lightCaption = null;
@@ -407,13 +439,14 @@ final class SessionTabStrip implements SessionRegistry.Listener
 			Log.i(TAG, text + " (" + why + ")");
 		}
 		place(why);
+		layOutTabs();
 		if (shown != null && tabs.containsKey(shown))
 		{
 			final View v = tabs.get(shown).view;
 			scroll.post(() -> {
 				if (v.getRight() > scroll.getScrollX() + scroll.getWidth() ||
 				    v.getLeft() < scroll.getScrollX())
-					scroll.smoothScrollTo(Math.max(0, v.getLeft() - dp(TAB_MIN_DP) / 2), 0);
+					scroll.smoothScrollTo(Math.max(0, v.getLeft()), 0);
 			});
 		}
 	}
@@ -478,7 +511,8 @@ final class SessionTabStrip implements SessionRegistry.Listener
 		}
 
 		// The tabs share what the caption bar leaves, minus "+", the bar's buttons and the drag
-		// area.
+		// area. Neighbouring tabs overlap by a foot. When the window's tabs do not fit at their
+		// least width, the window is compact: the shown tab alone, and the switcher's button.
 		final int width = Math.max(0, right - left);
 		final int n = Math.max(1, order.size());
 		int shownTools = 0;
@@ -486,15 +520,22 @@ final class SessionTabStrip implements SessionRegistry.Listener
 			if (b.getVisibility() != View.GONE)
 				shownTools++;
 		final int tw0 = (holds && p != Place.NONE) ? shownTools * dp(TOOL_DP) : 0;
-		final int forTabs = Math.max(0, width - dp(PLUS_DP) - tw0 -
-		                                    (p == Place.CAPTION ? dp(DRAG_MIN_DP) : 0));
+		final int foot = dp(FOOT_DP);
+		int forTabs = Math.max(0, width - dp(PLUS_DP) - tw0 -
+		                              (p == Place.CAPTION ? dp(DRAG_MIN_DP) : 0));
+		final boolean small =
+		    p != Place.NONE && n > 1 && n * dp(TAB_MIN_DP) - (n - 1) * foot > forTabs;
+		final int visible = small ? 1 : n;
+		if (small)
+			forTabs = Math.max(0, forTabs - dp(SWITCHER_DP));
 		final int tw = Math.max(Math.min(dp(TAB_MIN_DP), forTabs),
-		                        Math.min(dp(TAB_MAX_DP), forTabs / n));
-		final int sw = Math.min(tw * order.size(), forTabs);
+		                        Math.min(dp(TAB_MAX_DP),
+		                                 (forTabs + (visible - 1) * foot) / visible));
+		final int sw = Math.min(visible * tw - (visible - 1) * foot, forTabs);
 
 		final boolean changed = p != place || top != placeTop || height != placeHeight ||
 		                        left != placeLeft || width != placeWidth || tw != tabWidth ||
-		                        sw != scrollWidth || tw0 != toolsWidth;
+		                        sw != scrollWidth || tw0 != toolsWidth || small != compact;
 		place = p;
 		if (!changed)
 			return;
@@ -505,6 +546,8 @@ final class SessionTabStrip implements SessionRegistry.Listener
 		tabWidth = tw;
 		scrollWidth = sw;
 		toolsWidth = tw0;
+		compact = small;
+		switcher.setVisibility(small ? View.VISIBLE : View.GONE);
 		tools.setVisibility(tw0 > 0 ? View.VISIBLE : View.GONE);
 
 		final FrameLayout.LayoutParams slp = (FrameLayout.LayoutParams)strip.getLayoutParams();
@@ -522,8 +565,7 @@ final class SessionTabStrip implements SessionRegistry.Listener
 		final LinearLayout.LayoutParams sclp = (LinearLayout.LayoutParams)scroll.getLayoutParams();
 		sclp.width = sw;
 		scroll.setLayoutParams(sclp);
-		for (Tab t : tabs.values())
-			t.setWidth(tw);
+		layOutTabs();
 		strip.bringToFront();
 
 		// A row of its own takes space from the remote desktop; the caption bar's does not.
@@ -537,10 +579,11 @@ final class SessionTabStrip implements SessionRegistry.Listener
 		                     : reason + ", " + height + " px high at y " + top + ", from x " + left +
 		                           " to " + right + caption + "; " + order.size() + " tab(s) of " +
 		                           Math.round(tw / density) + " dp" +
-		                           (tw * order.size() > forTabs ? ", scrolling" : "") +
+		                           (small ? ", compact: the shown one and the switcher" : "") +
 		                           (tw0 > 0 ? ", the bar's " + shownTools + " buttons" : "") +
 		                           (p == Place.CAPTION
-		                                ? ", " + Math.round((width - dp(PLUS_DP) - sw - tw0) /
+		                                ? ", " + Math.round((width - dp(PLUS_DP) - sw - tw0 -
+		                                                     (small ? dp(SWITCHER_DP) : 0)) /
 		                                                    density) +
 		                                      " dp left for dragging"
 		                                : ""));
@@ -550,6 +593,30 @@ final class SessionTabStrip implements SessionRegistry.Listener
 			Log.i(TAG, log + " (" + why + ")");
 		}
 		excludeLater();
+	}
+
+	/**
+	 * Each tab's width, its overlap with the one before (a foot), whether it is shown (compact: the
+	 * shown session's only) and whether it has a divider after it (between two tabs not shown).
+	 */
+	private void layOutTabs()
+	{
+		final SessionHost shown = window.getHost();
+		final int width = tabWidth > 0 ? tabWidth : dp(TAB_MAX_DP);
+		boolean first = true;
+		for (int i = 0; i < order.size(); i++)
+		{
+			final SessionHost h = order.get(i);
+			final Tab t = tabs.get(h);
+			if (t == null)
+				continue;
+			final boolean visible = !compact || h == shown || (shown == null && i == 0);
+			final boolean divider = !compact && h != shown && i + 1 < order.size() &&
+			                        order.get(i + 1) != shown;
+			t.layOut(visible, width, first ? 0 : -dp(FOOT_DP), divider);
+			if (visible)
+				first = false;
+		}
 	}
 
 	private void excludeLater()
@@ -600,7 +667,7 @@ final class SessionTabStrip implements SessionRegistry.Listener
 		final ImageView attention;
 		final TextView title;
 		final MaterialButton close;
-		final MaterialShapeDrawable background;
+		final TabBackground background;
 		boolean shown;
 
 		Tab(SessionHost host)
@@ -609,9 +676,9 @@ final class SessionTabStrip implements SessionRegistry.Listener
 			view = new LinearLayout(activity);
 			view.setOrientation(LinearLayout.HORIZONTAL);
 			view.setGravity(Gravity.CENTER_VERTICAL);
-			view.setPaddingRelative(dp(12), 0, dp(2), 0);
+			view.setPaddingRelative(dp(FOOT_DP) + dp(10), 0, dp(FOOT_DP) + dp(2), 0);
 			view.setFocusable(false);
-			background = new MaterialShapeDrawable(tabShape());
+			background = new TabBackground();
 			view.setBackground(background);
 			view.setForeground(selectable());
 
@@ -670,20 +737,24 @@ final class SessionTabStrip implements SessionRegistry.Listener
 			restyle();
 		}
 
-		void setWidth(int width)
+		void layOut(boolean visible, int width, int marginStart, boolean divider)
 		{
+			final int visibility = visible ? View.VISIBLE : View.GONE;
+			if (view.getVisibility() != visibility)
+				view.setVisibility(visibility);
+			background.setDivider(divider);
 			final LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams)view.getLayoutParams();
-			if (lp != null && lp.width == width)
+			if (lp != null && lp.width == width && lp.getMarginStart() == marginStart)
 				return;
 			final LinearLayout.LayoutParams n =
 			    new LinearLayout.LayoutParams(width, ViewGroup.LayoutParams.MATCH_PARENT);
 			n.topMargin = dp(TAB_TOP_GAP_DP);
+			n.setMarginStart(marginStart);
 			view.setLayoutParams(n);
 		}
 
 		void update(boolean isShown)
 		{
-			setWidth(tabWidth > 0 ? tabWidth : dp(TAB_MAX_DP));
 			shown = isShown;
 			title.setText(host.getTitle());
 			final boolean connecting =
@@ -718,8 +789,9 @@ final class SessionTabStrip implements SessionRegistry.Listener
 
 		void restyle()
 		{
-			background.setFillColor(ColorStateList.valueOf(shown ? shownTabColor()
-			                                                     : Color.TRANSPARENT));
+			background.setStyle(shown, shownTabColor(),
+			                    MaterialColors.getColor(
+			                        view, com.google.android.material.R.attr.colorOutlineVariant));
 			title.setTextColor(MaterialColors.getColor(
 			    view, shown ? com.google.android.material.R.attr.colorOnSurface
 			                : com.google.android.material.R.attr.colorOnSurfaceVariant));
@@ -799,16 +871,126 @@ final class SessionTabStrip implements SessionRegistry.Listener
 		return b;
 	}
 
-	/** A tab's shape: the theme's medium corners at the top, square at the bottom (it joins the bar). */
-	private ShapeAppearanceModel tabShape()
+	/** The shown tab's top corners: the theme's medium corner. */
+	private float tabCorner()
 	{
 		final TypedValue tv = new TypedValue();
-		final ShapeAppearanceModel.Builder b =
-		    activity.getTheme().resolveAttribute(
-		        com.google.android.material.R.attr.shapeAppearanceCornerMedium, tv, true)
-		        ? ShapeAppearanceModel.builder(activity, tv.resourceId, 0)
-		        : ShapeAppearanceModel.builder();
-		return b.setBottomLeftCornerSize(0f).setBottomRightCornerSize(0f).build();
+		if (!activity.getTheme().resolveAttribute(
+		        com.google.android.material.R.attr.shapeAppearanceCornerMedium, tv, true))
+			return dp(12);
+		final ShapeAppearanceModel m = ShapeAppearanceModel.builder(activity, tv.resourceId, 0).build();
+		return m.getTopLeftCornerSize().getCornerSize(new RectF(0, 0, dp(TAB_MAX_DP), dp(ROW_DP)));
+	}
+
+	/**
+	 * A tab's background. The shown tab: filled, the theme's medium corners at the top, and feet
+	 * at the bottom that curve out into the strip's stroke ({@link #FOOT_DP} on each side, inside
+	 * the view: the next tab overlaps it by as much), so the tab and the stroke under the strip
+	 * are one shape, as a browser's tab and toolbar. Another tab: nothing, or a short divider at
+	 * its end when the next tab is not shown either.
+	 */
+	private final class TabBackground extends Drawable
+	{
+		private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
+		private final Paint line = new Paint(Paint.ANTI_ALIAS_FLAG);
+		private final Path path = new Path();
+		private final float corner = tabCorner();
+		private boolean shown;
+		private boolean divider;
+
+		void setStyle(boolean isShown, int fillColor, int dividerColor)
+		{
+			shown = isShown;
+			fill.setColor(fillColor);
+			line.setColor(dividerColor);
+			line.setStrokeWidth(Math.max(1f, density));
+			invalidateSelf();
+		}
+
+		void setDivider(boolean on)
+		{
+			if (on == divider)
+				return;
+			divider = on;
+			invalidateSelf();
+		}
+
+		@Override public void draw(Canvas canvas)
+		{
+			final Rect b = getBounds();
+			final float f = dp(FOOT_DP);
+			final float l = b.left, t = b.top, r = b.right, h = b.bottom;
+			if (shown)
+			{
+				final float c = Math.min(corner, (r - l - 2 * f) / 2);
+				path.reset();
+				path.moveTo(l, h);
+				// left foot: a quarter circle from the stroke up into the tab's side
+				path.arcTo(new RectF(l - f, h - 2 * f, l + f, h), 90, -90, false);
+				path.lineTo(l + f, t + c);
+				path.arcTo(new RectF(l + f, t, l + f + 2 * c, t + 2 * c), 180, 90, false);
+				path.lineTo(r - f - c, t);
+				path.arcTo(new RectF(r - f - 2 * c, t, r - f, t + 2 * c), 270, 90, false);
+				path.lineTo(r - f, h - f);
+				// right foot
+				path.arcTo(new RectF(r - f, h - 2 * f, r + f, h), 180, -90, false);
+				path.close();
+				canvas.drawPath(path, fill);
+			}
+			else if (divider)
+			{
+				final float x = r - f / 2; // the middle of the gap to the next tab's body
+				final float inset = (h - t) / 4f;
+				canvas.drawLine(x, t + inset, x, h - inset, line);
+			}
+		}
+
+		@Override public void setAlpha(int alpha)
+		{
+		}
+
+		@Override public void setColorFilter(ColorFilter cf)
+		{
+		}
+
+		@Override public int getOpacity()
+		{
+			return PixelFormat.TRANSLUCENT;
+		}
+	}
+
+	/** The strip's background: its colour, and the stroke along its bottom in the shown tab's. */
+	private final class StripBackground extends Drawable
+	{
+		private final Paint fill = new Paint();
+		private final Paint stroke = new Paint();
+
+		void setColors(int stripColor, int strokeColor)
+		{
+			fill.setColor(stripColor);
+			stroke.setColor(strokeColor);
+			invalidateSelf();
+		}
+
+		@Override public void draw(Canvas canvas)
+		{
+			final Rect b = getBounds();
+			canvas.drawRect(b, fill);
+			canvas.drawRect(b.left, b.bottom - dp(STROKE_DP), b.right, b.bottom, stroke);
+		}
+
+		@Override public void setAlpha(int alpha)
+		{
+		}
+
+		@Override public void setColorFilter(ColorFilter cf)
+		{
+		}
+
+		@Override public int getOpacity()
+		{
+			return PixelFormat.OPAQUE;
+		}
 	}
 
 	private Drawable selectable()
