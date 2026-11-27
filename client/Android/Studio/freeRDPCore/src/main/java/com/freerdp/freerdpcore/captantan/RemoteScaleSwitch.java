@@ -1,7 +1,8 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
  *
- * captantan fork: the session bar's quick remote scale switch (roadmap 4.2).
+ * captantan fork: the session bar's quick remote scale switch (roadmap 4.2), and since 5.2 its
+ * "View" menu with reset zoom.
  */
 
 package com.freerdp.freerdpcore.captantan;
@@ -12,13 +13,16 @@ import android.view.MenuItem;
 import android.view.View;
 
 import androidx.appcompat.widget.PopupMenu;
+import androidx.core.view.MenuCompat;
 
 import com.freerdp.freerdpcore.R;
 import com.freerdp.freerdpcore.presentation.SessionActivity;
 
 /**
- * The session bar's remote scale button (package 4.2), one per {@link SessionBar}: a small menu
- * with the values of the "Remote scale" setting ({@link RemoteScale}), the one in force ticked.
+ * The session bar's "View" button (package 4.2 as "Remote scale"; 5.2 folded "Reset zoom" into it
+ * to free a slot for the capture button), one per {@link SessionBar}: a small menu with "Reset
+ * zoom" first, then the values of the "Remote scale" setting ({@link RemoteScale}), the one in
+ * force ticked.
  * "Automatic" says what it gives in this window ("Automatic (175 %)"); "Custom" is listed only
  * while it is the setting, with its percentage (the percentage itself is set in "RDP options").
  *
@@ -26,7 +30,7 @@ import com.freerdp.freerdpcore.presentation.SessionActivity;
  * (all its other settings kept), so it is there after a reconnect and in the bookmark editor. A
  * session without a saved bookmark (quick connect) keeps it for that session only, as the bar's
  * other settings do ({@link SessionBarSettings#save}). A {@code freerdp://} link has the scale
- * of its arguments: the button is disabled for it ({@link SessionBar#showScale}).
+ * of its arguments: the menu then says so and has only "Reset zoom".
  *
  * <p>Then the window asks the server again at once ({@link SessionResizeController#askAgain}):
  * after the usual settle wait, one layout request with the same size and the new scale, which
@@ -48,12 +52,54 @@ final class RemoteScaleSwitch
 		this.activity = window.getActivity();
 	}
 
-	/** From the bar's button. */
-	void openMenu(View anchor, SessionHost host)
+	/** The menu item ID of "Reset zoom"; the scales use their ordinals. */
+	private static final int RESET_ZOOM = 1000;
+	private static final int SCALE_GROUP = 0;
+	private static final int ZOOM_GROUP = 1;
+
+	/**
+	 * From the bar's button.
+	 *
+	 * @param resetZoom what "Reset zoom" does
+	 */
+	void openMenu(View anchor, SessionHost host, Runnable resetZoom)
 	{
-		if (host == null || host.getBookmark() == null || anchor == null)
+		if (host == null || anchor == null)
 			return;
 		close();
+		final PopupMenu m = new PopupMenu(activity, anchor);
+		final Menu items = m.getMenu();
+		MenuCompat.setGroupDividerEnabled(items, true);
+		m.setForceShowIcon(true);
+		items.add(ZOOM_GROUP, RESET_ZOOM, 0, R.string.captantan_bar_zoom_reset)
+		    .setIcon(R.drawable.captantan_ic_zoom_reset);
+		if (host.getBookmark() != null)
+			addScales(items, host);
+		else
+			items.add(SCALE_GROUP, Menu.NONE, 1, R.string.captantan_bar_scale_link).setEnabled(false);
+		m.setOnMenuItemClickListener((MenuItem item) -> {
+			final int i = item.getItemId();
+			if (i == RESET_ZOOM)
+			{
+				Log.i(SessionBar.TAG, "view: " + window.getName() + " " + host + ": reset zoom");
+				resetZoom.run();
+				window.getBar().hide("after reset zoom");
+			}
+			else if (i >= 0 && i < RemoteScale.values().length)
+				choose(host, RemoteScale.values()[i]);
+			return true;
+		});
+		m.setOnDismissListener(d -> {
+			if (menu == d)
+				menu = null;
+		});
+		menu = m;
+		m.show();
+	}
+
+	/** The scales, the one in force ticked, after a disabled "Remote scale" heading. */
+	private void addScales(Menu items, SessionHost host)
+	{
 		final ConnectionPrefs prefs = SessionBarSettings.of(activity, host);
 		final RemoteScale now = prefs.getRemoteScale();
 		final int dpi = densityDpi();
@@ -61,8 +107,7 @@ final class RemoteScaleSwitch
 		    activity.getResources().getStringArray(R.array.captantan_remote_scale_entries);
 		final String[] values =
 		    activity.getResources().getStringArray(R.array.captantan_remote_scale_values);
-		final PopupMenu m = new PopupMenu(activity, anchor);
-		final Menu items = m.getMenu();
+		items.add(SCALE_GROUP, Menu.NONE, 1, R.string.captantan_bar_scale).setEnabled(false);
 		for (int i = 0; i < values.length && i < entries.length; i++)
 		{
 			final RemoteScale scale = ConnectionPrefs.REMOTE_SCALE.parse(values[i]);
@@ -81,21 +126,9 @@ final class RemoteScaleSwitch
 			}
 			else
 				label = entries[i];
-			items.add(0, scale.ordinal(), i, label).setChecked(scale == now);
+			items.add(SCALE_GROUP, scale.ordinal(), 2 + i, label).setChecked(scale == now);
 		}
-		items.setGroupCheckable(0, true, true);
-		m.setOnMenuItemClickListener((MenuItem item) -> {
-			final int i = item.getItemId();
-			if (i >= 0 && i < RemoteScale.values().length)
-				choose(host, RemoteScale.values()[i]);
-			return true;
-		});
-		m.setOnDismissListener(d -> {
-			if (menu == d)
-				menu = null;
-		});
-		menu = m;
-		m.show();
+		items.setGroupCheckable(SCALE_GROUP, true, true);
 	}
 
 	private void choose(SessionHost target, RemoteScale scale)

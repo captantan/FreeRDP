@@ -132,4 +132,14 @@
             android:summary="@string/captantan_touch_note" />
     </PreferenceCategory>
 
+    <!-- captantan fork (roadmap 5.2): captantan/KeyCaptureController -->
+    <PreferenceCategory
+        android:title="@string/captantan_options_cat_keyboard">
+        <SwitchPreferenceCompat
+            android:key="key_capture"
+            android:title="@string/captantan_key_capture"
+            android:summary="@string/captantan_key_capture_summary"
+            android:defaultValue="true" />
+    </PreferenceCategory>
+
 </PreferenceScreen>

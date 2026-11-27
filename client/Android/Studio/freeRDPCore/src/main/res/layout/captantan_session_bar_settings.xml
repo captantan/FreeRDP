@@ -124,6 +124,16 @@
             android:valueFrom="30"
             android:valueTo="100" />
 
+        <!-- roadmap 5.2: system-key capture (captantan/KeyCaptureController), saved at once -->
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/captantan_bar_settings_capture"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:minHeight="48dp"
+            android:text="@string/captantan_key_capture"
+            android:textAppearance="?attr/textAppearanceBodyLarge" />
+
         <TextView
             android:id="@+id/captantan_bar_settings_note"
             android:layout_width="match_parent"

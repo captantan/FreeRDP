@@ -247,11 +247,17 @@ public final class ConnectionPrefs
 	public static final EnumField<PenInput.Mode> PEN_MODE =
 	    new EnumField<>("pen_mode", PenInput.Mode.DEFAULT, PenInput.Mode.values());
 
+	/**
+	 * System-key capture (roadmap 5.2): while the session's window has focus, Android's system
+	 * shortcuts (Meta, Alt+Tab, ...) go to the remote machine. See KeyCaptureController.
+	 */
+	public static final BoolField KEY_CAPTURE = new BoolField("key_capture", true);
+
 	private static final Field<?>[] FIELDS = { GRAPHICS_MODE, REMOTE_SCALE, REMOTE_SCALE_CUSTOM,
 		                                       BAR_MODE,      BAR_EDGE,     BAR_OPACITY,
 		                                       BAR_IN_FULLSCREEN,
 		                                       TOUCH_MODE,    POINTER_SPEED, TOUCH_SCROLL,
-		                                       TOUCH_DRAG,    PEN_MODE };
+		                                       TOUCH_DRAG,    PEN_MODE,     KEY_CAPTURE };
 
 	// ---------------------------------------------------------------------------------------------
 
@@ -342,6 +348,12 @@ public final class ConnectionPrefs
 	public RemoteScale getRemoteScale()
 	{
 		return get(REMOTE_SCALE);
+	}
+
+	/** System-key capture wanted (roadmap 5.2). */
+	public boolean getKeyCapture()
+	{
+		return get(KEY_CAPTURE);
 	}
 
 	public SessionBarSettings.Mode getBarMode()

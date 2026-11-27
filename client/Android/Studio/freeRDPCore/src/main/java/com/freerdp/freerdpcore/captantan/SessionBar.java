@@ -126,6 +126,8 @@ public final class SessionBar
 	private MaterialButton fullScreenButton;
 	private MaterialButton scaleButton;
 	private final RemoteScaleSwitch scales;
+	/** The window's system-key capture (package 5.2), shown by the capture button. */
+	private KeyCaptureController keyCapture;
 
 	private SessionHost host;
 	private SessionBarSettings.Mode mode = SessionBarSettings.DEFAULT_MODE;
@@ -525,6 +527,17 @@ public final class SessionBar
 		final Slider slider = v.findViewById(R.id.captantan_bar_settings_opacity);
 		final TextView note = v.findViewById(R.id.captantan_bar_settings_note);
 		final MaterialSwitch keep = v.findViewById(R.id.captantan_bar_settings_fullscreen);
+		// package 5.2: system-key capture, saved at once (KeyCaptureController)
+		final MaterialSwitch capture = v.findViewById(R.id.captantan_bar_settings_capture);
+		if (keyCapture != null)
+		{
+			capture.setChecked(KeyCaptureController.isSupported() && keyCapture.isWanted());
+			capture.setEnabled(KeyCaptureController.isSupported());
+			capture.setOnCheckedChangeListener(
+			    (b, checked) -> keyCapture.setSaved(checked, "session bar settings"));
+		}
+		else
+			capture.setVisibility(View.GONE);
 
 		modes.check(mode == SessionBarSettings.Mode.DOCKED
 		                ? R.id.captantan_bar_mode_docked
@@ -664,6 +677,36 @@ public final class SessionBar
 		container.addView(bar);
 		bindButtons();
 		showTouchMode(touchMode);
+		showCapture();
+	}
+
+	/** From SessionWindow: the capture button follows this window's controller (package 5.2). */
+	void watchKeyCapture(KeyCaptureController controller)
+	{
+		keyCapture = controller;
+		controller.setListener(c -> showCapture());
+		showCapture();
+	}
+
+	/**
+	 * The capture button shows whether system keys are captured for this session (package 5.2):
+	 * the setting, which applies whenever the window has focus. Disabled where Android has no
+	 * capture (before API 36.1).
+	 */
+	void showCapture()
+	{
+		final View b = (bar != null) ? bar.findViewById(R.id.captantan_bar_capture) : null;
+		if (!(b instanceof MaterialButton) || keyCapture == null)
+			return;
+		final boolean supported = KeyCaptureController.isSupported();
+		final boolean on = supported && keyCapture.isWanted();
+		((MaterialButton)b).setIconResource(on ? R.drawable.captantan_ic_key_capture
+		                                       : R.drawable.captantan_ic_key_capture_off);
+		b.setEnabled(supported);
+		b.setContentDescription(activity.getString(
+		    !supported ? R.string.captantan_bar_capture_unsupported
+		               : on ? R.string.captantan_bar_capture_on : R.string.captantan_bar_capture_off));
+		b.setTooltipText(b.getContentDescription());
 	}
 
 	/** The input mode button shows the touch mode in force (package 4.3, TouchModeSwitch). */
@@ -688,10 +731,10 @@ public final class SessionBar
 		if (scaleButton == null)
 			return;
 		final boolean usable = host != null && host.getBookmark() != null;
-		scaleButton.setEnabled(usable);
+		// package 5.2: the button is the "View" menu, which always has reset zoom
 		scaleButton.setContentDescription(
-		    !usable ? activity.getString(R.string.captantan_bar_scale_link)
-		            : activity.getString(R.string.captantan_bar_scale_now,
+		    !usable ? activity.getString(R.string.captantan_bar_view_link)
+		            : activity.getString(R.string.captantan_bar_view_now,
 		                                 RemoteScale.desktopPercent(
 		                                     activity, host,
 		                                     activity.getResources().getConfiguration().densityDpi)));
@@ -726,11 +769,16 @@ public final class SessionBar
 		// bar after a choice (TouchModeSwitch)
 		bind(R.id.captantan_bar_touch_pointer, "input mode", false,
 		     () -> window.getTouchModes().openMenu(bar.findViewById(R.id.captantan_bar_touch_pointer)));
-		bind(R.id.captantan_bar_zoom_reset, "reset zoom", true,
-		     input::onTouchPointerResetScrollZoom);
-		// package 4.2: the remote scale menu; it hides the bar after a choice (RemoteScaleSwitch)
-		bind(R.id.captantan_bar_scale, "remote scale", false,
-		     () -> scales.openMenu(bar.findViewById(R.id.captantan_bar_scale), host));
+		// package 5.2: system-key capture on or off for this connection (KeyCaptureController)
+		bind(R.id.captantan_bar_capture, "key capture", true, () -> {
+			if (keyCapture != null)
+				keyCapture.setSaved(!keyCapture.isWanted(), "session bar button");
+		});
+		// package 4.2: the remote scale menu, since 5.2 the "View" menu with reset zoom first; it
+		// hides the bar after a choice (RemoteScaleSwitch)
+		bind(R.id.captantan_bar_scale, "view", false,
+		     () -> scales.openMenu(bar.findViewById(R.id.captantan_bar_scale), host,
+		                           input::onTouchPointerResetScrollZoom));
 		bind(R.id.captantan_bar_fullscreen, "full screen", true, this::toggleFullScreen);
 		bind(R.id.captantan_bar_settings, "bar settings", false, this::openSettings);
 		bind(R.id.captantan_bar_disconnect, "disconnect", true, this::confirmDisconnect);

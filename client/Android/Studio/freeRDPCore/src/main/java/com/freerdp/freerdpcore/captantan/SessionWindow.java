@@ -133,6 +133,8 @@ public final class SessionWindow
 	private final TrackpadInput trackpad;
 	private final TouchModeSwitch touchModes;
 	private final PenInput pen;
+	/** System-key capture while the window has focus (package 5.2). */
+	private final KeyCaptureController keyCapture;
 	/** The configuration's night bits the views were built with. */
 	private int night;
 
@@ -185,6 +187,8 @@ public final class SessionWindow
 		this.trackpad = new TrackpadInput(this, sessionView, scrollView, input);
 		this.touchModes = new TouchModeSwitch(this, input, touchPointerView, trackpad);
 		this.pen = new PenInput(this, sessionView, trackpad);
+		this.keyCapture = new KeyCaptureController(this);
+		bar.watchKeyCapture(keyCapture);
 		this.night = activity.getResources().getConfiguration().uiMode &
 		             Configuration.UI_MODE_NIGHT_MASK;
 
@@ -216,6 +220,15 @@ public final class SessionWindow
 	public SessionActivity getActivity()
 	{
 		return activity;
+	}
+
+	/**
+	 * The window's system-key capture (package 5.2): {@link KeyCaptureController#setCapture} for a
+	 * key combination (5.3).
+	 */
+	public KeyCaptureController getKeyCapture()
+	{
+		return keyCapture;
 	}
 
 	/** The window's resize controller: its viewport, and the hooks the activity calls into. */
@@ -454,6 +467,8 @@ public final class SessionWindow
 		touchModes.onShown(target);
 		// And what a stylus is to it (pen input).
 		pen.onShown(target);
+		// And whether system keys are captured for it (package 5.2).
+		keyCapture.onShown(target);
 
 		if (connected)
 			bind();
@@ -523,6 +538,8 @@ public final class SessionWindow
 		sessionView.invalidate();
 		// The session is resized to this window's viewport if it differs (package 3.2).
 		resizer.onBound(host);
+		// System keys go to it while the window has focus (package 5.2).
+		keyCapture.onBound(host);
 	}
 
 	/**
@@ -544,6 +561,8 @@ public final class SessionWindow
 			return;
 		bound = false;
 		resizer.onUnbound();
+		// Android's shortcuts are Android's again before the window lets go (package 5.2).
+		keyCapture.onUnbound(sessionGoesOn ? "session released" : "session ended");
 
 		if (sessionGoesOn)
 		{
@@ -667,6 +686,7 @@ public final class SessionWindow
 	{
 		started = true;
 		resizer.onStart();
+		keyCapture.onStart();
 		if (host != null)
 		{
 			host.setPainting(true);
@@ -680,6 +700,7 @@ public final class SessionWindow
 	{
 		started = false;
 		resizer.onStop();
+		keyCapture.onStop();
 		if (host != null)
 			host.setPainting(false);
 	}
@@ -736,8 +757,10 @@ public final class SessionWindow
 	/** Hook in onWindowFocusChanged(). */
 	public void onFocusChanged(boolean hasFocus)
 	{
-		if (!destroyed)
-			SessionRegistry.setFocus(this, hasFocus);
+		if (destroyed)
+			return;
+		SessionRegistry.setFocus(this, hasFocus);
+		keyCapture.onFocusChanged(hasFocus);
 	}
 
 	/**
@@ -791,6 +814,7 @@ public final class SessionWindow
 		destroyed = true;
 		SessionSwitcher.closeFor(activity);
 		release("window closed");
+		keyCapture.onDestroy();
 		resizer.onDestroy();
 		bar.onDestroy();
 		dropUnstarted();
