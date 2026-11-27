@@ -59,10 +59,16 @@ public final class SessionLauncher
 	/** Boolean extra of a HomeActivity launch: open the search field to start a new connection. */
 	static final String EXTRA_NEW_CONNECTION = "com.freerdp.freerdpcore.captantan.new_connection";
 
-	/** The app-wide setting "Open new connections" (settings_app_ui.xml). */
+	/**
+	 * The app-wide setting "Open new connections" (settings_app_ui.xml). The default is
+	 * {@link #THIS_WINDOW} since package 6.1b (was {@link #NEW_WINDOW_IN_DESKTOP}).
+	 */
 	public enum Placement
 	{
-		/** The session window, which then lets go of the session it showed. */
+		/**
+		 * The session window, which then lets go of the session it showed; that session goes on
+		 * as a tab of the window (package 6.1b; its tab strip shows it in a desktop window).
+		 */
 		THIS_WINDOW("this_window"),
 		/** Always a new window. */
 		NEW_WINDOW("new_window"),
@@ -81,6 +87,12 @@ public final class SessionLauncher
 	/** Key of the setting; must equal @string/captantan_pref_key_new_connection_window. */
 	static final String PREF_KEY = "captantan_new_connection_window";
 
+	/**
+	 * Package 6.1b, app-wide state: true once the old default was moved to the new one
+	 * ({@link #migrateDefault}). Permanent once released.
+	 */
+	static final String PREF_DEFAULT_MOVED = "captantan_new_connection_default_moved";
+
 	private static final String TAG = SessionRegistry.TAG;
 
 	private SessionLauncher()
@@ -94,13 +106,38 @@ public final class SessionLauncher
 	{
 		final SharedPreferences prefs =
 		    PreferenceManager.getDefaultSharedPreferences(context.getApplicationContext());
-		final String stored = prefs.getString(PREF_KEY, Placement.NEW_WINDOW_IN_DESKTOP.stored);
+		final String stored = prefs.getString(PREF_KEY, Placement.THIS_WINDOW.stored);
 		for (Placement p : Placement.values())
 		{
 			if (p.stored.equals(stored))
 				return p;
 		}
-		return Placement.NEW_WINDOW_IN_DESKTOP;
+		return Placement.THIS_WINDOW;
+	}
+
+	/**
+	 * Package 6.1b, once per install, at app start: the default of "Open new connections" moved
+	 * from {@code desktop} to {@code this_window} (one window, sessions as its tabs). The app's
+	 * settings screen stores a setting's default when the app first runs, so a stored
+	 * {@code desktop} cannot be told from a choice: it becomes {@code this_window}. A stored
+	 * {@code this_window} or {@code new_window} was chosen and is kept. Afterwards every value is
+	 * kept, {@code desktop} too.
+	 */
+	public static void migrateDefault(Context context)
+	{
+		final SharedPreferences prefs =
+		    PreferenceManager.getDefaultSharedPreferences(context.getApplicationContext());
+		if (prefs.getBoolean(PREF_DEFAULT_MOVED, false))
+			return;
+		final String was = prefs.getString(PREF_KEY, null);
+		final SharedPreferences.Editor edit = prefs.edit().putBoolean(PREF_DEFAULT_MOVED, true);
+		if (Placement.NEW_WINDOW_IN_DESKTOP.stored.equals(was))
+			edit.putString(PREF_KEY, Placement.THIS_WINDOW.stored);
+		edit.apply();
+		Log.i(TAG, "open new connections: " +
+		               (Placement.NEW_WINDOW_IN_DESKTOP.stored.equals(was)
+		                    ? "desktop -> this_window (the new default, package 6.1b)"
+		                    : "kept " + (was != null ? was : "the default (none stored)")));
 	}
 
 	/**
@@ -205,6 +242,14 @@ public final class SessionLauncher
 			if (bringToFront(live.getWindow(), from.getLocalClassName()))
 				return;
 		}
+		// Package 6.1b: a session that is a tab of a window is shown in that window.
+		final SessionWindow tabOf = (live != null) ? SessionTabs.ownerOf(live) : null;
+		if (tabOf != null && !tabOf.getActivity().isFinishing() &&
+		    bringToFront(tabOf, from.getLocalClassName() + " (" + live + " is its tab)"))
+		{
+			tabOf.switchTo(live, "a launch from " + from.getLocalClassName());
+			return;
+		}
 		if (live != null)
 			intent.putExtra(SessionWindow.EXTRA_SESSION, live.getToken());
 
@@ -215,9 +260,13 @@ public final class SessionLauncher
 		               (newWindow ? "a new window" : "the session window") + " (setting " +
 		               getPlacement(from).stored + ", desktop windowing " +
 		               describeWindowing(from) + ")");
-		// A new desktop window opens where the connection's last one was (package 6.1).
+		// A new desktop window opens where the connection's last one was (package 6.1); the
+		// session window, when none is open, where it was last (6.1b). An open session window
+		// is reached as it is: launch bounds would move it.
 		if (newWindow && isDesktopWindowing(from))
 			options = WindowBounds.forLaunch(from, intent, options);
+		else if (!newWindow && isDesktopWindowing(from) && SessionTabs.getWindows().isEmpty())
+			options = WindowBounds.forTabWindowLaunch(from, options);
 		from.startActivity(intent, options);
 	}
 

@@ -40,7 +40,9 @@ import java.util.Set;
  * the bottom the navigation bar (unless hidden by the setting) and, with "fit rounded corners",
  * the screen's rounded corners;</li>
  * <li>the extra insets of {@link #setReservedInsets}, which the docked session bar (4.1)
- * uses for its strip, also in full screen when it is kept there (4.2).</li>
+ * uses for its strip, also in full screen when it is kept there (4.2);</li>
+ * <li>the session tabs' own row ({@link #setTabStripTop}, 6.1b) in a desktop window without a
+ * caption bar. Tabs in the caption bar take nothing: the content is below the caption bar.</li>
  * </ul>
  * Not subtracted: the on-screen keyboard (IME) and the app's own key bar above it, the floating
  * toolbar, the touch pointer, a system bar shown for a moment by a swipe, dialogs and sheets. Those
@@ -115,6 +117,8 @@ public final class SessionResizeController implements DisplayControl.Listener
 	/** From the activity's insets listener; null until the first insets pass. */
 	private int[] systemInsets;
 	private final int[] reservedInsets = new int[4];
+	/** The session tabs' own row at the top (package 6.1b), in pixels. */
+	private int tabStripTop = 0;
 
 	/** The viewport as last computed, and since when it has been that. */
 	private int viewportWidth;
@@ -219,10 +223,45 @@ public final class SessionResizeController implements DisplayControl.Listener
 		                     now[3]);
 	}
 
-	/** The strip of {@link #setReservedInsets}: left, top, right, bottom in pixels (a copy). */
+	/**
+	 * What the session view is padded by beyond the system insets: the strip of
+	 * {@link #setReservedInsets} plus, at the top, the tab strip's own row
+	 * ({@link #setTabStripTop}). Left, top, right, bottom in pixels (a copy).
+	 */
 	public int[] getReservedInsets()
 	{
+		final int[] all = reservedInsets.clone();
+		all[1] += tabStripTop;
+		return all;
+	}
+
+	/** The session bar's strip alone, as {@link #setReservedInsets} set it (a copy). */
+	int[] getBarReservedInsets()
+	{
 		return reservedInsets.clone();
+	}
+
+	/**
+	 * Package 6.1b: the session tabs' own row at the top of a desktop window that has no caption
+	 * bar to put them in ({@link SessionTabStrip}), in pixels; 0 when the tabs are in the caption
+	 * bar or not shown. Left out of the viewport like the bar's strip; the session bar sits below
+	 * it. True if it changed (the caller then has the insets applied again, so the session view's
+	 * padding follows).
+	 */
+	boolean setTabStripTop(int px)
+	{
+		final int now = Math.max(0, px);
+		if (now == tabStripTop)
+			return false;
+		tabStripTop = now;
+		viewportMaybeChanged("tab strip row " + now + " px");
+		return true;
+	}
+
+	/** {@link #setTabStripTop}'s row, in pixels; 0 when there is none. */
+	int getTabStripTop()
+	{
+		return tabStripTop;
 	}
 
 	/** The viewport's width in pixels as of now, or 0 if the window has not been laid out. */
@@ -240,7 +279,7 @@ public final class SessionResizeController implements DisplayControl.Listener
 		if (root == null || systemInsets == null || root.getHeight() <= 0)
 			return 0;
 		return Math.max(0, root.getHeight() - systemInsets[1] - systemInsets[3] -
-		                       reservedInsets[1] - reservedInsets[3]);
+		                       reservedInsets[1] - reservedInsets[3] - tabStripTop);
 	}
 
 	private void viewportMaybeChanged(String cause)
@@ -371,6 +410,12 @@ public final class SessionResizeController implements DisplayControl.Listener
 	 */
 	void connectWhenSized(SessionHost session, Runnable connect)
 	{
+		// A connect still waiting for the caption bar goes first (package 6.1b: a second connect
+		// in the same window, for a new tab, within the wait must not drop it).
+		if (pendingConnect != null)
+			finishConnect("a desktop window, another connect started in it after " +
+			              (SystemClock.uptimeMillis() - pendingSince) + " ms of waiting for the " +
+			              "caption bar");
 		pendingConnect = connect;
 		pendingSession = session;
 		pendingSince = SystemClock.uptimeMillis();

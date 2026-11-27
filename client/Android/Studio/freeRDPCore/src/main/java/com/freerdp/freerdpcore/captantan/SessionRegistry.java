@@ -79,6 +79,8 @@ public final class SessionRegistry
 	{
 		appContext = application;
 		application.registerActivityLifecycleCallbacks(new VisibilityWatcher());
+		// Package 6.1b: "Open new connections" has a new default.
+		SessionLauncher.migrateDefault(application);
 	}
 
 	// ****************************************************************************

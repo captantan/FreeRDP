@@ -117,6 +117,8 @@ public final class SessionWindow
 	private static final String TAG = SessionRegistry.TAG;
 	/** Saved state: the intent of the session the window showed (SessionLauncher.intentFor). */
 	private static final String STATE_SHOWN = "com.freerdp.freerdpcore.captantan.window.shown";
+	/** Saved state: whether the window was opened as a window of its own (package 6.1b). */
+	private static final String STATE_OWN = "com.freerdp.freerdpcore.captantan.window.own";
 	private static int nextNumber = 1;
 
 	private final String name = "w" + (nextNumber++);
@@ -136,6 +138,15 @@ public final class SessionWindow
 	private final PenInput pen;
 	/** System-key capture while the window has focus (package 5.2). */
 	private final KeyCaptureController keyCapture;
+	/** The session tabs in a desktop window's caption bar (package 6.1b). */
+	private final SessionTabStrip tabStrip;
+	/**
+	 * Package 6.1b: opened as a window of its own (a new window: "Open in new window", the eject,
+	 * or the "Open new connections" setting), not as the session window a plain launch reaches.
+	 * A window of its own remembers its bounds for its connection's bookmark (6.1); the session
+	 * window for the app ({@link WindowBounds#rememberTabWindow}).
+	 */
+	private final boolean ownWindow;
 	/** The configuration's night bits the views were built with. */
 	private int night;
 
@@ -202,11 +213,18 @@ public final class SessionWindow
 		final Intent shown = (savedInstanceState != null)
 		                         ? savedInstanceState.getParcelable(STATE_SHOWN)
 		                         : null;
+		final Intent launch = activity.getIntent();
+		this.ownWindow = (savedInstanceState != null)
+		                     ? savedInstanceState.getBoolean(STATE_OWN, false)
+		                     : launch != null &&
+		                           (launch.getFlags() & Intent.FLAG_ACTIVITY_MULTIPLE_TASK) != 0;
 		if (shown != null)
 			activity.setIntent(shown);
-		Log.i(TAG, "window open: " + name + (shown != null ? " (recreated)" : ""));
-		// Test build of 6.1b, step 1: what the caption bar lets the app do.
-		CaptionProbe.install(activity, name);
+		Log.i(TAG, "window open: " + name + (shown != null ? " (recreated)" : "") +
+		               (ownWindow ? ", a window of its own" : ", the session window"));
+		// Its sessions as tabs (package 6.1b).
+		SessionTabs.opened(this);
+		this.tabStrip = new SessionTabStrip(this);
 
 		// The switcher's button on upstream's floating toolbar (floating_toolbar.xml). The toolbar
 		// already makes it draggable like its other buttons; a tap opens the switcher. Since
@@ -265,6 +283,13 @@ public final class SessionWindow
 	void setOwnFullScreen(boolean on)
 	{
 		ownFullScreen = on;
+		tabStrip.update(on ? "full screen" : "full screen left");
+	}
+
+	/** Whether the window was opened as a window of its own (package 6.1b). */
+	boolean isOwnWindow()
+	{
+		return ownWindow;
 	}
 
 	/** The session this window shows, or null. */
@@ -471,6 +496,9 @@ public final class SessionWindow
 		release("window shows another session");
 
 		host = target;
+		// It is this window's tab from now on (package 6.1b); before attach(), so that a window
+		// that showed it and lets go of it knows it is no longer its tab.
+		SessionTabs.take(target, this, "shown");
 		ports.setSession(target.getState());
 		// The window's intent names what it shows (see the class comment).
 		activity.setIntent(SessionLauncher.intentFor(activity, target));
@@ -499,6 +527,7 @@ public final class SessionWindow
 			bind();
 
 		SessionRegistry.focusedSessionChanged(this);
+		tabStrip.update("shown");
 	}
 
 	/**
@@ -516,22 +545,62 @@ public final class SessionWindow
 		activity.finish();
 	}
 
-	/** The session is being shown in another window. */
+	/**
+	 * The session is being shown in another window. The window closes; in a desktop window with
+	 * other tabs it shows the next one instead (package 6.1b: the eject).
+	 */
 	void lose(String reason)
 	{
-		release(reason);
-		if (!destroyed)
-			activity.finish();
+		final SessionHost was = host;
+		// The session goes with its own bounds; this window's are not its any more.
+		release(reason, false);
+		if (destroyed)
+			return;
+		if (showNextTab(was, reason))
+			return;
+		activity.finish();
+	}
+
+	/**
+	 * Package 6.1b: a desktop window whose shown session left it (ejected, ended) shows its next
+	 * tab, as a browser does, instead of closing. False if it has none, or is not a desktop
+	 * window (then it closes, as before).
+	 */
+	private boolean showNextTab(SessionHost gone, String why)
+	{
+		if (destroyed || activity.isFinishing() || !SessionLauncher.isDesktopWindowing(activity))
+			return false;
+		final SessionHost next = SessionTabs.neighbour(this, gone);
+		if (next == null)
+			return false;
+		Log.i(TAG, "tabs: " + name + " shows its tab " + next + " (" + gone + ": " + why +
+		               "; not closing)");
+		// Posted: this runs inside another window's attach or the session's last callback.
+		sessionView.post(() -> {
+			if (destroyed || host != null)
+				return;
+			if (next.isLive() && !next.isEnding())
+				show(next);
+			else if (!showNextTab(next, "gone too"))
+				activity.finish();
+		});
+		return true;
 	}
 
 	/** Detach: the window shows no session afterwards. The session is not touched. */
 	private void release(String reason)
 	{
+		release(reason, true);
+	}
+
+	private void release(String reason, boolean rememberBounds)
+	{
 		final SessionHost was = host;
 		if (was == null)
 			return;
-		// Its connection's next window opens where this one is now (package 6.1).
-		if (!destroyed)
+		// Its connection's next window opens where this one is now (package 6.1): a window of
+		// its own only (6.1b); the session window's bounds are the app's (onStop).
+		if (!destroyed && rememberBounds && ownWindow)
 			WindowBounds.remember(activity, was, name, reason);
 		unbind(true);
 		host = null;
@@ -732,6 +801,23 @@ public final class SessionWindow
 	{
 		if (from != host)
 			return;
+		// Package 6.1b: a desktop window with other tabs shows the next one instead of closing.
+		if (SessionLauncher.isDesktopWindowing(activity) &&
+		    SessionTabs.neighbour(this, from) != null)
+		{
+			// What upstream's handlers would say, without closing the window.
+			if (failed && !quiet)
+				toast(activity.getText(R.string.error_connection_failure));
+			unbind(false);
+			host = null;
+			bar.onReleased();
+			touchModes.onReleased();
+			ports.setSession(null);
+			from.detach(this, "session ended");
+			titleChanged();
+			showNextTab(from, failed ? "its session failed or was ended" : "its session ended");
+			return;
+		}
 		// Upstream's handlers read the activity's session field, so they run before it is cleared.
 		if (failed)
 			ports.failed(quiet);
@@ -766,8 +852,12 @@ public final class SessionWindow
 	public void onStop()
 	{
 		started = false;
-		// Closed, minimised or hidden: its connection's next window opens here (package 6.1).
-		WindowBounds.remember(activity, host, name, "window stopped");
+		// Closed, minimised or hidden: its connection's next window opens here (package 6.1), or,
+		// for the session window, the next session window (6.1b).
+		if (ownWindow)
+			WindowBounds.remember(activity, host, name, "window stopped");
+		else
+			WindowBounds.rememberTabWindow(activity, name, "window stopped");
 		resizer.onStop();
 		keyCapture.onStop();
 		if (host != null)
@@ -782,6 +872,7 @@ public final class SessionWindow
 	{
 		if (host != null && host.isLive())
 			outState.putParcelable(STATE_SHOWN, SessionLauncher.intentFor(activity, host));
+		outState.putBoolean(STATE_OWN, ownWindow);
 	}
 
 	/**
@@ -795,6 +886,7 @@ public final class SessionWindow
 	public void onConfigurationChanged(Configuration newConfig)
 	{
 		resizer.onConfigurationChanged(newConfig);
+		tabStrip.onConfigurationChanged();
 		final int nightNow = newConfig.uiMode & Configuration.UI_MODE_NIGHT_MASK;
 		if (nightNow != night && !destroyed)
 		{
@@ -818,6 +910,7 @@ public final class SessionWindow
 			((ExtendedKeyboardView)keyboard).rebuild(); // captantan fork method
 		touchPointerView.rebuild();                    // captantan fork method
 		bar.rebuild();
+		tabStrip.rebuild();
 		if (host != null && bound)
 			host.replayPointer(activity);
 		Log.i(TAG, "ui mode changed in " + name + ": key bar, touch pointer and session bar rebuilt");
@@ -829,6 +922,8 @@ public final class SessionWindow
 		if (destroyed)
 			return;
 		SessionRegistry.setFocus(this, hasFocus);
+		if (hasFocus)
+			SessionTabs.focused(this);
 		keyCapture.onFocusChanged(hasFocus);
 	}
 
@@ -866,7 +961,10 @@ public final class SessionWindow
 	/** The Back question, with a warning when leaving the session leaves a microphone or camera on. */
 	private CharSequence backMessage(SessionHost session)
 	{
-		final String question = activity.getString(R.string.captantan_back_message);
+		String question = activity.getString(R.string.captantan_back_message);
+		// Package 6.1b: "Leave running" closes the window with all its tabs.
+		if (SessionLauncher.isDesktopWindowing(activity) && SessionTabs.tabsOf(this).size() > 1)
+			question += "\n\n" + activity.getString(R.string.captantan_back_other_tabs);
 		if (!session.redirectsMicrophoneOrCamera())
 			return question;
 		return question + "\n\n" + activity.getString(R.string.captantan_back_capture_note);
@@ -883,6 +981,9 @@ public final class SessionWindow
 		destroyed = true;
 		SessionSwitcher.closeFor(activity);
 		release("window closed");
+		// Its other tabs go to the session window used last (package 6.1b).
+		SessionTabs.closed(this);
+		tabStrip.onDestroy();
 		keyCapture.onDestroy();
 		resizer.onDestroy();
 		bar.onDestroy();

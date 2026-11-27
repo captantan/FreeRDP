@@ -1033,7 +1033,7 @@ public final class SessionBar
 	private void reserve(int left, int top, int right, int bottom)
 	{
 		final SessionResizeController resizer = window.getResizer();
-		final int[] was = resizer.getReservedInsets();
+		final int[] was = resizer.getBarReservedInsets();
 		if (was[0] == left && was[1] == top && was[2] == right && was[3] == bottom)
 			return;
 		resizer.setReservedInsets(left, top, right, bottom);
@@ -1083,7 +1083,9 @@ public final class SessionBar
 			keys.getLocationInWindow(k);
 			bottom = Math.max(bottom, ct + ch - k[1]);
 		}
-		safe.set(Math.max(0, sys.left - cl), Math.max(0, sys.top - ct),
+		// package 6.1b: the session tabs' own row, where a desktop window has no caption bar
+		final int tabRow = window.getResizer().getTabStripTop();
+		safe.set(Math.max(0, sys.left - cl), Math.max(0, sys.top - ct) + tabRow,
 		         Math.max(0, sys.right - cr), bottom);
 		if (docked && edge == SessionBarSettings.Edge.TOP)
 			keepClearOfTopCorners(cl, ct, cw);
@@ -1213,7 +1215,9 @@ public final class SessionBar
 					// Status Bar" on below the cutout too. The strip reaches down to the bar's
 					// bottom, so the bar never covers the picture.
 					final int padded = window.getResizer().getSystemInsets()[1];
-					reserve(0, thick + Math.max(0, container.getTop() + safe.top - padded), 0, 0);
+					// (the tab row of 6.1b is left out of the viewport by the controller itself)
+					reserve(0, thick + Math.max(0, container.getTop() + safe.top - tabRow - padded),
+					        0, 0);
 					break;
 				}
 			}

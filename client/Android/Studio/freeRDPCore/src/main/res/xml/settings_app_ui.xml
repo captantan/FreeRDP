@@ -7,10 +7,11 @@
         android:entryValues="@array/pref_theme_values"
         android:key="@string/pref_key_theme"
         android:title="@string/pref_title_theme" />
-    <!-- captantan fork: where a new connection opens (roadmap 2.2, captantan/SessionLauncher) -->
+    <!-- captantan fork: where a new connection opens (roadmap 2.2, captantan/SessionLauncher; default
+         this_window since 6.1b) -->
     <ListPreference
         xmlns:app="http://schemas.android.com/apk/res-auto"
-        android:defaultValue="desktop"
+        android:defaultValue="this_window"
         android:entries="@array/captantan_new_connection_entries"
         android:entryValues="@array/captantan_new_connection_values"
         android:key="@string/captantan_pref_key_new_connection_window"
