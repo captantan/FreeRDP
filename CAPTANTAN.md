@@ -2151,6 +2151,158 @@ Alt+Tab, Ctrl+Esc, Alt+F4, ...) go to the remote machine as real key down and ke
   (above) never reaches the app either. Keys that arrive go to `PhysicalKeyboard` and so to the remote,
   unless a key combination takes them first.
 
+**Window behaviour** (package 6.1)
+
+Session windows behave as desktop windows: each is labelled with its connection, connects at the size it
+really gets, comes back where it was, and has a full screen of its own. Session tabs in the caption bar
+and a one-window default are the next package, not this one.
+
+- **Window titles.** `SessionWindow` sets the task's label (`Activity.setTaskDescription`, a label
+  only) to the title of the session the window shows, and back to none (the app's name) when it shows
+  none; a switch sets it once (posted). `dumpsys activity activities` shows it per task
+  (`taskDescription: label="..."`). **On the tablet the system does not show it:** its caption bar,
+  taskbar and Recents all say the app's name ("RDP debug" for the test build), measured. It is kept
+  because it costs nothing and other launchers and Recents implementations read it; showing the
+  connection in the caption bar is for the tabs package (drawing in the caption area).
+- **The connect size in a desktop window.** A desktop window gets its caption bar after its first
+  layout (3.3), and the size of a new connection was taken at that first layout. Now
+  `SessionWindow.start` hands the connect to `SessionResizeController.connectWhenSized`: in a desktop
+  window whose caption bar is not there yet the connect waits for it, at most `CAPTION_WAIT_MS` =
+  300 ms (then it goes on, so a connect never hangs on insets that do not come), and the size is taken
+  again right before connecting in every case (which also covers a permission question that came in
+  between). Outside desktop windowing nothing waits. Chosen over subtracting a caption height because
+  it needs no edit to `SessionActivity` at all (`connectWithTitle`'s body is already
+  `window.start`) and needs no guess at a height that is only known once it arrives.
+  - **How the caption bar arrives on the tablet:** not as a caption bar inset. Android lays the
+    content out below it, so the root view is shorter than the window (1201 then 1131 px, 70 px, two
+    to twenty ms later). The controller counts both: the caption bar inset
+    (`WindowInsets.Type.captionBar()`, Android's documented way) and a root view shorter than the
+    window's bounds.
+- **Window bounds.** `captantan/WindowBounds.java` (new). Per saved bookmark, the state value
+  `window_bounds` in `ConnectionPrefs` (see the table): written when a desktop window that shows the
+  bookmark's session stops (closed, minimised, hidden) or lets go of it (a switch, "Leave running"),
+  only if it changed; used as launch bounds (`ActivityOptions.setLaunchBounds`) when a new window opens
+  from a desktop window or from the list in desktop windowing (`SessionLauncher.launch` and
+  `openInNewWindow`). Not stored: a window outside desktop windowing, a window that covers the whole
+  display (maximised or full screen; the bounds from before are kept, so the next window opens at its
+  normal size), quick connects and links (no bookmark: the system places them), below API 30.
+  Ignored, with the reason in the log: another display size or density (another display, a rotation,
+  a changed display size), a size above the display or below the minimum; a window that fits but lies
+  partly off the display is moved onto it. A launch display chosen in upstream's display picker is
+  kept in the same `ActivityOptions`.
+- **Default and minimum size**: a `<layout>` element on `SessionActivity` (core manifest):
+  `defaultWidth` 60 %, `defaultHeight` 75 %, centred; `minWidth` / `minHeight` from
+  `captantan_window_min_width` / `_height` (280 x 240 dp: the bar's eight buttons at their 32 dp floor
+  need 268 dp). The minimum is in force on the tablet (`dumpsys` shows `minWidth=490 minHeight=420` px
+  at 280 dpi) and also applies to split screen. **The default is not:** a new window first gets it
+  (1776x1240 px, centred) and Android's desktop windowing then moves and resizes it to its own choice
+  (1601x1201 px, cascaded) before the first layout. Launch bounds are honoured as given.
+  "Open beside" (`LAUNCH_ADJACENT`) is ignored in desktop windowing, as before: a second window
+  without remembered bounds is cascaded by the system.
+- **Full screen in a desktop window is the window's own** (`captantan/FullScreen.java`, new; the
+  owner's choice on 2026-11-26). Outside desktop windowing full screen is upstream's two app-wide
+  settings as before (4.1). In a desktop window the app-wide settings are ignored (a desktop window
+  opens out of full screen), and the button and Back hide or show that window's session bar and system
+  bars only; the other windows are not touched. The window keeps its bounds. To cover the whole
+  display, maximise it with the caption bar's button (on the tablet a maximised window takes the
+  whole display and hides its caption), then full screen hides the bar too.
+  - **What the "7 s caption-less state" of the 4.1 run was:** not reproduced in this package.
+    Hiding the system bars leaves a desktop window at its bounds with its caption bar; the
+    whole-display, caption-less window is the tablet's own maximise (seen twice in the first run,
+    without the app's button). The likely reading of 4.1's observation is a maximised window.
+  - **Tried and removed:** `Activity.requestFullscreenMode` (API 34). On the tablet it takes the
+    window out of desktop windowing into the tablet's full-screen mode, and the request to leave is
+    refused ("Fullscreen request denied by system policy"), so the window cannot go back; the owner
+    had to close it and open it again.
+- **Returning to an open session.** A tap on a bookmark whose session a window shows already brought
+  that window to the front (2.2, `SessionLauncher.launch`), and one whose session no window shows
+  opened it in a window without connecting again. The gap was upstream's display picker
+  (`ExternalDisplayManager`), which asked which display to use before that, whenever an external
+  display is connected: it now brings the window to the front first. A second connection of the same
+  bookmark is never offered: both hosts give one desktop per user, so a second session would take the
+  first one's desktop.
+- **The system's "New window"** (`android.window.PROPERTY_SUPPORTS_MULTI_INSTANCE_SYSTEM_UI`): not
+  declared, and not tried on the tablet. The system offers "New window" by starting the app again
+  in a new task. The app's session windows are already separate tasks, one per session, made on
+  purpose; a second, empty session window has nothing to show (it closes), and one started from a
+  session window's own intent would name that window's live session and take it from the old
+  window, which closes (a move, not a new window). On the connection list it would give a second
+  list. "New connection" in the switcher and the list
+  already open new windows. Samsung's legacy keep-alive meta-data: not added, no device run showed a
+  need (the session window handles density and size changes itself since 3.2 and was never
+  relaunched).
+- **Stored state** (`ConnectionPrefs`, new; per bookmark; permanent once released):
+
+  | Key | Format | Notes |
+  |---|---|---|
+  | `window_bounds` | `1;<left>,<top>,<right>,<bottom>;<w>x<h>;<dpi>` | format version, window bounds in display pixels (caption bar included), the display's size in pixels and density they were taken on |
+
+  It is state, not a setting: kept under the bookmark's prefix with `ConnectionPrefs.getState` /
+  `putState`, never on the options screen, kept by `saveAs` (an options save does not drop it), and
+  removed by `forget` with the rest when the bookmark is deleted. A new state key goes into
+  `ConnectionPrefs.STATE_KEYS`. A later format uses another version and ignores this one.
+- **Log** (INFO):
+  - `captantan.session`: `window title: w<n> "<title>" (s<n> ...), task <id>` or `... the app's name
+    (no session)`; `window bounds stored: ...`, `window bounds not stored: ... covers the whole
+    display ...`, `window bounds used for bookmark <id>: WxH at x,y[ (stored ..., moved onto the
+    display)], display <id>`, `window bounds ignored for bookmark <id>: <why>`, `window bounds: none
+    stored ...`; `bring to front: ... (s<n> ... is open there)` for a tap on an open session's
+    bookmark.
+  - `captantan.resize`: `connect <s> waits for the caption bar of desktop window w<n> (...)`, then
+    `connect size <s>: WxH from w<n> (viewport ...; as first taken | first taken at WxH; <why>)` where
+    why is `not a desktop window`, `a desktop window, caption bar N px already in the insets`, `...
+    arrived N ms after the first size`, `... no caption bar after 300 ms`, or the window closing during
+    the wait; the window's bounds now end the `window` and `configuration` lines (`bounds WxH at x,y`).
+  - `captantan.bar`: `full screen on|off in w<n> (<cause>; this desktop window only, ...)` or
+    `(...; Hide Status Bar and Hide Navigation Bar, app-wide)`.
+- **Upstream files edited** (each marked `captantan fork`):
+  - `SessionActivity.java`: in `hideSystemBars` and in `onWindowInsetsChanged`, the two lines that
+    read Hide Status Bar and Hide Navigation Bar read `FullScreen.hideStatusBar(this, window)` and
+    `FullScreen.hideNavigationBar(this, window)` (and one import). **Merging:** wherever upstream reads
+    those two settings in the session activity, read them through `FullScreen` (`window` may be null
+    in `onCreate`). Nothing else in `SessionActivity` changed: the connect wait hangs off
+    `window.start`.
+  - `freeRDPCore/src/main/AndroidManifest.xml`: the `<layout>` element in `SessionActivity`.
+    **Merging:** keep it inside the activity; if upstream adds its own `<layout>`, keep one, with our
+    minimum.
+  - `ExternalDisplayManager.java`: two lines at the top of `launchSessionWithDisplayPicker`
+    (`SessionLauncher.bringToFrontIfShown`). **Merging:** keep them before any display question.
+- Ours, changed: `SessionWindow` (title, bounds at stop and release, the connect hook, the window's own
+  full screen), `SessionResizeController` (`connectWhenSized`, the caption check, bounds in the log),
+  `SessionLauncher` (launch bounds, `bringToFrontIfShown`), `SessionBar` (full screen through
+  `FullScreen`), `ConnectionPrefs` (state keys), `captantan_dimens.xml`, the compile check.
+- **Device runs** (2026-11-26, three test builds of this package; the table is in the pull request).
+  Tablet (API 37, 280 dpi, desktop windowing), GNOME and Windows hosts; tags `captantan.*` and
+  `dumpsys activity activities`:
+  - **Two windows side by side:** two session tasks, each with its own bounds; resizing one resized
+    only its own session (one request each); key capture followed focus. Titles: set per task
+    (`dumpsys`), not shown by the tablet's caption bar, taskbar or Recents (see above).
+  - **New connections in a desktop window** (five): before the fix the caption bar was not seen and
+    each connect waited the full 300 ms, still at the right size; after it, the caption bar arrived 16
+    and 20 ms after the first size, and each connection came up at its final viewport (2054x1404,
+    1470x1404) with its first request skipped as `CURRENT_SIZE`: no resize and no reconnect after
+    connecting.
+  - **Bounds:** a closed window came back at its bounds; one that had been dragged partly off the left
+    edge came back moved onto the display; after a switch, the window's bounds went to the session it
+    had shown and the next window of the other bookmark opened at the switched window's bounds; a
+    maximised window stored nothing and the bounds before it were used next. "Open in new window"
+    from the switcher used the bookmark's bounds too. The minimum size was in force.
+  - **Full screen:** with hiding the bars alone, only the bar went away (first build); with
+    `requestFullscreenMode` the window left desktop windowing for good (second build, removed); in the
+    third build, by the owner's word (the log was lost to a wireless adb drop): full screen hid only
+    that window's bar, in a normal and in a maximised window, the window stayed in desktop windowing,
+    the button and Back left it, and the other window did not change.
+  - **A tap on an open session's bookmark** brought its window to the front (`bring to front: ...
+    is open there`).
+  - **The tablet's full window** (outside desktop windowing): connect, the bar, full screen and Back
+    as in release `.8` (owner's word, third build).
+  - Phone (API 37, 390 dpi, third build), GNOME host: connect in the one session window ("not a
+    desktop window"), at the size below the docked bar (1080x2029; before, the first size was taken
+    before the bar's strip, 1080x2146); the bar's buttons; app-wide full screen on with the button
+    and off with Back, one request each way. As in `.8`.
+  - **Not run:** an external display (none at hand; package 6.2), the system's "New window" (not
+    declared), a desktop window below API 34, DeX.
+
 ## Package and version scheme
 
 - `versionName = <upstream release>-captantan.<R>`, for example `3.33.1-captantan.1`.
