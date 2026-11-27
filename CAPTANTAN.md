@@ -1839,7 +1839,21 @@ screen, and a button that changes the remote scale (3.3) during a session.
   enabled for docked), `TouchModeSwitch.java` (a comment), `res/layout/captantan_session_bar{,_settings}.xml`,
   `res/xml/captantan_connection_options.xml`, `captantan_strings.xml` (the remote scale and bar notes say
   what the new controls do).
-- **Device runs:** not run yet.
+- **Device runs** (2026-11-26; the table is in PR #27), the phone (inner and cover screens), GNOME host:
+  - **Kept in full screen:** one layout request per change, whether full screen is entered or left,
+    the switch is flipped in full screen, the phone is folded or unfolded, or it is rotated. Switching
+    it on outside full screen sent nothing.
+    - Strips: 277 px in portrait (the bar plus the cutout) and 117 px in inner-screen landscape, with the
+      buttons 85 px clear of both rounded corners. On the cover screen in landscape the buttons kept
+      clear of the cutout on the left.
+    - The buttons stayed at 44 dp on the cover screen in portrait (all eight fit).
+    - Back left full screen. A swipe-in of the system bars over the bar caused no resize; they went
+      away after 5 s.
+  - **Option off:** full screen with the bar hidden as before (one request, the whole screen).
+  - **Remote scale:** 125 %, 300 % and 175 % were each one request with the same size and the new scale,
+    applied without a reconnect, and the bookmark editor showed the last choice.
+  - **Still working:** overlay mode, trackpad mode, the input mode menu.
+  - **Not run:** the tablet, the Windows host, "Automatic" chosen from the menu.
 - **For later packages.**
   - **A bar button with a menu:** copy `RemoteScaleSwitch` or `TouchModeSwitch` (a `PopupMenu`
     anchored on the button, closed by the bar in `onShown`/`onReleased`/`rebuild`/`onDestroy`, the
