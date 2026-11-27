@@ -1839,7 +1839,7 @@ screen, and a button that changes the remote scale (3.3) during a session.
   enabled for docked), `TouchModeSwitch.java` (a comment), `res/layout/captantan_session_bar{,_settings}.xml`,
   `res/xml/captantan_connection_options.xml`, `captantan_strings.xml` (the remote scale and bar notes say
   what the new controls do).
-- **Device runs** (2026-11-26; the table is in PR #27), the phone (inner and cover screens), GNOME host:
+- **Device runs** (2026-11-26; the table is in PR #27). On the phone (inner and cover screens), GNOME host:
   - **Kept in full screen:** one layout request per change, whether full screen is entered or left,
     the switch is flipped in full screen, the phone is folded or unfolded, or it is rotated. Switching
     it on outside full screen sent nothing.
@@ -1853,7 +1853,16 @@ screen, and a button that changes the remote scale (3.3) during a session.
   - **Remote scale:** 125 %, 300 % and 175 % were each one request with the same size and the new scale,
     applied without a reconnect, and the bookmark editor showed the last choice.
   - **Still working:** overlay mode, trackpad mode, the input mode menu.
-  - **Not run:** the tablet, the Windows host, "Automatic" chosen from the menu.
+
+  On the tablet, GNOME and Windows hosts:
+  - **Kept in full screen:** a 114 px strip (the bar plus the 29 px cutout), one request per change on
+    both hosts. That covered the switch and the mode flipped in full screen and outside it, and a new
+    window for a session that already had the size (skipped as the last layout sent).
+  - **Option off and overlay mode:** as before.
+  - **Remote scale:** "Automatic" gave 125 % at 280 dpi; then 300 % and 175 %, each without a reconnect.
+  - **Reported after the log stopped (no log):** the scale menu on the Windows host, trackpad mode,
+    the input mode menu and a reconnect.
+  - **Not run:** Android's own touchpad settings together with the scale menu.
 - **For later packages.**
   - **A bar button with a menu:** copy `RemoteScaleSwitch` or `TouchModeSwitch` (a `PopupMenu`
     anchored on the button, closed by the bar in `onShown`/`onReleased`/`rebuild`/`onDestroy`, the
