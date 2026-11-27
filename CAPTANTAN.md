@@ -1876,8 +1876,8 @@ pen can be sent to the host as a pen.
   - The build with the behaviour: on the Windows host hover, tap, strokes with pressure in a drawing
     application, the side button, in each touch mode, in a full window and a desktop window, and both
     values of `pen_mode`; on the GNOME host hover, tap, the quick drag that scrolls, the held drag and the
-    side button's right click. Fingers, the keyboard cover's touchpad and a mouse were rechecked with the
-    channel loaded: as before, and Windows showed no touch feedback. All of it was reported as working.
+    side button's right click. Fingers and the keyboard cover's touchpad were rechecked with the channel
+    loaded: as before, and Windows showed no touch feedback. All of it was reported as working.
     The log of the first part of the run agrees (pen registered, about 25 strokes with pressure up to 814
     of 1024, none cancelled; drag scrolls on the GNOME host; the path following a switch of sessions in
     one window).
