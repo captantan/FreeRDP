@@ -823,6 +823,7 @@ public final class SessionBar
 			Log.i(TAG, "full screen " + (full ? "on" : "off") + " in " + window.getName() + " (" +
 			               cause + "; this desktop window only, the others and the app-wide " +
 			               "settings unchanged)");
+			FullScreen.requestSystem(activity, window, full);
 		}
 		else
 		{

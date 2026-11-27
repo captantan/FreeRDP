@@ -36,7 +36,9 @@ import com.freerdp.freerdpcore.presentation.SessionActivity;
  * written when a desktop window that shows the bookmark's session stops (closed, minimised, hidden
  * behind another app) and when it lets go of the session (a switch, "Leave running"), and only if
  * it changed. Not stored: a window outside desktop windowing (full screen, split screen), a window
- * that covers the whole display (full screen in a desktop window), a quick connect or a
+ * that covers the whole display (maximised by the system's caption button, which on the tablet
+ * takes the whole display and hides the caption, or in full screen: the bounds from before stay,
+ * so the next window opens at its normal size), a quick connect or a
  * {@code freerdp://} link (no bookmark; they open where the system puts them), and below API 30
  * (no window metrics).
  *
@@ -88,7 +90,7 @@ public final class WindowBounds
 		{
 			Log.i(TAG, "window bounds not stored: " + windowName + " " + host + " covers the whole " +
 			               "display " + display.width() + "x" + display.height() +
-			               " (full screen) (" + why + ")");
+			               " (maximised or full screen; the bounds before are kept) (" + why + ")");
 			return;
 		}
 		final int dpi = activity.getResources().getConfiguration().densityDpi;

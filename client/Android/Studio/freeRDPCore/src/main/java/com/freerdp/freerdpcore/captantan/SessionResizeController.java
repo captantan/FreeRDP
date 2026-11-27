@@ -200,16 +200,6 @@ public final class SessionResizeController implements DisplayControl.Listener
 			return;
 		systemInsets = now;
 		viewportMaybeChanged("insets " + left + "/" + top + "/" + right + "/" + bottom);
-		// A connect waiting for the caption bar goes on once it is here (posted: this runs in
-		// the insets pass, and the viewport then has its final size).
-		if (pendingConnect != null)
-			handler.post(() -> {
-				final int caption = captionTop();
-				if (pendingConnect != null && caption > 0)
-					finishConnect("a desktop window, caption bar " + caption + " px arrived " +
-					              (SystemClock.uptimeMillis() - pendingSince) +
-					              " ms after the first size");
-			});
 	}
 
 	/**
@@ -263,6 +253,10 @@ public final class SessionResizeController implements DisplayControl.Listener
 		               viewportHeight + ", " + cause + ")");
 		viewportWidth = w;
 		viewportHeight = h;
+		// A connect waiting for the caption bar goes on once it is there (posted: this runs in
+		// a layout or insets pass, and the viewport then has its final size).
+		if (pendingConnect != null)
+			handler.post(this::checkCaption);
 		// The picture is centred again in the new space (upstream's ScrollView2D keeps the old
 		// top while the picture's height stays, which is right for the keyboard only). Posted:
 		// this runs inside the root's layout pass.
@@ -436,13 +430,29 @@ public final class SessionResizeController implements DisplayControl.Listener
 		connect.run();
 	}
 
-	/** The caption bar inset at the top of the window now, in pixels (0 below API 30). */
+	private void checkCaption()
+	{
+		final int caption = captionTop();
+		if (pendingConnect != null && caption > 0)
+			finishConnect("a desktop window, caption bar " + caption + " px arrived " +
+			              (SystemClock.uptimeMillis() - pendingSince) + " ms after the first size");
+	}
+
+	/**
+	 * The caption bar at the top of a desktop window now, in pixels (0 below API 30). Android
+	 * gives it in one of two ways: as a caption bar inset over the content (Android's own desktop
+	 * windowing, documented), or by laying the content out below it, so that the root view is
+	 * shorter than the window (the tablet, measured: 1201 then 1131 px, no inset). Both count.
+	 */
 	private int captionTop()
 	{
 		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || root == null)
 			return 0;
 		final WindowInsets in = root.getRootWindowInsets();
-		return (in != null) ? in.getInsets(WindowInsets.Type.captionBar()).top : 0;
+		final int inset = (in != null) ? in.getInsets(WindowInsets.Type.captionBar()).top : 0;
+		final int window = activity.getWindowManager().getCurrentWindowMetrics().getBounds().height();
+		final int above = (root.getHeight() > 0) ? Math.max(0, window - root.getHeight()) : 0;
+		return Math.max(inset, above);
 	}
 
 	static int validWidth(int w)

@@ -391,7 +391,7 @@ jobs:
           for r in dimen/captantan_window_min_width dimen/captantan_window_min_height; do
             grep -qF "$r" "$RUNNER_TEMP/resources.txt" || fail "the APK lacks the resource $r"
           done
-          for k in window_bounds setLaunchBounds setTaskDescription android:activity.launchDisplayId 'window title: ' 'window bounds stored: ' 'window bounds used for bookmark ' 'window bounds ignored for bookmark ' 'waits for the caption bar' 'connect size ' bringToFrontIfShown 'this desktop window only'; do
+          for k in window_bounds setLaunchBounds setTaskDescription android:activity.launchDisplayId 'window title: ' 'window bounds stored: ' 'window bounds used for bookmark ' 'window bounds ignored for bookmark ' 'waits for the caption bar' 'connect size ' bringToFrontIfShown 'this desktop window only' requestFullscreenMode 'system full screen '; do
             grep -qaF -- "$k" "$RUNNER_TEMP/classes.dex.all" || fail "the APK lacks the string '$k' of window behaviour (6.1)"
           done
           echo "window behaviour: bounds class and key, manifest layout, minimum size, title, caption wait and log strings present"
