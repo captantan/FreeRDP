@@ -435,9 +435,9 @@ is shown in at most one window.
   carries the session's token (`SessionWindow.EXTRA_SESSION`) and its connection reference or link
   (`intentFor`).
 - **The setting** "Open new connections" (Settings, User interface; key `captantan_new_connection_window`):
-  "In a new window in desktop windowing, else in the session window" (`desktop`, the default), "In the
-  session window" (`this_window`), "In a new window" (`new_window`). So a phone gets one window that
-  switches. **Desktop windowing** is detected per launch from the launching activity: Android's desktop
+  "In a new window in desktop windowing, else in the session window" (`desktop`, the default until
+  6.1b), "In the session window" (`this_window`, the default since 6.1b, see "Session tabs"), "In a new
+  window" (`new_window`). So a phone gets one window that switches. **Desktop windowing** is detected per launch from the launching activity: Android's desktop
   windowing and DeX run apps in freeform windows (also when maximised), which the activity's
   configuration prints as `mWindowingMode=freeform` (Android has no public call for it); older DeX also
   has `Configuration.semDesktopModeEnabled`, read by reflection where it exists. Split screen is not

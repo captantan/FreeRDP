@@ -410,11 +410,12 @@ jobs:
             grep -qaF -- "$k" "$RUNNER_TEMP/classes.dex.all" || fail "the APK lacks the string '$k' of session tabs (6.1b)"
           done
           # (the release build shortens resource paths: the file's path comes from the resource table)
-          ui=$(grep -A2 -E 'xml/settings_app_ui( |$)' "$RUNNER_TEMP/resources.txt" | sed -n 's/.*(file) \(res\/[^ ]*\).*/\1/p' | head -1)
+          ui=$( { grep -A2 -E 'xml/settings_app_ui( |$)' "$RUNNER_TEMP/resources.txt" || true; } | sed -n 's/.*(file) \(res\/[^ ]*\).*/\1/p' | sed -n 1p)
           [ -n "$ui" ] || ui=res/xml/settings_app_ui.xml
+          echo "settings_app_ui.xml is $ui in the release APK"
           if [ "$(basename "$AAPT")" = aapt ]; then "$AAPT" dump xmltree "$REL" "$ui" > "$RUNNER_TEMP/settings-ui.txt"
           else "$AAPT" dump xmltree --file "$ui" "$REL" > "$RUNNER_TEMP/settings-ui.txt"; fi
-          grep -A1 -F 'defaultValue' "$RUNNER_TEMP/settings-ui.txt" | grep -qF '"this_window"' || fail "the default of Open new connections is not this_window"
+          grep -qE 'defaultValue[^=]*="this_window"' "$RUNNER_TEMP/settings-ui.txt" || fail "the default of Open new connections is not this_window"
           echo "session tabs: model, strip, caption calls, icons, strings, state keys, the new default and log strings present"
 
           echo "== preview badging"
