@@ -166,6 +166,8 @@ public final class SessionWindow
 	private boolean destroyed = false;
 	private AlertDialog backDialog;
 	private SessionState blank;
+	/** This window's own full screen, in a desktop window (package 6.1, {@link FullScreen}). */
+	private boolean ownFullScreen = false;
 	/** The task's label as last set (package 6.1); null is the app's name. */
 	private String title;
 	private boolean titlePending = false;
@@ -249,6 +251,18 @@ public final class SessionWindow
 	public SessionBar getBar()
 	{
 		return bar;
+	}
+
+	/** Whether the window is in its own full screen (a desktop window's, package 6.1). */
+	public boolean isOwnFullScreen()
+	{
+		return ownFullScreen;
+	}
+
+	/** Sets the window's own full screen; the caller then applies it (SessionBar). */
+	void setOwnFullScreen(boolean on)
+	{
+		ownFullScreen = on;
 	}
 
 	/** The session this window shows, or null. */
