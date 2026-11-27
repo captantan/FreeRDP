@@ -104,10 +104,14 @@ import java.util.Map;
  * <p><b>Colours and shape.</b> The strip has the theme's highest surface container in a light
  * theme and its lowest in a dark one; the shown tab has the other end (white against grey in the
  * light theme), the other tabs none, with a short divider between two of them. The shown tab is
- * a pill floating on the strip, as Firefox's tabs on Ubuntu: with no address bar under the tabs,
- * a browser's tab joined to its toolbar looked off (the third run tried a stroke along the strip
- * in the shown tab's colour with the tab curving into it, commit 5d7e004d7; the pill replaces it
- * for the owner to compare, the dividers kept at the owner's word). The first build's two near-equal greys were hard to tell apart.
+ * a pill floating on the strip, as Firefox's tabs on Ubuntu. The owner's rule, from the device
+ * runs: a tab joined to what lies below it (Chrome's tab and address bar) is the better style
+ * when there is something for it to anchor to, and Firefox's pills feel disjointed from its
+ * address bar; here nothing lies below the tabs but the remote picture, so the pill is better.
+ * A stroke along the strip in the shown tab's colour, with the tab curving into it, was tried to
+ * give it something (commit 5d7e004d7) and looked off; the owner chose the pill over it and kept
+ * the dividers. If a toolbar ever comes back under the tabs, the joined tab is the one to bring
+ * back. The first build's two near-equal greys were hard to tell apart.
  *
  * <p><b>Tabs.</b> A tap or click shows the tab's session in this window ({@link
  * SessionWindow#switchTo}); its close control disconnects it after asking, as the switcher and
