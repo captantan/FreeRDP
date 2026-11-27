@@ -57,7 +57,8 @@ import java.util.List;
  * package 5.2, for what the devices showed.
  *
  * <p>Log (tag {@code captantan.keys}, INFO): {@code key capture: w<n> mechanism ...} once per
- * window and session, and {@code key capture on|off: w<n> s<n> "<title>" (<cause>)} at every
+ * window and session (with whether a physical keyboard is attached), {@code physical keyboard
+ * attached|gone} when that changes, and {@code key capture on|off: w<n> s<n> "<title>" (<cause>)} at every
  * change of what is set on the window. No per-key lines (those are PhysicalKeyboard's).
  */
 public final class KeyCaptureController
@@ -372,7 +373,10 @@ public final class KeyCaptureController
 			            "." + (Build.VERSION.SDK_INT_FULL % 100000) +
 			            ", setKeyboardCaptureEnabled while focused)";
 		Log.i(TAG, "key capture: " + window.getName() + " " + host + " mechanism " + mechanism +
-		               "; " + serviceText + "; setting key_capture " + (wanted ? "on" : "off"));
+		               "; " + serviceText + "; setting key_capture " + (wanted ? "on" : "off") +
+		               "; physical keyboard " +
+		               (keyboardAttached ? "attached (the bar shows its capture button)"
+		                                 : "none (the bar hides its capture button)"));
 	}
 
 	/** Whether upstream's keyboard accessibility service is enabled for this app. */

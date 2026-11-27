@@ -197,7 +197,7 @@
     <string name="captantan_bar_capture_off">System keys stay with Android (tap: send them to the remote)</string>
     <string name="captantan_bar_capture_unsupported">System-key capture needs Android 16 QPR2 or later</string>
     <string name="captantan_key_capture">Send system shortcuts to the remote</string>
-    <string name="captantan_key_capture_summary">While the session has focus, the Windows key, Alt+Tab, Ctrl+Esc, Alt+F4 and the like go to the remote machine instead of Android. Android keeps a few (Home, Overview, power, volume), and a long press on Escape gives the keys back to Android. Needs Android 16 QPR2 or later.</string>
+    <string name="captantan_key_capture_summary">While the session has focus, the Windows key, Alt+Tab, Ctrl+Esc, Alt+F4 and the like go to the remote machine instead of Android. Android keeps a few (Home, Meta+D, Meta+H, power, volume, and Ctrl+Space while it switches Android\'s keyboard language), and a long press on Escape is Android\'s way out of the window. Needs Android 16 QPR2 or later.</string>
     <string name="captantan_options_cat_keyboard">Keyboard</string>
     <string name="captantan_bar_opacity">Opacity</string>
     <string name="captantan_options_cat_bar">Session bar</string>
