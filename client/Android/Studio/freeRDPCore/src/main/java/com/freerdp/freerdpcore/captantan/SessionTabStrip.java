@@ -8,13 +8,16 @@ package com.freerdp.freerdpcore.captantan;
 
 import android.content.res.ColorStateList;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.ColorFilter;
 import android.graphics.Paint;
-import android.graphics.Path;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.InsetDrawable;
+import android.graphics.drawable.RippleDrawable;
 import android.os.Build;
 import android.text.TextUtils;
 import android.util.Log;
@@ -100,11 +103,11 @@ import java.util.Map;
  *
  * <p><b>Colours and shape.</b> The strip has the theme's highest surface container in a light
  * theme and its lowest in a dark one; the shown tab has the other end (white against grey in the
- * light theme, as a browser's tab strip), the other tabs none, with a short divider between two
- * of them. A stroke of the shown tab's colour runs along the strip's bottom, and the shown tab
- * curves out into it at its feet, so tab and stroke are one shape on top of the remote picture,
- * as a browser's tab and toolbar (the owner's wish in the second run: the white tab alone did not
- * look attached). The first build's two near-equal greys were hard to tell apart.
+ * light theme), the other tabs none, with a short divider between two of them. The shown tab is
+ * a pill floating on the strip, as Firefox's tabs on Ubuntu: with no address bar under the tabs,
+ * a browser's tab joined to its toolbar looked off (the third run tried a stroke along the strip
+ * in the shown tab's colour with the tab curving into it, commit 5d7e004d7; the pill replaces it
+ * for the owner to compare, the dividers kept at the owner's word). The first build's two near-equal greys were hard to tell apart.
  *
  * <p><b>Tabs.</b> A tap or click shows the tab's session in this window ({@link
  * SessionWindow#switchTo}); its close control disconnects it after asking, as the switcher and
@@ -134,12 +137,11 @@ final class SessionTabStrip implements SessionRegistry.Listener
 	private static final int PLUS_DP = 36;
 	/** The switcher's button of a narrow window (compact). */
 	private static final int SWITCHER_DP = 36;
-	private static final int TAB_TOP_GAP_DP = 4;
 	private static final int CLOSE_DP = 24;
-	/** The shown tab's feet: it curves out into the stroke at its bottom, as a browser's tab. */
-	private static final int FOOT_DP = 8;
-	/** The line under the strip in the shown tab's colour, that the shown tab joins. */
-	private static final int STROKE_DP = 3;
+	/** The gap between two tabs' pills; a divider sits in it between two tabs not shown. */
+	private static final int TAB_GAP_DP = 4;
+	/** Above and below a tab's pill in the strip. */
+	private static final int PILL_INSET_DP = 5;
 	/** A bar button on the strip, square, with an icon of {@link #TOOL_ICON_DP}. */
 	private static final int TOOL_DP = 36;
 	private static final int TOOL_ICON_DP = 20;
@@ -166,7 +168,6 @@ final class SessionTabStrip implements SessionRegistry.Listener
 	private final LinearLayout tabRow;
 	private final MaterialButton plus;
 	private final MaterialButton switcher;
-	private final StripBackground stripBackground;
 	private final LinearLayout tools;
 	private final Map<String, MaterialButton> toolButtons = new LinkedHashMap<>();
 	private final Map<SessionHost, Tab> tabs = new HashMap<>();
@@ -255,9 +256,7 @@ final class SessionTabStrip implements SessionRegistry.Listener
 		                                                 ViewGroup.LayoutParams.MATCH_PARENT));
 		strip.addView(row, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
 		                                                ViewGroup.LayoutParams.MATCH_PARENT));
-		stripBackground = new StripBackground();
-		strip.setBackground(stripBackground);
-		stripBackground.setColors(stripColor(), shownTabColor());
+		strip.setBackgroundColor(stripColor());
 		if (content != null)
 			content.addView(strip, new FrameLayout.LayoutParams(
 			                           ViewGroup.LayoutParams.MATCH_PARENT, 0, Gravity.TOP));
@@ -311,7 +310,7 @@ final class SessionTabStrip implements SessionRegistry.Listener
 	/** Light or dark changed: colours again. */
 	void rebuild()
 	{
-		stripBackground.setColors(stripColor(), shownTabColor());
+		strip.setBackgroundColor(stripColor());
 		for (Tab t : tabs.values())
 			t.restyle();
 		lightCaption = null;
@@ -511,8 +510,8 @@ final class SessionTabStrip implements SessionRegistry.Listener
 		}
 
 		// The tabs share what the caption bar leaves, minus "+", the bar's buttons and the drag
-		// area. Neighbouring tabs overlap by a foot. When the window's tabs do not fit at their
-		// least width, the window is compact: the shown tab alone, and the switcher's button.
+		// area. When the window's tabs do not fit at their least width, the window is compact: the
+		// shown tab alone, and the switcher's button.
 		final int width = Math.max(0, right - left);
 		final int n = Math.max(1, order.size());
 		int shownTools = 0;
@@ -520,18 +519,16 @@ final class SessionTabStrip implements SessionRegistry.Listener
 			if (b.getVisibility() != View.GONE)
 				shownTools++;
 		final int tw0 = (holds && p != Place.NONE) ? shownTools * dp(TOOL_DP) : 0;
-		final int foot = dp(FOOT_DP);
 		int forTabs = Math.max(0, width - dp(PLUS_DP) - tw0 -
 		                              (p == Place.CAPTION ? dp(DRAG_MIN_DP) : 0));
 		final boolean small =
-		    p != Place.NONE && n > 1 && n * dp(TAB_MIN_DP) - (n - 1) * foot > forTabs;
+		    p != Place.NONE && n > 1 && n * dp(TAB_MIN_DP) > forTabs;
 		final int visible = small ? 1 : n;
 		if (small)
 			forTabs = Math.max(0, forTabs - dp(SWITCHER_DP));
 		final int tw = Math.max(Math.min(dp(TAB_MIN_DP), forTabs),
-		                        Math.min(dp(TAB_MAX_DP),
-		                                 (forTabs + (visible - 1) * foot) / visible));
-		final int sw = Math.min(visible * tw - (visible - 1) * foot, forTabs);
+		                        Math.min(dp(TAB_MAX_DP), forTabs / visible));
+		final int sw = Math.min(visible * tw, forTabs);
 
 		final boolean changed = p != place || top != placeTop || height != placeHeight ||
 		                        left != placeLeft || width != placeWidth || tw != tabWidth ||
@@ -596,14 +593,13 @@ final class SessionTabStrip implements SessionRegistry.Listener
 	}
 
 	/**
-	 * Each tab's width, its overlap with the one before (a foot), whether it is shown (compact: the
-	 * shown session's only) and whether it has a divider after it (between two tabs not shown).
+	 * Each tab's width, whether it is shown (compact: the shown session's only) and whether it has
+	 * a divider after it (between two tabs not shown).
 	 */
 	private void layOutTabs()
 	{
 		final SessionHost shown = window.getHost();
 		final int width = tabWidth > 0 ? tabWidth : dp(TAB_MAX_DP);
-		boolean first = true;
 		for (int i = 0; i < order.size(); i++)
 		{
 			final SessionHost h = order.get(i);
@@ -613,9 +609,7 @@ final class SessionTabStrip implements SessionRegistry.Listener
 			final boolean visible = !compact || h == shown || (shown == null && i == 0);
 			final boolean divider = !compact && h != shown && i + 1 < order.size() &&
 			                        order.get(i + 1) != shown;
-			t.layOut(visible, width, first ? 0 : -dp(FOOT_DP), divider);
-			if (visible)
-				first = false;
+			t.layOut(visible, width, divider);
 		}
 	}
 
@@ -676,11 +670,11 @@ final class SessionTabStrip implements SessionRegistry.Listener
 			view = new LinearLayout(activity);
 			view.setOrientation(LinearLayout.HORIZONTAL);
 			view.setGravity(Gravity.CENTER_VERTICAL);
-			view.setPaddingRelative(dp(FOOT_DP) + dp(10), 0, dp(FOOT_DP) + dp(2), 0);
+			view.setPaddingRelative(dp(TAB_GAP_DP) / 2 + dp(10), 0, dp(TAB_GAP_DP) / 2 + dp(2), 0);
 			view.setFocusable(false);
 			background = new TabBackground();
 			view.setBackground(background);
-			view.setForeground(selectable());
+			view.setForeground(pillRipple());
 
 			progress = new CircularProgressIndicator(activity);
 			progress.setIndeterminate(true);
@@ -737,20 +731,17 @@ final class SessionTabStrip implements SessionRegistry.Listener
 			restyle();
 		}
 
-		void layOut(boolean visible, int width, int marginStart, boolean divider)
+		void layOut(boolean visible, int width, boolean divider)
 		{
 			final int visibility = visible ? View.VISIBLE : View.GONE;
 			if (view.getVisibility() != visibility)
 				view.setVisibility(visibility);
 			background.setDivider(divider);
 			final LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams)view.getLayoutParams();
-			if (lp != null && lp.width == width && lp.getMarginStart() == marginStart)
+			if (lp != null && lp.width == width)
 				return;
-			final LinearLayout.LayoutParams n =
-			    new LinearLayout.LayoutParams(width, ViewGroup.LayoutParams.MATCH_PARENT);
-			n.topMargin = dp(TAB_TOP_GAP_DP);
-			n.setMarginStart(marginStart);
-			view.setLayoutParams(n);
+			view.setLayoutParams(
+			    new LinearLayout.LayoutParams(width, ViewGroup.LayoutParams.MATCH_PARENT));
 		}
 
 		void update(boolean isShown)
@@ -883,17 +874,16 @@ final class SessionTabStrip implements SessionRegistry.Listener
 	}
 
 	/**
-	 * A tab's background. The shown tab: filled, the theme's medium corners at the top, and feet
-	 * at the bottom that curve out into the strip's stroke ({@link #FOOT_DP} on each side, inside
-	 * the view: the next tab overlaps it by as much), so the tab and the stroke under the strip
-	 * are one shape, as a browser's tab and toolbar. Another tab: nothing, or a short divider at
-	 * its end when the next tab is not shown either.
+	 * A tab's background. The shown tab: a pill, filled, with the theme's medium corners, inset by
+	 * {@link #PILL_INSET_DP} above and below and half of {@link #TAB_GAP_DP} at the sides, floating
+	 * on the strip (as Firefox's tabs on Ubuntu, which the owner pointed to in the third run).
+	 * Another tab: nothing, or a short divider at its end when the next tab is not shown either
+	 * (the owner kept the dividers).
 	 */
 	private final class TabBackground extends Drawable
 	{
 		private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
 		private final Paint line = new Paint(Paint.ANTI_ALIAS_FLAG);
-		private final Path path = new Path();
 		private final float corner = tabCorner();
 		private boolean shown;
 		private boolean divider;
@@ -918,30 +908,17 @@ final class SessionTabStrip implements SessionRegistry.Listener
 		@Override public void draw(Canvas canvas)
 		{
 			final Rect b = getBounds();
-			final float f = dp(FOOT_DP);
-			final float l = b.left, t = b.top, r = b.right, h = b.bottom;
 			if (shown)
 			{
-				final float c = Math.min(corner, (r - l - 2 * f) / 2);
-				path.reset();
-				path.moveTo(l, h);
-				// left foot: a quarter circle from the stroke up into the tab's side
-				path.arcTo(new RectF(l - f, h - 2 * f, l + f, h), 90, -90, false);
-				path.lineTo(l + f, t + c);
-				path.arcTo(new RectF(l + f, t, l + f + 2 * c, t + 2 * c), 180, 90, false);
-				path.lineTo(r - f - c, t);
-				path.arcTo(new RectF(r - f - 2 * c, t, r - f, t + 2 * c), 270, 90, false);
-				path.lineTo(r - f, h - f);
-				// right foot
-				path.arcTo(new RectF(r - f, h - 2 * f, r + f, h), 180, -90, false);
-				path.close();
-				canvas.drawPath(path, fill);
+				final RectF pill = pillRect(b);
+				final float c = Math.min(corner, pill.height() / 2);
+				canvas.drawRoundRect(pill, c, c, fill);
 			}
 			else if (divider)
 			{
-				final float x = r - f / 2; // the middle of the gap to the next tab's body
-				final float inset = (h - t) / 4f;
-				canvas.drawLine(x, t + inset, x, h - inset, line);
+				final float x = b.right - line.getStrokeWidth() / 2;
+				final float inset = dp(PILL_INSET_DP) + b.height() / 5f;
+				canvas.drawLine(x, b.top + inset, x, b.bottom - inset, line);
 			}
 		}
 
@@ -959,46 +936,24 @@ final class SessionTabStrip implements SessionRegistry.Listener
 		}
 	}
 
-	/** The strip's background: its colour, and the stroke along its bottom in the shown tab's. */
-	private final class StripBackground extends Drawable
+	/** Where a tab's pill lies in the tab's bounds. */
+	private RectF pillRect(Rect b)
 	{
-		private final Paint fill = new Paint();
-		private final Paint stroke = new Paint();
-
-		void setColors(int stripColor, int strokeColor)
-		{
-			fill.setColor(stripColor);
-			stroke.setColor(strokeColor);
-			invalidateSelf();
-		}
-
-		@Override public void draw(Canvas canvas)
-		{
-			final Rect b = getBounds();
-			canvas.drawRect(b, fill);
-			canvas.drawRect(b.left, b.bottom - dp(STROKE_DP), b.right, b.bottom, stroke);
-		}
-
-		@Override public void setAlpha(int alpha)
-		{
-		}
-
-		@Override public void setColorFilter(ColorFilter cf)
-		{
-		}
-
-		@Override public int getOpacity()
-		{
-			return PixelFormat.OPAQUE;
-		}
+		final float gap = dp(TAB_GAP_DP) / 2f, inset = dp(PILL_INSET_DP);
+		return new RectF(b.left + gap, b.top + inset, b.right - gap, b.bottom - inset);
 	}
 
-	private Drawable selectable()
+	/** A tab's press and hover highlight, in the shape of its pill. */
+	private Drawable pillRipple()
 	{
-		final TypedValue tv = new TypedValue();
-		if (!activity.getTheme().resolveAttribute(android.R.attr.selectableItemBackground, tv, true))
-			return null;
-		return activity.getDrawable(tv.resourceId);
+		final GradientDrawable mask = new GradientDrawable();
+		mask.setColor(Color.WHITE);
+		mask.setCornerRadius(Math.min(tabCorner(), (dp(ROW_DP) - 2 * dp(PILL_INSET_DP)) / 2f));
+		final int gap = dp(TAB_GAP_DP) / 2, inset = dp(PILL_INSET_DP);
+		return new RippleDrawable(
+		    ColorStateList.valueOf(MaterialColors.getColor(
+		        content != null ? content : root, androidx.appcompat.R.attr.colorControlHighlight)),
+		    null, new InsetDrawable(mask, gap, inset, gap, inset));
 	}
 
 	/**
