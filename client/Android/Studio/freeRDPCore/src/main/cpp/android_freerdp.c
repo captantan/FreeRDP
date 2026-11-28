@@ -53,6 +53,7 @@
 #include "android_disp.h"
 #include "captantan_disp.h" /* captantan fork */
 #include "captantan_pen.h"  /* captantan fork */
+#include "captantan_stats.h" /* captantan fork */
 #include "android_rail.h"
 #include "android_freerdp_jni.h"
 
@@ -769,6 +770,10 @@ static BOOL android_client_new(freerdp* instance, rdpContext* context)
 	if (!captantan_pen_new(instance))
 		return FALSE;
 
+	/* captantan fork: the statistics panel's counters (captantan_stats.c) */
+	if (!captantan_stats_new(instance))
+		return FALSE;
+
 	/* captantan fork: display control state; it sets instance->Redirect, so it comes last */
 	if (!captantan_disp_new(instance))
 		return FALSE;
@@ -786,6 +791,7 @@ static void android_client_free(freerdp* instance, rdpContext* context)
 
 	captantan_disp_free(instance); /* captantan fork */
 	captantan_pen_free(instance);  /* captantan fork */
+	captantan_stats_free(instance); /* captantan fork */
 	android_event_queue_uninit(instance);
 }
 
