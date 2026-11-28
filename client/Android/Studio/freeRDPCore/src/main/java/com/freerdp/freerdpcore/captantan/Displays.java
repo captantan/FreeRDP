@@ -131,10 +131,31 @@ public final class Displays
 		{
 			sb.append(", not readable (").append(e.getClass().getSimpleName()).append(')');
 		}
-		sb.append(", ").append(Display.stateToString(d.getState()))
+		sb.append(", ").append(state(d.getState()))
 		    .append(", ").append(Math.round(d.getRefreshRate())).append(" Hz, flags 0x")
 		    .append(Integer.toHexString(d.getFlags()));
 		return sb.toString();
+	}
+
+	private static String state(int state)
+	{
+		switch (state)
+		{
+			case Display.STATE_ON:
+				return "on";
+			case Display.STATE_OFF:
+				return "off";
+			case Display.STATE_DOZE:
+				return "doze";
+			case Display.STATE_DOZE_SUSPEND:
+				return "doze suspend";
+			case Display.STATE_ON_SUSPEND:
+				return "on suspend";
+			case Display.STATE_VR:
+				return "vr";
+			default:
+				return "state " + state;
+		}
 	}
 
 	/** "display N" for an activity, or "display ?" before API 30 or when it has none. */
