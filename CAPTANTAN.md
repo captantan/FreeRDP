@@ -516,6 +516,17 @@ is shown in at most one window.
 - Not in this package: the notification (2.3), the fork's session bar (4.1), resizing a session to the
   window it attaches to (milestone 3), key combinations (5.3, since dropped by the owner on 2026-11-26), window titles and bounds (6.1), restyling the
   list rows beyond the marking (7.2b).
+- **A launch that names nothing** (fixed 2026-11-27, after a crash on the tablet in desktop windowing): an
+  intent with no link, no connection reference and no session token reached the session window's
+  `onNewIntent` when the window was brought back; `leaveFor` let go of the shown session and upstream's
+  `processIntent` dereferenced the missing extras (`NullPointerException` at `bundle.containsKey`). Now
+  `leaveFor` returns false for such an intent: the window keeps what it shows, its intent is set back to
+  the shown session's, and the log says `launch names no session, ignored in w<n> (keeps s<n>): action
+  ..., categories ..., flags ..., component ..., extras [...], from <package>` (keys and the sender only,
+  no values). A launch that names a link, a connection reference, a session token or upstream's
+  `instance` goes on as before. `SessionActivity.processIntent` also takes a missing extras bundle as an
+  empty one (one marked line): the activity is exported, and an empty intent at its start now closes it
+  instead of crashing.
 **Sessions in the background** (package 2.3)
 
 A foreground service runs exactly while at least one session is live (connecting, connected or waiting
@@ -2626,7 +2637,9 @@ compile check runs on the merge.
      being the `action_search` item's action view: if upstream renames or restyles these (7.2b may too), fix
      `HomeSessions`. `floating_toolbar.xml`: keep the sessions button inside `floating_toolbar_buttons`;
      if upstream rewrites the toolbar, put it back where its buttons are (it needs only its id).
-     `settings_app_ui.xml`: keep the `captantan_new_connection_window` preference.
+     `settings_app_ui.xml`: keep the `captantan_new_connection_window` preference. `processIntent` keeps
+     the marked line that takes missing extras as `Bundle.EMPTY` (drop it if upstream adds its own null
+     check).
    - `KeyboardAccessibilityService.java`: keep `SessionRegistry.getFocusedActivity()` in both places.
      Any new reader of "the active session" must ask the registry.
    - `GlobalApp.java`: keep `SessionRegistry.init(this)` and, after it, `SessionKeeper.init(this)`
