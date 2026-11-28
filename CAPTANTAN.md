@@ -527,6 +527,17 @@ is shown in at most one window.
   `instance` goes on as before. `SessionActivity.processIntent` also takes a missing extras bundle as an
   empty one (one marked line): the activity is exported, and an empty intent at its start now closes it
   instead of crashing.
+  - **Measured on the tablet** (desktop windowing, API 37, test build of pull request 37, 2026-11-27):
+    bringing the session window back from the taskbar, from Recents and with the launcher icon sent the
+    session window no intent at all (the taskbar and Recents move the task to the front; the launcher icon
+    starts the connection list, `MAIN`/`LAUNCHER`), so the intent of the crash did not come back that way.
+    The crash's intent (the session window's component, `FLAG_ACTIVITY_NEW_TASK`, no extras: probably a
+    launcher starting the task again from its base intent, which the system hands to launchers without
+    extras) was sent with `adb shell am start -n
+    dev.captantan.freerdp.debug/com.freerdp.freerdpcore.presentation.SessionActivity`: with a session shown
+    it reached `onNewIntent`, the window kept the session (the `ignored` line, same process, no reconnect);
+    with no session window open, a window opened and closed within a second, no crash. A launch from the
+    list afterwards opened the session window and connected as before.
 **Sessions in the background** (package 2.3)
 
 A foreground service runs exactly while at least one session is live (connecting, connected or waiting
