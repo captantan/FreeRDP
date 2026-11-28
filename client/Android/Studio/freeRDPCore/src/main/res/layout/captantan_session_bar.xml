@@ -2,8 +2,8 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- captantan fork: the session bar (roadmap 4.1, captantan/SessionBar). SessionBar sets the
      place, the opacity and the size of every button in captantan_bar_buttons. Left: input
-     (keyboard, input mode, system-key capture); middle: the view and the bar (reset zoom, bar
-     settings, which has the remote scale); right:
+     (keyboard, input mode, system-key capture); middle: the view and the bar (reset zoom, connection
+     statistics, bar settings, which has the remote scale); right:
      the session and the window (sessions, full screen, disconnect). A new button: a Button like
      these inside captantan_bar_buttons, and one bind(...) line in SessionBar.bindButtons. -->
 <com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
@@ -88,6 +88,20 @@
             android:padding="10dp"
             android:contentDescription="@string/captantan_bar_zoom_reset"
             app:icon="@drawable/captantan_ic_zoom_reset" />
+
+        <!-- roadmap 7.1: the connection statistics panel (captantan/StatsPanel) -->
+        <Button
+            android:id="@+id/captantan_bar_stats"
+            style="?attr/materialIconButtonStyle"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:padding="10dp"
+            android:contentDescription="@string/captantan_bar_stats"
+            app:icon="@drawable/captantan_ic_stats" />
 
         <Button
             android:id="@+id/captantan_bar_settings"

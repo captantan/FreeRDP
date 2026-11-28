@@ -94,7 +94,8 @@ import java.util.Map;
  *
  * <p><b>The bar's buttons</b> (the owner's choice in the 6.1b device run). In a desktop window the
  * session bar is not shown: its keyboard, input mode, key capture, reset zoom and settings
- * buttons are at the strip's right end ({@link SessionBar#pressOnTabStrip}), with the space for
+ * buttons, and the connection statistics button (package 7.1), are at the strip's right end
+ * ({@link SessionBar#pressOnTabStrip}), with the space for
  * dragging between them and "+", and are excluded from the system's gestures like the tabs. The
  * switcher, full screen and disconnect are not needed there (the tabs; the caption bar's
  * maximise and full-display buttons; a tab's close control). The remote desktop gets the bar's
@@ -109,7 +110,7 @@ import java.util.Map;
  * when there is something for it to anchor to, and Firefox's pills feel disjointed from its
  * address bar; here nothing lies below the tabs but the remote picture, so the pill is better.
  * A stroke along the strip in the shown tab's colour, with the tab curving into it, was tried to
- * give it something (commit 5d7e004d7) and looked off; the owner chose the pill over it and kept
+ * give it something (in pull request #34's history) and looked off; the owner chose the pill over it and kept
  * the dividers. If a toolbar ever comes back under the tabs, the joined tab is the one to bring
  * back. The first build's two near-equal greys were hard to tell apart.
  *
@@ -152,7 +153,7 @@ final class SessionTabStrip implements SessionRegistry.Listener
 	/** The bar's buttons the strip has, in the bar's order. */
 	private static final String[] TOOLS = { SessionBar.KEYBOARD, SessionBar.INPUT_MODE,
 		                                    SessionBar.KEY_CAPTURE, SessionBar.RESET_ZOOM,
-		                                    SessionBar.BAR_SETTINGS };
+		                                    SessionBar.STATS, SessionBar.BAR_SETTINGS };
 
 	private enum Place
 	{
@@ -391,7 +392,10 @@ final class SessionTabStrip implements SessionRegistry.Listener
 	{
 		if (destroyed)
 			return;
-		final boolean holdsNow = desktop && !window.isOwnFullScreen();
+		// The strip is only ever placed from API 30 (place): on API 29 a freeform window keeps
+		// its session bar (6.1b review).
+		final boolean holdsNow = desktop && !window.isOwnFullScreen() &&
+		                         Build.VERSION.SDK_INT >= Build.VERSION_CODES.R;
 		if (holdsNow != holds)
 		{
 			holds = holdsNow;
@@ -1001,6 +1005,8 @@ final class SessionTabStrip implements SessionRegistry.Listener
 				return R.drawable.captantan_ic_key_capture;
 			case SessionBar.RESET_ZOOM:
 				return R.drawable.captantan_ic_zoom_reset;
+			case SessionBar.STATS:
+				return R.drawable.captantan_ic_stats;
 			default:
 				return R.drawable.ic_tune;
 		}
@@ -1018,6 +1024,8 @@ final class SessionTabStrip implements SessionRegistry.Listener
 				return activity.getString(R.string.captantan_bar_capture_on);
 			case SessionBar.RESET_ZOOM:
 				return activity.getString(R.string.captantan_bar_zoom_reset);
+			case SessionBar.STATS:
+				return activity.getString(R.string.captantan_bar_stats);
 			default:
 				return activity.getString(R.string.captantan_bar_settings);
 		}

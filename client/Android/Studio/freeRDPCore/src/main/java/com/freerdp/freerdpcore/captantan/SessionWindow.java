@@ -140,6 +140,8 @@ public final class SessionWindow
 	private final KeyCaptureController keyCapture;
 	/** The session tabs in a desktop window's caption bar (package 6.1b). */
 	private final SessionTabStrip tabStrip;
+	/** The connection statistics panel (package 7.1). */
+	private final StatsPanel stats;
 	/**
 	 * Package 6.1b: opened as a window of its own (a new window: "Open in new window", the eject,
 	 * or the "Open new connections" setting), not as the session window a plain launch reaches.
@@ -202,6 +204,7 @@ public final class SessionWindow
 		this.touchPointerView = activity.findViewById(R.id.touchPointerView);
 		this.resizer = new SessionResizeController(activity, name);
 		this.bar = new SessionBar(this, input);
+		this.stats = new StatsPanel(this);
 		this.trackpad = new TrackpadInput(this, sessionView, scrollView, input);
 		this.touchModes = new TouchModeSwitch(this, input, touchPointerView, trackpad);
 		this.pen = new PenInput(this, sessionView, trackpad);
@@ -268,6 +271,12 @@ public final class SessionWindow
 	 * The window's session bar (package 4.1): {@link SessionBar#reveal} for a key combination
 	 * (5.3), {@link SessionBar#onWindowInsets} from the activity's insets listener.
 	 */
+	/** The connection statistics panel (package 7.1). */
+	StatsPanel getStats()
+	{
+		return stats;
+	}
+
 	public SessionBar getBar()
 	{
 		return bar;
@@ -541,6 +550,8 @@ public final class SessionWindow
 
 		SessionRegistry.focusedSessionChanged(this);
 		tabStrip.update("shown");
+		// The statistics follow the shown session (package 7.1).
+		stats.onShownChanged("shown");
 	}
 
 	/**
@@ -828,6 +839,7 @@ public final class SessionWindow
 			ports.setSession(null);
 			from.detach(this, "session ended");
 			titleChanged();
+			stats.onShownChanged("session ended");
 			showNextTab(from, failed ? "its session failed or was ended" : "its session ended");
 			return;
 		}
@@ -842,6 +854,7 @@ public final class SessionWindow
 		ports.setSession(null);
 		from.detach(this, "session ended");
 		titleChanged();
+		stats.onShownChanged("session ended");
 	}
 
 	// ****************************************************************************
@@ -853,6 +866,7 @@ public final class SessionWindow
 		started = true;
 		resizer.onStart();
 		keyCapture.onStart();
+		stats.onStart();
 		if (host != null)
 		{
 			host.setPainting(true);
@@ -873,6 +887,7 @@ public final class SessionWindow
 			WindowBounds.rememberTabWindow(activity, name, "window stopped");
 		resizer.onStop();
 		keyCapture.onStop();
+		stats.onStop();
 		if (host != null)
 			host.setPainting(false);
 	}
@@ -924,6 +939,7 @@ public final class SessionWindow
 		touchPointerView.rebuild();                    // captantan fork method
 		bar.rebuild();
 		tabStrip.rebuild();
+		stats.rebuild();
 		if (host != null && bound)
 			host.replayPointer(activity);
 		Log.i(TAG, "ui mode changed in " + name + ": key bar, touch pointer and session bar rebuilt");
@@ -942,7 +958,8 @@ public final class SessionWindow
 
 	/**
 	 * Hook in handleBackPressed(), after upstream's own uses of Back (hide the keyboards, Alt+F4).
-	 * In full screen Back first leaves full screen ({@link SessionBar#leaveFullScreen}). Back never
+	 * An open statistics panel is closed first (package 7.1, {@link StatsPanel}). In full screen
+	 * Back then leaves full screen ({@link SessionBar#leaveFullScreen}). Back never
 	 * ends a session by itself: it asks whether to leave it running and go to the connection list,
 	 * or to disconnect it. Always true (handled).
 	 */
@@ -954,6 +971,9 @@ public final class SessionWindow
 			activity.finish();
 			return true;
 		}
+		// An open statistics panel closes first (package 7.1).
+		if (stats.close("Back"))
+			return true;
 		if (bar.leaveFullScreen("Back"))
 			return true;
 		if (backDialog != null && backDialog.isShowing())
@@ -997,6 +1017,7 @@ public final class SessionWindow
 		// Its other tabs go to the session window used last (package 6.1b).
 		SessionTabs.closed(this);
 		tabStrip.onDestroy();
+		stats.onDestroy();
 		keyCapture.onDestroy();
 		resizer.onDestroy();
 		bar.onDestroy();

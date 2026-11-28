@@ -291,4 +291,21 @@
     <!-- a tab's tooltip: "title: state" -->
     <string name="captantan_tab_tooltip">%1$s: %2$s</string>
     <string name="captantan_back_other_tabs">Leave running closes this window; the other sessions in its tabs keep running too.</string>
+    <!-- The connection statistics panel (package 7.1, captantan/StatsPanel.java) -->
+    <string name="captantan_bar_stats">Connection statistics</string>
+    <string name="captantan_stats_close">Close statistics</string>
+    <string name="captantan_stats_waiting">Measuring…</string>
+    <string name="captantan_stats_stalled">No new figures: the session is busy</string>
+    <string name="captantan_stats_no_session">No session</string>
+    <string name="captantan_stats_not_reported">not reported</string>
+    <string name="captantan_stats_rtt">Round trip</string>
+    <string name="captantan_stats_server">Server's measure</string>
+    <string name="captantan_stats_graphics">Graphics</string>
+    <string name="captantan_stats_asked">Asked for</string>
+    <string name="captantan_stats_frames">Frames</string>
+    <string name="captantan_stats_decoder">Decoder</string>
+    <string name="captantan_stats_remote">Remote desktop</string>
+    <string name="captantan_stats_received">Received</string>
+    <string name="captantan_stats_sent">Sent</string>
+    <string name="captantan_stats_security">Security</string>
 </resources>
