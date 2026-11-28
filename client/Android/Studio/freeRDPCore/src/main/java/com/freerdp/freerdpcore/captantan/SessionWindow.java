@@ -119,6 +119,8 @@ public final class SessionWindow
 	private static final String STATE_SHOWN = "com.freerdp.freerdpcore.captantan.window.shown";
 	/** Saved state: whether the window was opened as a window of its own (package 6.1b). */
 	private static final String STATE_OWN = "com.freerdp.freerdpcore.captantan.window.own";
+	/** Saved state: the tokens of the window's tabs, for the window that replaces it (6.2). */
+	private static final String STATE_TABS = "com.freerdp.freerdpcore.captantan.window.tabs";
 	private static int nextNumber = 1;
 
 	private final String name = "w" + (nextNumber++);
@@ -146,9 +148,11 @@ public final class SessionWindow
 	 * Package 6.1b: opened as a window of its own (a new window: "Open in new window", the eject,
 	 * or the "Open new connections" setting), not as the session window a plain launch reaches.
 	 * A window of its own remembers its bounds for its connection's bookmark (6.1); the session
-	 * window for the app ({@link WindowBounds#rememberTabWindow}).
+	 * window for the app ({@link WindowBounds#rememberTabWindow}). Package 6.2: a window of its own
+	 * that a plain launch reaches while no session window is open becomes the session window
+	 * ({@link #leaveFor}): that is what it is from then on.
 	 */
-	private final boolean ownWindow;
+	private boolean ownWindow;
 	/** The configuration's night bits the views were built with. */
 	private int night;
 
@@ -228,8 +232,10 @@ public final class SessionWindow
 		               Displays.where(activity) + ", desktop windowing " +
 		               SessionLauncher.describeWindowing(activity) + ", task " +
 		               activity.getTaskId());
-		// Its sessions as tabs (package 6.1b).
-		SessionTabs.opened(this);
+		// Its sessions as tabs (package 6.1b); a recreated window takes back its own (6.2).
+		SessionTabs.opened(this, (savedInstanceState != null)
+		                             ? savedInstanceState.getStringArray(STATE_TABS)
+		                             : null);
 		this.tabStrip = new SessionTabStrip(this);
 
 		// The switcher's button on upstream's floating toolbar (floating_toolbar.xml). The toolbar
@@ -419,9 +425,35 @@ public final class SessionWindow
 			if (SessionLauncher.bringToFront(other, "a launch that reached " + name))
 				return false;
 		}
+		becomeSessionWindowFor(intent);
 		release("window shows another session");
 		dropUnstarted();
 		return true;
+	}
+
+	/**
+	 * Package 6.2 (from the 6.1b review): a plain launch (not a new window) that reaches a window
+	 * of its own while no session window is open makes it the session window: it collects the
+	 * tabs of such launches, so it keeps the app's session window bounds from now on, not its
+	 * connection's.
+	 */
+	private void becomeSessionWindowFor(Intent intent)
+	{
+		if (!ownWindow || intent == null ||
+		    (intent.getFlags() & Intent.FLAG_ACTIVITY_MULTIPLE_TASK) != 0)
+			return;
+		for (SessionWindow w : SessionTabs.getWindows())
+		{
+			if (w != this && !w.isOwnWindow())
+			{
+				Log.i(TAG, "window role: " + name + " stays a window of its own (a plain launch " +
+				               "reached it while " + w.getName() + " is the session window)");
+				return;
+			}
+		}
+		ownWindow = false;
+		Log.i(TAG, "window role: " + name + " is the session window now (a plain launch " +
+		               "reached it and no session window is open)");
 	}
 
 	/**
@@ -943,6 +975,12 @@ public final class SessionWindow
 		if (host != null && host.isLive())
 			outState.putParcelable(STATE_SHOWN, SessionLauncher.intentFor(activity, host));
 		outState.putBoolean(STATE_OWN, ownWindow);
+		// Package 6.2: the tabs, for a window that replaces this one (SessionTabs.closed).
+		final java.util.List<SessionHost> tabs = SessionTabs.tabsOf(this);
+		final String[] tokens = new String[tabs.size()];
+		for (int i = 0; i < tokens.length; i++)
+			tokens[i] = tabs.get(i).getToken();
+		outState.putStringArray(STATE_TABS, tokens);
 	}
 
 	/**
@@ -1056,8 +1094,9 @@ public final class SessionWindow
 		destroyed = true;
 		SessionSwitcher.closeFor(activity);
 		release("window closed");
-		// Its other tabs go to the session window used last (package 6.1b).
-		SessionTabs.closed(this);
+		// Its other tabs go to the session window used last (package 6.1b), on the same display
+		// first; a window the system recreates keeps them for its successor (6.2).
+		SessionTabs.closed(this, activity.isFinishing());
 		tabStrip.onDestroy();
 		stats.onDestroy();
 		keyCapture.onDestroy();
