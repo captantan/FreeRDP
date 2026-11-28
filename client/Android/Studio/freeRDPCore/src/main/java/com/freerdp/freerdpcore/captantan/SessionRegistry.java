@@ -79,6 +79,8 @@ public final class SessionRegistry
 	{
 		appContext = application;
 		application.registerActivityLifecycleCallbacks(new VisibilityWatcher());
+		// Package 6.2: the displays, in the log.
+		Displays.init(application);
 		// Package 6.1b: "Open new connections" has a new default.
 		SessionLauncher.migrateDefault(application);
 	}
@@ -265,7 +267,7 @@ public final class SessionRegistry
 			return;
 		final SessionHost host = w.getHost();
 		Log.i(TAG, "focus: " + w.getName() + " (" + (host != null ? host.toString() : "no session") +
-		               ")");
+		               ", " + Displays.of(w.getActivity()) + ")");
 	}
 
 	// ****************************************************************************

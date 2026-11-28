@@ -700,6 +700,14 @@ public final class SessionBar
 		fullScreenButton = bar.findViewById(R.id.captantan_bar_fullscreen);
 		cardRadius = ((MaterialCardView)bar).getRadius();
 		cardElevation = ((MaterialCardView)bar).getCardElevation();
+		// Package 6.2 (from the 7.1 review): the card is not clickable, so a press, a mouse or
+		// touchpad click, a wheel turn or hover on its padding between the buttons went on to the
+		// session view behind it and to the remote, as on the statistics card (StatsPanel). The
+		// card takes them; its buttons still get theirs first. SessionBarGestures sees every
+		// event before the views do and is not affected.
+		bar.setOnGenericMotionListener((v, ev) -> true);
+		bar.setOnHoverListener((v, ev) -> true);
+		bar.setOnTouchListener((v, ev) -> true);
 		bar.setVisibility(View.GONE);
 		container.addView(bar);
 		bindButtons();

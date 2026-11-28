@@ -103,6 +103,7 @@ public final class HomeSessions implements SessionRegistry.Listener, DefaultLife
 		activity.addOnNewIntentListener(this::onNewIntent);
 		activity.addMenuProvider(searchOpener, activity);
 		activity.getLifecycle().addObserver(this);
+		Displays.watchList(activity); // package 6.2: where the list is
 	}
 
 	// ****************************************************************************
@@ -112,6 +113,8 @@ public final class HomeSessions implements SessionRegistry.Listener, DefaultLife
 	{
 		SessionRegistry.addListener(this);
 		onSessionsChanged();
+		android.util.Log.i(SessionRegistry.TAG, "list: shown on " + Displays.where(activity) +
+		                                            ", session windows " + Displays.windows());
 	}
 
 	@Override public void onStop(@NonNull LifecycleOwner owner)
