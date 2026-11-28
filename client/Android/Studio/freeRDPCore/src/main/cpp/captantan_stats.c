@@ -13,7 +13,11 @@
  *    when a channel opens.
  *  - The H.264 decoder a GFX surface uses (freerdp_captantan_h264_decoder, the fork's libfreerdp
  *    addition), looked up only when a snapshot is taken, under the GFX context's mux, which is
- *    only tried: a decode in progress keeps the last name.
+ *    only tried: a decode in progress keeps the last name. The mux exists from
+ *    gdi_graphics_pipeline_init (the channel handler after this file's) to
+ *    gdi_graphics_pipeline_uninit (the one after this file's ChannelDisconnected), so it is
+ *    touched only once the channel has carried a surface command, and never after this file let
+ *    go of the context.
  *  - The server's network auto-detect ([MS-RDPBCGR] 2.2.14): the client only answers it. The
  *    server measures; whether it tells the client (a Network Characteristics Result) is the
  *    server's choice. Counted here: round-trip requests, bandwidth tests and results, through the
@@ -502,6 +506,7 @@ static void captantan_stats_take(freerdp* inst, captantanStats* st)
 	if (st->gfx)
 	{
 		flags |= CAPTANTAN_STATS_FLAG_GFX;
+		UINT64 commands = 0;
 		if (gGfxIndicesKnown)
 		{
 			flags |= CAPTANTAN_STATS_FLAG_GFX_COUNTS;
@@ -515,9 +520,14 @@ static void captantan_stats_take(freerdp* inst, captantanStats* st)
 				    (INT64)rdpgfx_stats_value_for_index(st->gfx, gGfxCommandIndex[c]);
 				s[CAPTANTAN_STATS_GFX_BYTES + c] =
 				    (INT64)rdpgfx_stats_value_for_index(st->gfx, gGfxBytesIndex[c]);
+				commands += (UINT64)s[CAPTANTAN_STATS_GFX_COMMANDS + c];
 			}
 		}
-		captantan_stats_find_decoder(st, &flags);
+		/* The GFX context's mux is initialised by gdi_graphics_pipeline_init, in the channel
+		 * handler that runs after this file's: only a channel that has carried a surface
+		 * command (which comes after that handler, on the same thread) is past it. */
+		if (commands > 0)
+			captantan_stats_find_decoder(st, &flags);
 	}
 	else
 		st->decoder[0] = '\0';
