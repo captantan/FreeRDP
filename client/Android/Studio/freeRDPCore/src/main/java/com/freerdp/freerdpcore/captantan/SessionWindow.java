@@ -224,7 +224,10 @@ public final class SessionWindow
 		if (shown != null)
 			activity.setIntent(shown);
 		Log.i(TAG, "window open: " + name + (shown != null ? " (recreated)" : "") +
-		               (ownWindow ? ", a window of its own" : ", the session window"));
+		               (ownWindow ? ", a window of its own" : ", the session window") + ", on " +
+		               Displays.where(activity) + ", desktop windowing " +
+		               SessionLauncher.describeWindowing(activity) + ", task " +
+		               activity.getTaskId());
 		// Its sessions as tabs (package 6.1b).
 		SessionTabs.opened(this);
 		this.tabStrip = new SessionTabStrip(this);
@@ -1062,6 +1065,8 @@ public final class SessionWindow
 		bar.onDestroy();
 		dropUnstarted();
 		SessionRegistry.setFocus(this, false);
-		Log.i(TAG, "window closed: " + name);
+		Log.i(TAG, "window closed: " + name + " (" + Displays.of(activity) + ", finishing " +
+		               activity.isFinishing() + ", changing configurations " +
+		               activity.isChangingConfigurations() + ")");
 	}
 }

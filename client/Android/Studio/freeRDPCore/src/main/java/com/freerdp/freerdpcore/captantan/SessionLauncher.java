@@ -184,7 +184,7 @@ public final class SessionLauncher
 	}
 
 	/** A value of the window configuration in Configuration.toString(), or "?". */
-	private static String configValue(String text, String name)
+	static String configValue(String text, String name)
 	{
 		final int at = text.indexOf(name);
 		return (at < 0) ? "?" : text.substring(at + name.length()).split("[ ,}]", 2)[0];
@@ -257,11 +257,12 @@ public final class SessionLauncher
 
 		final boolean newWindow = opensInNewWindow(from);
 		intent.addFlags(newWindow ? newWindowFlags(from) : SessionWindow.LAUNCH_FLAGS);
-		Log.i(TAG, "launch from " + from.getLocalClassName() + ": " +
+		Log.i(TAG, "launch from " + from.getLocalClassName() + " on " + Displays.of(from) + ": " +
 		               (live != null ? live.toString() : "new connection") + " opens in " +
 		               (newWindow ? "a new window" : "the session window") + " (setting " +
 		               getPlacement(from).stored + ", desktop windowing " +
-		               describeWindowing(from) + ")");
+		               describeWindowing(from) + ", asked display " + Displays.asked(options) +
+		               ", session windows " + Displays.windows() + ")");
 		// A new desktop window opens where the connection's last one was (package 6.1); the
 		// session window, when none is open, where it was last (6.1b). An open session window
 		// is reached as it is: launch bounds would move it.
@@ -282,8 +283,12 @@ public final class SessionLauncher
 	{
 		final SessionHost live = SessionRegistry.find(connectionReference);
 		final SessionWindow shownIn = (live != null) ? live.getWindow() : null;
-		return shownIn != null && bringToFront(shownIn, from.getLocalClassName() + " (" + live +
-		                                                    " is open there)");
+		if (shownIn != null && bringToFront(shownIn, from.getLocalClassName() + " on " +
+		                                                 Displays.of(from) + " (" + live +
+		                                                 " is open there)"))
+			return true;
+		Displays.logPicker(from);
+		return false;
 	}
 
 	/**
@@ -311,7 +316,8 @@ public final class SessionLauncher
 			return;
 		final Intent intent = intentFor(from, host);
 		intent.addFlags(newWindowFlags(from));
-		Log.i(TAG, "open in new window: " + host + " (asked from " + askedFrom + "; was " +
+		Log.i(TAG, "open in new window: " + host + " (asked from " + askedFrom + " on " +
+		               Displays.of(from) + "; was " +
 		               (host.getWindow() != null ? "in " + host.getWindow().getName()
 		                                         : "in no window") +
 		               ")");
@@ -358,7 +364,8 @@ public final class SessionLauncher
 					Log.i(TAG, "bring to front: " + window.getName() + " (" +
 					               (window.getHost() != null ? window.getHost().toString()
 					                                         : "no session") +
-					               ", task " + taskId + "), asked from " + askedFrom);
+					               ", task " + taskId + ", " + Displays.of(activity) +
+					               "), asked from " + askedFrom);
 					return true;
 				}
 				catch (IllegalArgumentException e)

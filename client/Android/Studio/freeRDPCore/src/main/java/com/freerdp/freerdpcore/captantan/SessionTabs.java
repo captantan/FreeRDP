@@ -85,8 +85,14 @@ final class SessionTabs
 		}
 		if (!left.isEmpty())
 		{
-			Log.i(TAG, "tabs: " + window.getName() + " closed, " + left.size() + " tab(s) " +
-			               (heir != null ? "go to " + heir.getName() : "belong to no window") +
+			Log.i(TAG, "tabs: " + window.getName() + " closed (" +
+			               Displays.of(window.getActivity()) + ", finishing " +
+			               window.getActivity().isFinishing() + ", changing configurations " +
+			               window.getActivity().isChangingConfigurations() + "), " + left.size() +
+			               " tab(s) " +
+			               (heir != null ? "go to " + heir.getName() + " (" +
+			                                   Displays.of(heir.getActivity()) + ")"
+			                             : "belong to no window") +
 			               ": " + left);
 			SessionRegistry.changed();
 		}
