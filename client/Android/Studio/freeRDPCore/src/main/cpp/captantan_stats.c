@@ -16,8 +16,12 @@
  *    only tried: a decode in progress keeps the last name. The mux exists from
  *    gdi_graphics_pipeline_init (the channel handler after this file's) to
  *    gdi_graphics_pipeline_uninit (the one after this file's ChannelDisconnected), so it is
- *    touched only once the channel has carried a surface command, and never after this file let
- *    go of the context.
+ *    touched only once android_freerdp.c says upstream's handler has run
+ *    (captantan_stats_gfx_ready) and never after this file let go of the context. (Until package
+ *    6.2 the gate was "the channel has carried a surface command", but the counters are reset
+ *    only in rdpgfx_on_open, after the ChannelConnected event: on a channel reopened on the same
+ *    plugin context, as the GNOME host's handover does on every connect, a sample in between saw
+ *    the old counts and tried the mux that gdi_graphics_pipeline_uninit had deleted.)
  *  - The server's network auto-detect ([MS-RDPBCGR] 2.2.14): the client only answers it. The
  *    server measures; whether it tells the client (a Network Characteristics Result) is the
  *    server's choice. Counted here: round-trip requests, bandwidth tests and results, through the
@@ -111,6 +115,7 @@ typedef struct
 
 	/* The GFX channel: its context while the channel is open. */
 	RdpgfxClientContext* gfx;
+	BOOL gfxReady;      /* gdi_graphics_pipeline_init has run for gfx: its mux exists */
 	UINT32 gfxChannels; /* opened so far */
 
 	/* The server's auto-detect, counted on the session thread. */
@@ -231,6 +236,7 @@ static void captantan_stats_on_channel_connected(void* context, const ChannelCon
 
 	EnterCriticalSection(&st->lock);
 	st->gfx = (RdpgfxClientContext*)e->pInterface;
+	st->gfxReady = FALSE; /* until upstream's handler, after this one, has made the mux */
 	st->gfxChannels++;
 	const UINT32 n = st->gfxChannels;
 	LeaveCriticalSection(&st->lock);
@@ -253,10 +259,27 @@ static void captantan_stats_on_channel_disconnected(void* context,
 	EnterCriticalSection(&st->lock);
 	const BOOL had = (st->gfx != nullptr);
 	st->gfx = nullptr;
+	st->gfxReady = FALSE; /* before upstream's handler, after this one, deletes the mux */
 	LeaveCriticalSection(&st->lock);
 
 	if (had)
 		STATS_INFO("gfx: channel closed, session %p", (void*)((rdpContext*)context)->instance);
+}
+
+void captantan_stats_gfx_ready(void* context, RdpgfxClientContext* gfx)
+{
+	captantanStats* st = captantan_stats_of((rdpContext*)context);
+	if (!st || !gfx)
+		return;
+
+	EnterCriticalSection(&st->lock);
+	const BOOL ours = (st->gfx == gfx);
+	if (ours)
+		st->gfxReady = TRUE;
+	LeaveCriticalSection(&st->lock);
+
+	STATS_INFO("gfx: channel ready, session %p%s", (void*)((rdpContext*)context)->instance,
+	           ours ? ": the decoder can be looked up" : " (not the channel this file holds)");
 }
 
 // ****************************************************************************
@@ -506,7 +529,6 @@ static void captantan_stats_take(freerdp* inst, captantanStats* st)
 	if (st->gfx)
 	{
 		flags |= CAPTANTAN_STATS_FLAG_GFX;
-		UINT64 commands = 0;
 		if (gGfxIndicesKnown)
 		{
 			flags |= CAPTANTAN_STATS_FLAG_GFX_COUNTS;
@@ -520,13 +542,11 @@ static void captantan_stats_take(freerdp* inst, captantanStats* st)
 				    (INT64)rdpgfx_stats_value_for_index(st->gfx, gGfxCommandIndex[c]);
 				s[CAPTANTAN_STATS_GFX_BYTES + c] =
 				    (INT64)rdpgfx_stats_value_for_index(st->gfx, gGfxBytesIndex[c]);
-				commands += (UINT64)s[CAPTANTAN_STATS_GFX_COMMANDS + c];
 			}
 		}
 		/* The GFX context's mux is initialised by gdi_graphics_pipeline_init, in the channel
-		 * handler that runs after this file's: only a channel that has carried a surface
-		 * command (which comes after that handler, on the same thread) is past it. */
-		if (commands > 0)
+		 * handler that runs after this file's; android_freerdp.c says when it has run. */
+		if (st->gfxReady)
 			captantan_stats_find_decoder(st, &flags);
 	}
 	else

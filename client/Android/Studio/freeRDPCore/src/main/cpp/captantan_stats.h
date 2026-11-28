@@ -14,6 +14,7 @@
 
 #include <freerdp/freerdp.h>
 #include <freerdp/api.h>
+#include <freerdp/client/rdpgfx.h>
 
 #include "android_event.h"
 
@@ -64,6 +65,10 @@
 /* Per-session state: created with the client context, freed with it (android_freerdp.c). */
 FREERDP_LOCAL BOOL captantan_stats_new(freerdp* inst);
 FREERDP_LOCAL void captantan_stats_free(freerdp* inst);
+
+/* From android_freerdp.c, after upstream's ChannelConnected handler for the GFX channel ran
+ * (gdi_graphics_pipeline_init: the channel's mux exists). Package 6.2. */
+FREERDP_LOCAL void captantan_stats_gfx_ready(void* context, RdpgfxClientContext* gfx);
 
 /* Called by android_event.c for an event of type EVENT_TYPE_CAPTANTAN_STATS. */
 FREERDP_LOCAL BOOL captantan_stats_process_event(freerdp* inst, const ANDROID_EVENT* event);

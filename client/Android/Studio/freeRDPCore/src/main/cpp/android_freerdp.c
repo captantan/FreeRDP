@@ -105,6 +105,7 @@ static void android_OnChannelConnectedEventHandler(void* context,
 	{
 		freerdp_client_OnChannelConnectedEventHandler(context, e);
 		RdpgfxClientContext* gfx = (RdpgfxClientContext*)e->pInterface;
+		captantan_stats_gfx_ready(context, gfx); /* captantan fork: the mux exists now */
 		if (gfx)
 			gfx->UpdateWindowFromSurface = android_UpdateWindowFromSurface;
 	}
