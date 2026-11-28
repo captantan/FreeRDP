@@ -382,11 +382,23 @@ public final class SessionWindow
 
 	/**
 	 * Hook in onNewIntent(): the window is reused for another launch. False if it already shows
-	 * what the launch asks for. Otherwise the window lets go of its session, which goes on without
-	 * it, and the caller processes the launch (true).
+	 * what the launch asks for, or if the launch asks for nothing (no link, connection reference or
+	 * session token: the system bringing the task back). Otherwise the window lets go of its
+	 * session, which goes on without it, and the caller processes the launch (true).
 	 */
 	public boolean leaveFor(Intent intent)
 	{
+		if (!namesALaunch(intent))
+		{
+			// The system bringing the task back with an intent of its own (seen in desktop
+			// windowing on 2026-11-27): nothing is asked for, so the window keeps what it shows.
+			Log.i(TAG, "launch names no session, ignored in " + name + " (keeps " +
+			               (host != null ? host.toString() : "no session") + "): " +
+			               describe(intent));
+			if (host != null)
+				activity.setIntent(SessionLauncher.intentFor(activity, host));
+			return false;
+		}
 		final SessionHost target = lookup(intent);
 		if (host != null && target == host)
 		{
@@ -407,6 +419,33 @@ public final class SessionWindow
 		release("window shows another session");
 		dropUnstarted();
 		return true;
+	}
+
+	/**
+	 * Whether a launch asks for something that upstream's processIntent() would act on: a link, a
+	 * connection reference, a session token, or upstream's instance number.
+	 */
+	private static boolean namesALaunch(Intent intent)
+	{
+		return intent != null &&
+		    (intent.getData() != null ||
+		     intent.hasExtra(SessionActivity.PARAM_CONNECTION_REFERENCE) ||
+		     intent.hasExtra(EXTRA_SESSION) || intent.hasExtra(SessionActivity.PARAM_INSTANCE));
+	}
+
+	/** An intent for the log: what it is and who sent it, no values (a link can hold a password). */
+	private String describe(Intent intent)
+	{
+		if (intent == null)
+			return "no intent";
+		final Bundle extras = intent.getExtras();
+		final android.content.ComponentName component = intent.getComponent();
+		final Uri referrer = activity.getReferrer();
+		return "action " + intent.getAction() + ", categories " + intent.getCategories() +
+		    ", flags 0x" + Integer.toHexString(intent.getFlags()) + ", component " +
+		    (component != null ? component.getShortClassName() : null) + ", extras " +
+		    (extras != null ? extras.keySet() : "none") + ", from " +
+		    (referrer != null ? referrer.getHost() : "unknown");
 	}
 
 	/**

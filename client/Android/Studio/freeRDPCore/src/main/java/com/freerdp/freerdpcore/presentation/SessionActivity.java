@@ -544,6 +544,8 @@ public class SessionActivity extends AppCompatActivity
 
 		// get either session instance or create one from a bookmark/uri
 		Bundle bundle = intent.getExtras();
+		if (bundle == null) // captantan fork: an intent with no extras (the activity is exported)
+			bundle = Bundle.EMPTY;
 		Uri openUri = intent.getData();
 		if (openUri != null)
 		{
