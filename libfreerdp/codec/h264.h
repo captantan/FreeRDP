@@ -88,6 +88,9 @@ extern "C"
 
 		UINT32 YUVWidth;
 		UINT32 YUVHeight;
+
+		/* captantan fork: the MediaCodec codec's name, for freerdp_captantan_h264_decoder */
+		char captantanCodecName[96];
 	};
 
 	WINPR_ATTR_NODISCARD

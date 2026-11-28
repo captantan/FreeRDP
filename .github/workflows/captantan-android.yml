@@ -407,7 +407,7 @@ jobs:
           for r in drawable/captantan_ic_close drawable/captantan_ic_add drawable/captantan_ic_attention string/captantan_tab_new string/captantan_tab_close string/captantan_back_other_tabs string/captantan_bar_settings_desktop; do
             grep -qF "$r" "$RUNNER_TEMP/resources.txt" || fail "the APK lacks the resource $r"
           done
-          for k in setSystemGestureExclusionRects setSystemBarsAppearance getBoundingRects captantan_tab_window_bounds captantan_new_connection_default_moved 'tab strip ' 'tabs: ' 'tab: ' 'taken from the system' 'shows its tab ' 'another connect started in it' 'open new connections: ' 'its buttons are on the tab strip' '(tab strip, ' 'touchpad' 'compact: the shown one and the switcher'; do
+          for k in setSystemGestureExclusionRects setSystemBarsAppearance getBoundingRects captantan_tab_window_bounds captantan_new_connection_default_moved 'tab strip ' 'tabs: ' 'tab: ' 'taken from the system' 'shows its tab ' 'another connect started in it' 'open new connections: ' 'its buttons are on the tab strip' '(tab strip, ' 'touchpad' 'compact: the shown one and the switcher' 'the title only, '; do
             grep -qaF -- "$k" "$RUNNER_TEMP/classes.dex.all" || fail "the APK lacks the string '$k' of session tabs (6.1b)"
           done
           # (the release build shortens resource paths: find the settings file by its content, the
@@ -422,6 +422,32 @@ jobs:
           echo "settings_app_ui.xml is $ui in the release APK"
           grep -qE 'defaultValue[^=]*="this_window"' "$RUNNER_TEMP/settings-ui.txt" || fail "the default of Open new connections is not this_window"
           echo "session tabs: model, strip, caption calls, icons, strings, state keys, the new default and log strings present"
+          # Connection statistics (roadmap 7.1): the panel and its snapshot class, the native the
+          # snapshot is found by at run time (a missing one compiles and then fails when the panel
+          # opens), the fork's two libfreerdp additions it reads through (include/freerdp/captantan.h),
+          # the button on the bar and the tab strip, its icon, layout and strings, and the log strings
+          # of the Java side (panel, sampling, sources) and the native side (gfx channel, auto-detect,
+          # TCP, summary).
+          for c in ConnectionStats StatsPanel; do
+            grep -qaF "Lcom/freerdp/freerdpcore/captantan/$c;" "$RUNNER_TEMP/classes.dex.all" || fail "the APK lacks the class captantan/$c"
+          done
+          grep -qaF nativeSnapshot "$RUNNER_TEMP/classes.dex.all" || fail "captantan/ConnectionStats lacks the native method nativeSnapshot"
+          grep -Eq " FUNC +GLOBAL +DEFAULT +[0-9]+ Java_com_freerdp_freerdpcore_captantan_ConnectionStats_nativeSnapshot\$" "$RUNNER_TEMP/android-dynsyms.txt" || fail "libfreerdp-android.so does not export the native nativeSnapshot of captantan/ConnectionStats"
+          "$READELF" --dyn-syms -W "$RUNNER_TEMP/libfreerdp3.so" > "$RUNNER_TEMP/freerdp3-dynsyms.txt"
+          for f in freerdp_captantan_h264_decoder freerdp_captantan_tls_info; do
+            grep -Eq " FUNC +GLOBAL +DEFAULT +[0-9]+ $f\$" "$RUNNER_TEMP/freerdp3-dynsyms.txt" || fail "libfreerdp3.so does not export $f (include/freerdp/captantan.h)"
+          done
+          for r in id/captantan_bar_stats drawable/captantan_ic_stats layout/captantan_stats_panel string/captantan_bar_stats string/captantan_stats_not_reported string/captantan_stats_rtt string/captantan_stats_security; do
+            grep -qF "$r" "$RUNNER_TEMP/resources.txt" || fail "the APK lacks the resource $r"
+          done
+          for k in captantan.stats 'panel open: ' 'panel closed: ' 'sampling started: ' 'sampling stopped: ' 'sources ' ': follows '; do
+            grep -qaF -- "$k" "$RUNNER_TEMP/classes.dex.all" || fail "the APK lacks the string '$k' of the statistics panel (7.1)"
+          done
+          strings "$RUNNER_TEMP/libfreerdp-android.so" > "$RUNNER_TEMP/android-strings.txt"
+          for s in captantan.stats 'gfx: channel ' 'autodetect: the server' 'tcp: connect ' 'summary, session'; do
+            grep -qF -- "$s" "$RUNNER_TEMP/android-strings.txt" || fail "libfreerdp-android.so lacks the string '$s' of the statistics panel (7.1)"
+          done
+          echo "statistics panel: classes, native, libfreerdp additions, button, icon, layout, strings and log strings present"
 
           echo "== preview badging"
           "$AAPT" dump badging "$PRE" > "$RUNNER_TEMP/preview-badging.txt"

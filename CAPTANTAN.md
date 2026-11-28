@@ -165,8 +165,9 @@ file has no comment syntax):
 - `libfreerdp/codec/h264.c` (edited, two lines in `h264_context_init`): logs
   `H.264 decoder subsystem: <MediaCodec|OpenH264>` at INFO when a subsystem is chosen.
 - `libfreerdp/codec/h264_mediacodec.c` (edited, one line in `mediacodec_init`): the line
-  `MediaCodec using video/avc codec [<name>]` is INFO instead of DEBUG. These two are the fork's only edits
-  to libfreerdp; upstream changes `h264_mediacodec.c` often, so re-check them after each merge.
+  `MediaCodec using video/avc codec [<name>]` is INFO instead of DEBUG. Package 7.1 adds one more line next
+  to this one and a field in `h264.h` ("Connection statistics"); upstream changes `h264_mediacodec.c`
+  often, so re-check them after each merge.
 - `captantan/AvcDecoderLog.java` (new), started by one line in `GlobalApp.onCreate`: once per process, on a
   background thread, logs every `video/avc` decoder from `MediaCodecList` with `isHardwareAccelerated()`,
   `isSoftwareOnly()`, `isVendor()`, the codec it is an alias of, the largest size and low-latency support,
@@ -2477,7 +2478,7 @@ way to switch.
   tabs at no cost to the remote desktop); a visible eject icon on the shown tab (the owner chose the
   menu only); the shown tab in the bar's colour, joined to the docked bar below it (too close to the
   strip's grey; and the bar left the desktop window); a stroke along the strip with the shown tab
-  curving into it (commit 5d7e004d7; see "Why a pill"); scrolling tabs in a narrow window (replaced
+  curving into it (in pull request #34's history; see "Why a pill"); scrolling tabs in a narrow window (replaced
   by compact); listing every session no other window shows in each strip, or every session with the
   others marked (the owner chose a window's own tabs).
 - **Device runs** (2026-11-27, four test builds after the probe; the table is in the pull request).
@@ -2511,6 +2512,147 @@ way to switch.
     connections: kept the default`); one session window, no strip ("not a desktop window"), the docked
     bar and its switcher, two connections each at 1080x2029, below the bar, as in 6.1 and `.9`.
   - **Not run:** an external display (none at hand; package 6.2), DeX.
+
+**Connection statistics** (package 7.1)
+
+A panel of live figures for the session a window shows, like the Windows client's connection
+information: opened from a signal-bars button, closed by its own close control, the button again or
+Back.
+
+- **Where it opens from:** the session bar's ninth button, in the middle group between reset zoom and
+  the bar's settings (groups of 3, 3 and 3; on the phone in portrait nine 44 dp buttons need about
+  416 of 443 dp, and the bar's own shrinking applies below that). In a desktop window, the tab strip's
+  sixth tool, before the bar's settings. The strip reserves its 72 dp for dragging before the tabs get
+  anything (`SessionTabStrip.place`), so the sixth tool takes its 36 dp from the tabs, not from the
+  drag area; compact is reached 36 dp sooner. Not in the switcher (not asked for).
+- **Narrow desktop windows** (found in the first tablet run, the owner's design): a 607 dp window
+  had no room even for compact (the shown tab 0 dp, -6 dp to drag; with 6.1b's five tools it would
+  have been 30 dp). Now, when the shown tab cannot get 104 dp and the drag area 72 dp beside "+",
+  the switcher and the bar's buttons, the caption bar shows the shown session's title alone, takes
+  nothing from the system's gestures (all of it drags the window), and the session bar comes back
+  with every button, as outside desktop windowing (`bar w<n>: shown as its settings say ... (a
+  desktop window too narrow for the tab strip's buttons)`, `tab strip w<n>: ... the title only, N dp
+  is too narrow ... (needs N dp): the session bar instead`). A row of its own (no caption bar) is
+  dropped in that case. Widened, the tabs and the strip's buttons come back. The docked bar takes
+  its strip from the remote desktop then, as it does outside desktop windowing.
+- **Form** (the owner's choice after step 1): a card (`res/layout/captantan_stats_panel.xml`, Material
+  card, theme colours) over the top end corner of the session view, 8 dp inside the docked bar and the
+  tab strip's row, at most 300 dp wide. It is not modal: nothing in it takes keyboard focus, a touch
+  or click on the card stays on the card, and everything around it reaches the session as before. It
+  does not resize the remote desktop. It is not remembered (no stored key): a window opens with it
+  closed. A bottom sheet was the fallback if the card is in the way.
+- **What each row reads** (`captantan/StatsPanel`, `captantan/ConnectionStats`,
+  `cpp/captantan_stats.c`):
+
+  | Row | Source | Notes |
+  |---|---|---|
+  | Round trip | `TCP_INFO` of the connection's socket (`tcpi_rtt`, `tcpi_min_rtt`, `tcpi_rttvar`, `tcpi_total_retrans`) | the device's own kernel, measured on the RDP traffic; the socket is taken from the transport's `TCPConnect` callback |
+  | Server's measure | the server's Network Characteristics Result ([MS-RDPBCGR] 2.2.14.1.5): average and base round trip, bandwidth | only if the server sends one; "not reported" otherwise |
+  | Graphics | the GFX channel's bytes per codec ID in the last second (`rdpgfx_stats_value_for_index`, FreeRDP 3.27+) | "AVC444", or a mix "AVC444 92 %, ClearCodec 8 %"; "…, idle" when nothing changed |
+  | Asked for | the connection's graphics mode (1.4) and the bookmark's GFX and H.264 options, as `LibFreeRDP` applies them | |
+  | Frames | the GFX channel's frames ended per second and frames not yet acknowledged | |
+  | Decoder | the H.264 decoder of a GFX surface (`freerdp_captantan_h264_decoder`), hardware or software from `MediaCodecList` | |
+  | Remote desktop | the session's bitmap size and the remote scale the connection asks for (3.3) | |
+  | Received, Sent | `freerdp_get_stats`: bytes of the whole connection, the rate over the last second and the total | |
+  | Security | `FreeRDP_SelectedProtocol`, the TLS version and cipher (`freerdp_captantan_tls_info`) | |
+
+  No transport row: this build is always TCP. UDP (`-DWITH_RDPEUDP`, [MS-RDPEMT]) is experimental
+  upstream and off here, so every UDP offer of a server is declined; the panel would show a figure
+  that never changes. Anything a source does not give reads "not reported"; no figure is guessed,
+  and rates are never computed across two sessions, two GFX channels or a reconnect.
+- **Measured per host** (2026-11-28, both hosts, tablet and phone; `sources` and the native lines):
+
+  | Source | GNOME host | Windows host |
+  |---|---|---|
+  | TCP round trip | read at every connect (6 to 18 ms at the handshake), every sample | the same (24 ms at the handshake) |
+  | Server's auto-detect | connect time: one bandwidth test, round-trip requests and a result (lowest 2 to 5 ms, average 5 to 8 ms, 50 to 72 Mbit/s); then continuous round-trip requests (2 to 7 a second over three runs) and a result about every 1.3 s | continuous bandwidth tests and round-trip requests from the start (56 requests, 50 tests and 17 results in the first 7 s), and results; its first result reads 400 ms and 512 kbit/s, a starting value, not a measure |
+  | GFX | AVC444v2 | ClearCodec and Progressive (this host sent no H.264) |
+  | Decoder | MediaCodec, the vendor's hardware decoder on the tablet and the phone | none (no H.264) |
+  | Security | RDSTLS after the GNOME host's handover (a redirection: a second TCP connect and a new GFX channel), TLSv1.3 | NLA (extended), TLSv1.3 |
+
+  No row read "not reported" on either host. The GNOME host's handover shows as `tcp: connect 2`
+  and `gfx: channel 2 opened`; the panel's rates start again over it. Right after a new GFX channel
+  the decoder can read "no H.264 picture yet" for a sample or two (the surface's decoder is made with
+  its first H.264 frame, and the lookup skips a busy surface).
+- **Live, and free when closed.** While open, the window is started and it shows a live session,
+  `StatsPanel` takes one snapshot a second; nothing else. `ConnectionStats.take` returns the last
+  sample the session thread took and asks it for the next one (one `EVENT_TYPE_CAPTANTAN_STATS`
+  event on upstream's queue, never two at once), so figures are at most a second old, and a session
+  thread busy elsewhere gives no new sample (the panel says so after 3 s) rather than an old one with
+  a new time. Closed: no timer, no layout listener, no native call. What runs anyway, panel or not:
+  the GFX channel's own counters (upstream's), a counter under a lock for each auto-detect request
+  the server sends, and a wrapper around `TCPConnect` and `TransportDisconnect` (once per connect).
+- **Following the session.** The panel shows the session its window shows: a tab switch or a switch
+  through the switcher makes it follow (`panel w<n>: follows s<n>`), with rates starting again. A
+  session that ends: in a desktop window with other tabs the panel follows the next tab; otherwise
+  the window closes and the panel with it.
+- **Thread safety.** `captantan_stats.c` keeps the GFX channel's context from its ChannelConnected to
+  its ChannelDisconnected event (the context is freed later, when the plugin is terminated after
+  every channel was closed) and reads it under its own lock. The decoder's name is looked up under the
+  GFX context's `mux`, which is only tried: a decode in progress keeps the last name. Settings, the
+  transport and the socket are replaced by a reconnect or a redirection on the session thread, so
+  only the session thread reads them. The socket is forgotten in `TransportDisconnect`, before it is
+  closed, and its peer is compared at each read. The Java side calls only on the UI thread and only
+  while the `SessionHost` is live: the instance is freed only after the UI thread has seen the
+  session end.
+- **The libfreerdp addition** (the owner's choice after step 1: the public API cannot say which H.264
+  decoder a session got, nor the TLS version and cipher). New, the fork's own:
+  `include/freerdp/captantan.h` and `libfreerdp/core/captantan.c` (`freerdp_captantan_h264_decoder`,
+  `freerdp_captantan_tls_info`). Edited, each marked: `libfreerdp/codec/h264.h` (a field for the
+  MediaCodec codec's name), `libfreerdp/codec/h264_mediacodec.c` (one line copying the name, beside
+  1.3's edit), `libfreerdp/core/CMakeLists.txt` (one source line). Merge guidance is under "Merging a
+  new upstream release".
+- **Android client files edited** (each marked): `android_freerdp.c` (`captantan_stats_new` and
+  `_free` in `android_client_new` and `_free`), `android_freerdp.h` (the `captantanStats` pointer),
+  `android_event.c` (the include and two cases), `cpp/CMakeLists.txt` (two source lines). Ours,
+  changed: `SessionWindow` (the panel, Back closes it first, start, stop, show, end, light and dark),
+  `SessionBar` (the `STATS` button), `SessionTabStrip` (the sixth tool), `captantan_session_bar.xml`,
+  `captantan_strings.xml`, the compile check. New: `captantan_ic_stats` (Material Icons'
+  "signal_cellular_alt", Apache-2.0), `captantan_stats_panel.xml`.
+- **Connection settings unchanged.** The client already advertises network auto-detect (FreeRDP's
+  default connection type is auto-detect; the Android client passes `/network:auto`), and nothing
+  about how a connection is made changed: the IO callbacks are observed, not replaced.
+- **Log** (tag `captantan.stats`, INFO; sessions as `s<n>`, never a title, which may be a host name):
+  - Java: `panel open: w<n> s<n> (session bar|tab strip)`, `panel closed: w<n> s<n> (its close
+    control|the button again (...)|Back|window closed)`, `panel w<n>: follows s<n> (shown|session
+    ended|tick)`, `sampling started: w<n> s<n> (...)`, `sampling stopped: w<n> s<n> (panel
+    closed|window stopped|shows another session|no live session)`, and once per session shown
+    `sources s<n>: tcp round trip yes|no; server's auto-detect N round-trip request(s), N bandwidth
+    test(s), N result(s); gfx counters, codecs used [...]; decoder ...; security ...`.
+  - Native (every session, panel or not): `gfx counters: found by name`, `gfx: channel N opened` and
+    `closed`, `autodetect: the server's first round-trip request (continuous|connect time)`, `... first
+    bandwidth test`, `... first network result ...`, `tcp: connect N, session 0x...: round trip X ms`,
+    `tcp: TCP_INFO cannot be read`, and at the context's free `summary, session 0x...: the server sent
+    N round-trip request(s), ...`.
+  - No line per sample or per frame.
+- **Also in this package** (6.1b review): `SessionTabStrip` holds the bar's buttons only from API 30,
+  where it is ever placed, so a freeform window on API 29 keeps its session bar; the 6.1b block and
+  the class comment cite "pull request #34's history" for the stroke build. The card takes a
+  mouse's and a touchpad's generic motion and hover events; the session bar's overlay mode (a card
+  over the picture too) may let a click fall through the same way: not seen, not checked.
+- **Tried and dropped:** reading the transport, the settings and the GFX counters straight from the UI
+  thread (settings and transport are replaced on a reconnect); a hook in the GFX path to count frames
+  or name the decoder (the channel counts frames itself, and the surface's decoder can be read when
+  asked); a decoder row inferred from the device's first H.264 decoder (the owner chose the libfreerdp
+  addition so a fallback to OpenH264 shows).
+- **Device runs** (2026-11-28, two test builds; tablet: API 37, desktop windowing, touchpad and
+  touch; phone: API 37; tags `captantan.*` without `captantan.keys`; the table is in the pull
+  request):
+  - **First build:** the panel from the bar (tablet full window, phone) and the tab strip (desktop
+    window): every row plausible to the owner; it followed tab switches both ways and a session
+    that ended (to the next tab); sampling stopped at every close; the phone's bar kept nine 44 dp
+    buttons in portrait; several minutes open on a busy session: no slowdown (the owner) and no
+    log line per sample. Found: a touchpad click on the close control also clicked the remote
+    desktop under it (generic motion and hover events fall to the views behind a view that does
+    not take them), the close control's hover highlight was off its icon, and a narrow window left
+    the tab 0 dp.
+  - **Second build:** the click stays on the card, the highlight is centred, a 318 dp window showed
+    the title only with the session bar, and widened it went back to the strip.
+  - **Seen in the run, not this package's:** the app crashed once on the tablet when a new intent
+    that names no session reached the session window (`SessionActivity.processIntent`, null
+    extras, after `SessionWindow.leaveFor` had already let go of the shown session); a follow-up.
+  - **Not run:** an RD Gateway (the round trip is then to the gateway), an external display (6.2),
+    a reconnect after a network loss with the panel open, API 29.
 
 ## Package and version scheme
 
@@ -2789,6 +2931,28 @@ compile check runs on the merge.
        gives pens the flush that touch contacts have, `PEN_FLUSH_MS` can go), `client/X11/xf_input.c` (the
        reference caller), and `libfreerdp/core/capabilities.c` (that the host's capability sets are kept
        in `FreeRDP_ReceivedCapabilityData`).
+   - Connection statistics (package 7.1):
+     - `libfreerdp/codec/h264.h` (the `captantanCodecName` field at the end of `S_H264_CONTEXT`),
+       `libfreerdp/codec/h264_mediacodec.c` (the `strncpy` after the "MediaCodec using" line, beside
+       1.3's edit) and `libfreerdp/core/CMakeLists.txt` (the `captantan.c` source line): keep them. The
+       fork's own `include/freerdp/captantan.h` and `libfreerdp/core/captantan.c` read
+       `H264_CONTEXT`'s `subsystem` and the transport's `rdpTls` (`transport_get_tls`, `tls->ssl`): if
+       a merge renames or moves those, fix `captantan.c` (the compile check fails if it no longer
+       builds or exports its two functions). If `mediacodec_init` stops calling `AMediaCodec_getName`,
+       move the copy to where the name is known. If upstream adds an API that says a context's decoder
+       or a connection's TLS version, use it and drop the addition.
+     - `android_freerdp.c`: keep `captantan_stats_new(instance)` in `android_client_new` and
+       `captantan_stats_free(instance)` in `android_client_free` (it puts the transport's original
+       IO callbacks back, which the transport calls when it is freed after the client's free).
+       `android_freerdp.h`: keep the `captantanStats` pointer. `android_event.c`: keep the include and
+       the two cases. `cpp/CMakeLists.txt`: keep the two source lines.
+     - Library code it leans on, to read again if a merge touches it: the GFX stats API and its order
+       (`channels/rdpgfx/client/rdpgfx_main.c`, `rdpgfx_stats_name_for_index`: `captantan_stats.c`
+       checks the order by name and reports nothing if it changed), `libfreerdp/core/autodetect.c`
+       (that `RequestReceived` and `NetworkCharacteristicsResult` are still called for a client and
+       nothing else sets them), the IO callbacks (`freerdp_set_io_callbacks`, `TCPConnect`,
+       `TransportDisconnect`; if anything in the client starts setting them too, chain them), and
+       the GFX surface's `h264` and the context's `mux` (`libfreerdp/gdi/gfx.c`).
    - `ApplicationSettingsActivity.java` (`clearCertificateCache`) and `settings_app_security.xml`: keep the
      call to `CertificateStore.clear` and the removed "Accept all certificates". If upstream moves its
      certificate store again, update `CertificateStore`.

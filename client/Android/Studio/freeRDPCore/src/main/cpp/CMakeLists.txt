@@ -71,6 +71,9 @@ set(${MODULE_PREFIX}_SRCS
     # captantan fork: pen input through the input channel
     captantan_pen.c
     captantan_pen.h
+    # captantan fork: the statistics panel's counters
+    captantan_stats.c
+    captantan_stats.h
 )
 
 add_library(${MODULE_NAME} SHARED ${${MODULE_PREFIX}_SRCS})

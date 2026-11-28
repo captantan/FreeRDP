@@ -56,15 +56,16 @@ import com.freerdp.freerdpcore.presentation.SessionInputManager;
  * <p><b>Buttons</b> ({@code res/layout/captantan_session_bar.xml}, bound in {@link #bindButtons}):
  * the session switcher, the on-screen keyboard (the system keyboard with upstream's key bar, as
  * upstream's toolbar button did), the input mode menu (4.3), reset zoom (zoom 1:1, scrolled to
- * the top left, as the touch pointer's own reset), the remote scale menu (4.2,
+ * the top left, as the touch pointer's own reset), the connection statistics panel (7.1,
+ * {@link StatsPanel}), the remote scale menu (4.2,
  * {@link RemoteScaleSwitch}), full screen (upstream's "Hide Status Bar" and "Hide Navigation Bar"
  * settings, both at once), the bar's settings, and disconnect (asks first).
  * Upstream's toolbar had two actions (touch pointer, keyboard) and the fork had added the switcher
  * to it; all three are here.
  *
  * <p><b>In a desktop window</b> (package 6.1b) the bar is not shown and takes no strip: the
- * keyboard, input mode, key capture, reset zoom and settings buttons are on the tab strip in the
- * caption bar ({@link SessionTabStrip}, {@link #pressOnTabStrip}), and the switcher, full screen
+ * keyboard, input mode, key capture, reset zoom, statistics (7.1) and settings buttons are on the
+ * tab strip in the caption bar ({@link SessionTabStrip}, {@link #pressOnTabStrip}), and the switcher, full screen
  * and disconnect are left out there (the tabs, the caption bar's own buttons and a tab's close
  * control do their work). The owner chose this in the 6.1b device run.
  *
@@ -118,6 +119,7 @@ public final class SessionBar
 	static final String RESET_ZOOM = "reset zoom";
 	static final String FULL_SCREEN = "full screen";
 	static final String BAR_SETTINGS = "bar settings";
+	static final String STATS = "statistics";
 	static final String DISCONNECT = "disconnect";
 	private static final int GAP_DP = 4;
 	private static final int BUTTON_DP = 44;
@@ -791,6 +793,8 @@ public final class SessionBar
 		// package 4.2's remote scale menu is in the settings sheet since 5.2 (RemoteScaleSwitch)
 		bind(R.id.captantan_bar_fullscreen, FULL_SCREEN, true);
 		bind(R.id.captantan_bar_settings, BAR_SETTINGS, false);
+		// package 7.1: the connection statistics panel (StatsPanel), opened or closed
+		bind(R.id.captantan_bar_stats, STATS, true);
 		bind(R.id.captantan_bar_disconnect, DISCONNECT, true);
 	}
 
@@ -836,6 +840,9 @@ public final class SessionBar
 				break;
 			case BAR_SETTINGS:
 				openSettings();
+				break;
+			case STATS:
+				window.getStats().toggle(inTabStrip() ? "tab strip" : "session bar");
 				break;
 			case DISCONNECT:
 				confirmDisconnect();

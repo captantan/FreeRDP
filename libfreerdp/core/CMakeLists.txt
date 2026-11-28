@@ -106,6 +106,8 @@ set(${MODULE_PREFIX}_SRCS
     redirection.h
     autodetect.c
     autodetect.h
+    # captantan fork: what the Android client's statistics panel reads (include/freerdp/captantan.h)
+    captantan.c
     heartbeat.c
     heartbeat.h
     multitransport.c

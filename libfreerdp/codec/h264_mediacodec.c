@@ -1295,6 +1295,8 @@ static BOOL mediacodec_init(H264_CONTEXT* h264)
 
 		/* captantan fork: INFO (was DEBUG), so logcat shows the codec name */
 		WLog_Print(h264->log, WLOG_INFO, "MediaCodec using %s codec [%s]", CODEC_NAME, codec_name);
+		/* captantan fork: kept for freerdp_captantan_h264_decoder (include/freerdp/captantan.h) */
+		(void)strncpy(h264->captantanCodecName, codec_name, sizeof(h264->captantanCodecName) - 1);
 		AMediaCodec_releaseName(sys->decoder, codec_name);
 	}
 	else

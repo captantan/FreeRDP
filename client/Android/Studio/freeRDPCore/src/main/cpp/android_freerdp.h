@@ -49,6 +49,7 @@ typedef struct
 
 	void* captantanDisp; /* captantan fork: display control state (captantan_disp.c) */
 	void* captantanPen;  /* captantan fork: pen input state (captantan_pen.c) */
+	void* captantanStats; /* captantan fork: statistics panel counters (captantan_stats.c) */
 } androidContext;
 
 #endif /* FREERDP_CLIENT_ANDROID_FREERDP_H */
