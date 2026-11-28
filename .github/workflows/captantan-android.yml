@@ -407,7 +407,7 @@ jobs:
           for r in drawable/captantan_ic_close drawable/captantan_ic_add drawable/captantan_ic_attention string/captantan_tab_new string/captantan_tab_close string/captantan_back_other_tabs string/captantan_bar_settings_desktop; do
             grep -qF "$r" "$RUNNER_TEMP/resources.txt" || fail "the APK lacks the resource $r"
           done
-          for k in setSystemGestureExclusionRects setSystemBarsAppearance getBoundingRects captantan_tab_window_bounds captantan_new_connection_default_moved 'tab strip ' 'tabs: ' 'tab: ' 'taken from the system' 'shows its tab ' 'another connect started in it' 'open new connections: ' 'its buttons are on the tab strip' '(tab strip, ' 'touchpad' 'compact: the shown one and the switcher'; do
+          for k in setSystemGestureExclusionRects setSystemBarsAppearance getBoundingRects captantan_tab_window_bounds captantan_new_connection_default_moved 'tab strip ' 'tabs: ' 'tab: ' 'taken from the system' 'shows its tab ' 'another connect started in it' 'open new connections: ' 'its buttons are on the tab strip' '(tab strip, ' 'touchpad' 'compact: the shown one and the switcher' 'the title only, '; do
             grep -qaF -- "$k" "$RUNNER_TEMP/classes.dex.all" || fail "the APK lacks the string '$k' of session tabs (6.1b)"
           done
           # (the release build shortens resource paths: find the settings file by its content, the

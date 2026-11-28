@@ -42,7 +42,9 @@ import java.util.Map;
  * session view, below the docked bar and the tab strip's row. It is not modal: it takes no
  * keyboard focus (a physical keyboard keeps typing into the session) and does not change the
  * remote desktop's size. A touch or click on the card stays on the card; everything around it
- * reaches the session as before. It is not remembered: a new window opens with it closed.
+ * reaches the session as before; that holds for a mouse and a touchpad too (their buttons, wheel
+ * and hover over the card stay on the card). It is not remembered: a new window opens with it
+ * closed.
  *
  * <p><b>Cost.</b> Closed, it is nothing: no timer, no layout listener, no native call. Open, it
  * takes one snapshot a second ({@link ConnectionStats#take}) while the window is started and
@@ -306,6 +308,13 @@ final class StatsPanel
 	{
 		card = LayoutInflater.from(activity).inflate(R.layout.captantan_stats_panel, container,
 		                                             false);
+		// A mouse's or touchpad's buttons, wheel and hover arrive as generic motion and hover
+		// events, which a view that does not take them hands to the views behind it: the session
+		// view, which sends them to the remote (found on the tablet: a click on the close control
+		// also clicked the remote desktop under it). The card takes them all; its close control
+		// still gets its own hover first.
+		card.setOnGenericMotionListener((v, ev) -> true);
+		card.setOnHoverListener((v, ev) -> true);
 		title = card.findViewById(R.id.captantan_stats_title);
 		note = card.findViewById(R.id.captantan_stats_note);
 		final View closeButton = card.findViewById(R.id.captantan_stats_close);

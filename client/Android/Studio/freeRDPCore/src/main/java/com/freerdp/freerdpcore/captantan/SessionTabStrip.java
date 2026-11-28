@@ -79,7 +79,13 @@ import java.util.Map;
  * shrink to {@link #TAB_MIN_DP}. A window too narrow for its tabs at that width is
  * <b>compact</b>: the shown session's tab alone and the switcher's button (the bottom sheet with
  * every session, as outside desktop windowing) before "+" (the owner's choice in the second
- * device run; the first build scrolled the tabs, which left pieces of tabs at the edges). The remote desktop is not touched: the content
+ * device run; the first build scrolled the tabs, which left pieces of tabs at the edges). A
+ * window too narrow even for that (the shown tab at {@link #TAB_MIN_DP} and {@link #DRAG_MIN_DP}
+ * to drag, beside "+", the switcher and the bar's buttons) shows the shown session's title alone,
+ * takes nothing from the system's gestures (the whole caption bar drags the window), and the
+ * session bar comes back with every button, as outside desktop windowing (package 7.1, the
+ * owner's choice after a 607 dp window left the tab 0 dp and nothing to drag; a row of its own is
+ * dropped in that case). The remote desktop is not touched: the content
  * was already laid out below the caption bar. The caption bar's own icons are made dark while
  * the strip is light ({@code APPEARANCE_LIGHT_CAPTION_BARS}).</li>
  * <li><b>A row of its own</b>, {@link #ROW_DP} high, at the top of the window, when a desktop
@@ -193,6 +199,14 @@ final class SessionTabStrip implements SessionRegistry.Listener
 	private boolean compact;
 	/** The bar's buttons are on the strip (a desktop window, not in its own full screen). */
 	private boolean holds;
+	/**
+	 * Package 7.1 (the owner's choice): a window too narrow even for compact shows the session's
+	 * title alone in its caption bar, and the session bar comes back with every button, as outside
+	 * desktop windowing.
+	 */
+	private boolean titleOnly;
+	private final TextView titleView;
+	private final Space dragSpace;
 	private Boolean lightCaption;
 	private final Rect excluded = new Rect();
 	private final Rect excludedTools = new Rect();
@@ -225,6 +239,19 @@ final class SessionTabStrip implements SessionRegistry.Listener
 		scroll.addView(tabRow, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
 		                                                    ViewGroup.LayoutParams.MATCH_PARENT));
 		row.addView(scroll, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT));
+		// A window too narrow for the tabs and the bar's buttons: the shown session's title only.
+		titleView = new TextView(activity);
+		titleView.setSingleLine(true);
+		titleView.setEllipsize(TextUtils.TruncateAt.END);
+		titleView.setGravity(Gravity.CENTER_VERTICAL);
+		titleView.setPaddingRelative(dp(12), 0, dp(12), 0);
+		final TypedValue titleAppearance = new TypedValue();
+		if (activity.getTheme().resolveAttribute(
+		        com.google.android.material.R.attr.textAppearanceLabelLarge, titleAppearance, true))
+			titleView.setTextAppearance(titleAppearance.resourceId);
+		titleView.setVisibility(View.GONE);
+		row.addView(titleView,
+		            new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
 		// A narrow window: the switcher (a bottom sheet with every session), as outside desktop
 		// windowing, in place of the tabs that do not fit.
 		switcher = iconButton(R.drawable.captantan_ic_sessions,
@@ -244,7 +271,8 @@ final class SessionTabStrip implements SessionRegistry.Listener
 		row.addView(plus, new LinearLayout.LayoutParams(dp(PLUS_DP), dp(PLUS_DP), 0f));
 		((LinearLayout.LayoutParams)plus.getLayoutParams()).gravity = Gravity.CENTER_VERTICAL;
 		// In the caption bar this space is the system's: it drags the window.
-		row.addView(new Space(activity),
+		dragSpace = new Space(activity);
+		row.addView(dragSpace,
 		            new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
 		tools = new LinearLayout(activity);
 		tools.setOrientation(LinearLayout.HORIZONTAL);
@@ -394,17 +422,10 @@ final class SessionTabStrip implements SessionRegistry.Listener
 			return;
 		// The strip is only ever placed from API 30 (place): on API 29 a freeform window keeps
 		// its session bar (6.1b review).
-		final boolean holdsNow = desktop && !window.isOwnFullScreen() &&
-		                         Build.VERSION.SDK_INT >= Build.VERSION_CODES.R;
-		if (holdsNow != holds)
-		{
-			holds = holdsNow;
-			// the bar hides or shows for it; before the first session it learns it when shown
-			if (window.getHost() != null)
-				window.getBar().tabStripChanged(holds ? "a desktop window" : why);
-		}
+		updateHolds(why);
 		final List<SessionHost> now = desktop ? SessionTabs.tabsOf(window) : new ArrayList<>();
 		final SessionHost shown = window.getHost();
+		titleView.setText(shown != null ? shown.getTitle() : "");
 		if (desktop && shown != null && !now.contains(shown))
 			now.add(shown);
 
@@ -456,6 +477,27 @@ final class SessionTabStrip implements SessionRegistry.Listener
 					scroll.smoothScrollTo(Math.max(0, v.getLeft()), 0);
 			});
 		}
+	}
+
+	/** Whether the bar's buttons are on the strip, as the window and its width now are. */
+	private void updateHolds(String why)
+	{
+		final boolean holdsNow = mayHold() && !titleOnly;
+		if (holdsNow == holds)
+			return;
+		holds = holdsNow;
+		// the bar hides or shows for it; before the first session it learns it when shown
+		if (window.getHost() != null)
+			window.getBar().tabStripChanged(holds ? "a desktop window"
+			                                : titleOnly ? "a desktop window too narrow for the "
+			                                                  + "tab strip's buttons"
+			                                            : why);
+	}
+
+	/** A desktop window, not in its own full screen, from API 30 (where the strip is placed). */
+	private boolean mayHold()
+	{
+		return desktop && !window.isOwnFullScreen() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R;
 	}
 
 	// ****************************************************************************
@@ -526,11 +568,29 @@ final class SessionTabStrip implements SessionRegistry.Listener
 		for (MaterialButton b : toolButtons.values())
 			if (b.getVisibility() != View.GONE)
 				shownTools++;
+		// Package 7.1: the strip holds the bar's buttons only if, even compact, the shown tab
+		// gets its least width and the drag area its 72 dp; otherwise the title only, and the bar.
+		final int toolsWanted = (mayHold() && p != Place.NONE) ? shownTools * dp(TOOL_DP) : 0;
+		final int compactNeeds = dp(PLUS_DP) + toolsWanted + (n > 1 ? dp(SWITCHER_DP) : 0) +
+		                         dp(TAB_MIN_DP) + (p == Place.CAPTION ? dp(DRAG_MIN_DP) : 0);
+		final boolean narrow = p != Place.NONE && toolsWanted > 0 && width < compactNeeds;
+		if (narrow && p == Place.ROW)
+		{
+			// a row of its own would cost the remote desktop 40 dp for a title: the bar has it all
+			p = Place.NONE;
+			reason = "too narrow for the tab strip's row (needs " +
+			         Math.round(compactNeeds / density) + " dp): the session bar instead";
+		}
+		final boolean title = narrow && p == Place.CAPTION;
+		final boolean titleChanged = title != titleOnly;
+		titleOnly = title;
+		if (titleChanged)
+			updateHolds("layout");
 		final int tw0 = (holds && p != Place.NONE) ? shownTools * dp(TOOL_DP) : 0;
 		int forTabs = Math.max(0, width - dp(PLUS_DP) - tw0 -
 		                              (p == Place.CAPTION ? dp(DRAG_MIN_DP) : 0));
 		final boolean small =
-		    p != Place.NONE && n > 1 && n * dp(TAB_MIN_DP) > forTabs;
+		    !title && p != Place.NONE && n > 1 && n * dp(TAB_MIN_DP) > forTabs;
 		final int visible = small ? 1 : n;
 		if (small)
 			forTabs = Math.max(0, forTabs - dp(SWITCHER_DP));
@@ -540,7 +600,8 @@ final class SessionTabStrip implements SessionRegistry.Listener
 
 		final boolean changed = p != place || top != placeTop || height != placeHeight ||
 		                        left != placeLeft || width != placeWidth || tw != tabWidth ||
-		                        sw != scrollWidth || tw0 != toolsWidth || small != compact;
+		                        sw != scrollWidth || tw0 != toolsWidth || small != compact ||
+		                        titleChanged;
 		place = p;
 		if (!changed)
 			return;
@@ -554,6 +615,10 @@ final class SessionTabStrip implements SessionRegistry.Listener
 		compact = small;
 		switcher.setVisibility(small ? View.VISIBLE : View.GONE);
 		tools.setVisibility(tw0 > 0 ? View.VISIBLE : View.GONE);
+		scroll.setVisibility(title ? View.GONE : View.VISIBLE);
+		plus.setVisibility(title ? View.GONE : View.VISIBLE);
+		dragSpace.setVisibility(title ? View.GONE : View.VISIBLE);
+		titleView.setVisibility(title ? View.VISIBLE : View.GONE);
 
 		final FrameLayout.LayoutParams slp = (FrameLayout.LayoutParams)strip.getLayoutParams();
 		if (slp.height != height || slp.topMargin != top)
@@ -581,6 +646,11 @@ final class SessionTabStrip implements SessionRegistry.Listener
 		final String log =
 		    "tab strip " + window.getName() + ": " +
 		    (p == Place.NONE ? "none (" + reason + ")"
+		     : title ? reason + ", " + height + " px high at y " + top + ", from x " + left +
+		                   " to " + right + caption + "; the title only, " +
+		                   Math.round(width / density) + " dp is too narrow for the tabs and the " +
+		                   "bar's buttons (needs " + Math.round(compactNeeds / density) +
+		                   " dp): the session bar instead"
 		                     : reason + ", " + height + " px high at y " + top + ", from x " + left +
 		                           " to " + right + caption + "; " + order.size() + " tab(s) of " +
 		                           Math.round(tw / density) + " dp" +
@@ -635,7 +705,7 @@ final class SessionTabStrip implements SessionRegistry.Listener
 		if (destroyed || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q)
 			return;
 		final Rect r = new Rect(), t = new Rect();
-		if (place == Place.CAPTION && strip.getVisibility() == View.VISIBLE)
+		if (place == Place.CAPTION && strip.getVisibility() == View.VISIBLE && !titleOnly)
 		{
 			r.set(row.getLeft() + scroll.getLeft(), 0, row.getLeft() + plus.getRight(),
 			      strip.getHeight());

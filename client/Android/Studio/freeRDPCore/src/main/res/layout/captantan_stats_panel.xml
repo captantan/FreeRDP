@@ -2,7 +2,9 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- captantan fork: the connection statistics panel (roadmap 7.1, captantan/StatsPanel): a card
      over the session view's top end corner. StatsPanel adds one row per figure to
-     captantan_stats_rows and places and sizes the card. Nothing in it takes keyboard focus. -->
+     captantan_stats_rows and places and sizes the card. Nothing in it takes keyboard focus. The
+     close button is centred as the tab strip's buttons are (no padding, no icon padding, icon
+     gravity textStart: with the default padding the icon sat off its hover highlight). -->
 <com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     style="?attr/materialCardViewElevatedStyle"
@@ -46,10 +48,12 @@
                 android:insetBottom="0dp"
                 android:minWidth="0dp"
                 android:minHeight="0dp"
-                android:padding="8dp"
+                android:padding="0dp"
                 android:focusable="false"
                 android:contentDescription="@string/captantan_stats_close"
                 app:icon="@drawable/captantan_ic_close"
+                app:iconGravity="textStart"
+                app:iconPadding="0dp"
                 app:iconSize="20dp" />
         </LinearLayout>
 
