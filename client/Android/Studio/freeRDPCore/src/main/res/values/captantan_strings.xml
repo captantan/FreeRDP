@@ -299,7 +299,7 @@
     <string name="captantan_stats_no_session">No session</string>
     <string name="captantan_stats_not_reported">not reported</string>
     <string name="captantan_stats_rtt">Round trip</string>
-    <string name="captantan_stats_server">Server's measure</string>
+    <string name="captantan_stats_server">Server\'s measure</string>
     <string name="captantan_stats_graphics">Graphics</string>
     <string name="captantan_stats_asked">Asked for</string>
     <string name="captantan_stats_frames">Frames</string>
