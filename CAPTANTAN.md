@@ -2525,6 +2525,16 @@ Back.
   sixth tool, before the bar's settings. The strip reserves its 72 dp for dragging before the tabs get
   anything (`SessionTabStrip.place`), so the sixth tool takes its 36 dp from the tabs, not from the
   drag area; compact is reached 36 dp sooner. Not in the switcher (not asked for).
+- **Narrow desktop windows** (found in the first tablet run, the owner's design): a 607 dp window
+  had no room even for compact (the shown tab 0 dp, -6 dp to drag; with 6.1b's five tools it would
+  have been 30 dp). Now, when the shown tab cannot get 104 dp and the drag area 72 dp beside "+",
+  the switcher and the bar's buttons, the caption bar shows the shown session's title alone, takes
+  nothing from the system's gestures (all of it drags the window), and the session bar comes back
+  with every button, as outside desktop windowing (`bar w<n>: shown as its settings say ... (a
+  desktop window too narrow for the tab strip's buttons)`, `tab strip w<n>: ... the title only, N dp
+  is too narrow ... (needs N dp): the session bar instead`). A row of its own (no caption bar) is
+  dropped in that case. Widened, the tabs and the strip's buttons come back. The docked bar takes
+  its strip from the remote desktop then, as it does outside desktop windowing.
 - **Form** (the owner's choice after step 1): a card (`res/layout/captantan_stats_panel.xml`, Material
   card, theme colours) over the top end corner of the session view, 8 dp inside the docked bar and the
   tab strip's row, at most 300 dp wide. It is not modal: nothing in it takes keyboard focus, a touch
@@ -2550,7 +2560,20 @@ Back.
   upstream and off here, so every UDP offer of a server is declined; the panel would show a figure
   that never changes. Anything a source does not give reads "not reported"; no figure is guessed,
   and rates are never computed across two sessions, two GFX channels or a reconnect.
-- **Measured per host:** see the device runs below.
+- **Measured per host** (2026-11-28, both hosts, tablet and phone; `sources` and the native lines):
+
+  | Source | GNOME host | Windows host |
+  |---|---|---|
+  | TCP round trip | read at every connect (6 to 18 ms at the handshake), every sample | the same (24 ms at the handshake) |
+  | Server's auto-detect | connect time: one bandwidth test, round-trip requests and a result (lowest 2 to 5 ms, average 5 to 8 ms, 50 to 72 Mbit/s); then continuous round-trip requests (2 to 7 a second over three runs) and a result about every 1.3 s | continuous bandwidth tests and round-trip requests from the start (56 requests, 50 tests and 17 results in the first 7 s), and results; its first result reads 400 ms and 512 kbit/s, a starting value, not a measure |
+  | GFX | AVC444v2 | ClearCodec and Progressive (this host sent no H.264) |
+  | Decoder | MediaCodec, the vendor's hardware decoder on the tablet and the phone | none (no H.264) |
+  | Security | RDSTLS after the GNOME host's handover (a redirection: a second TCP connect and a new GFX channel), TLSv1.3 | NLA (extended), TLSv1.3 |
+
+  No row read "not reported" on either host. The GNOME host's handover shows as `tcp: connect 2`
+  and `gfx: channel 2 opened`; the panel's rates start again over it. Right after a new GFX channel
+  the decoder can read "no H.264 picture yet" for a sample or two (the surface's decoder is made with
+  its first H.264 frame, and the lookup skips a busy surface).
 - **Live, and free when closed.** While open, the window is started and it shows a live session,
   `StatsPanel` takes one snapshot a second; nothing else. `ConnectionStats.take` returns the last
   sample the session thread took and asks it for the next one (one `EVENT_TYPE_CAPTANTAN_STATS`
@@ -2604,13 +2627,32 @@ Back.
   - No line per sample or per frame.
 - **Also in this package** (6.1b review): `SessionTabStrip` holds the bar's buttons only from API 30,
   where it is ever placed, so a freeform window on API 29 keeps its session bar; the 6.1b block and
-  the class comment cite "pull request #34's history" for the stroke build.
+  the class comment cite "pull request #34's history" for the stroke build. The card takes a
+  mouse's and a touchpad's generic motion and hover events; the session bar's overlay mode (a card
+  over the picture too) may let a click fall through the same way: not seen, not checked.
 - **Tried and dropped:** reading the transport, the settings and the GFX counters straight from the UI
   thread (settings and transport are replaced on a reconnect); a hook in the GFX path to count frames
   or name the decoder (the channel counts frames itself, and the surface's decoder can be read when
   asked); a decoder row inferred from the device's first H.264 decoder (the owner chose the libfreerdp
   addition so a fallback to OpenH264 shows).
-- **Device runs:** see the pull request's table.
+- **Device runs** (2026-11-28, two test builds; tablet: API 37, desktop windowing, touchpad and
+  touch; phone: API 37; tags `captantan.*` without `captantan.keys`; the table is in the pull
+  request):
+  - **First build:** the panel from the bar (tablet full window, phone) and the tab strip (desktop
+    window): every row plausible to the owner; it followed tab switches both ways and a session
+    that ended (to the next tab); sampling stopped at every close; the phone's bar kept nine 44 dp
+    buttons in portrait; several minutes open on a busy session: no slowdown (the owner) and no
+    log line per sample. Found: a touchpad click on the close control also clicked the remote
+    desktop under it (generic motion and hover events fall to the views behind a view that does
+    not take them), the close control's hover highlight was off its icon, and a narrow window left
+    the tab 0 dp.
+  - **Second build:** the click stays on the card, the highlight is centred, a 318 dp window showed
+    the title only with the session bar, and widened it went back to the strip.
+  - **Seen in the run, not this package's:** the app crashed once on the tablet when a new intent
+    that names no session reached the session window (`SessionActivity.processIntent`, null
+    extras, after `SessionWindow.leaveFor` had already let go of the shown session); a follow-up.
+  - **Not run:** an RD Gateway (the round trip is then to the gateway), an external display (6.2),
+    a reconnect after a network loss with the panel open, API 29.
 
 ## Package and version scheme
 
